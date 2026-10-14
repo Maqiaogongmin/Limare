@@ -1,6 +1,11 @@
 name: Validate source
 on:
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: 'Exact source tag or commit to validate (blank uses this workflow ref)'
+        required: false
+        type: string
   pull_request:
 permissions:
   contents: read
@@ -9,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
@@ -17,9 +24,11 @@ jobs:
       - run: npm ci && npm run build && npm test
         working-directory: website
   macos:
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
       - run: xcodebuild -version
       - name: Build the pinned source without distribution credentials
         run: >-
