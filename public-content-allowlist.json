@@ -1,0 +1,41 @@
+{
+  "directories": [
+    ".github/",
+    "deps/",
+    "LICENSES/",
+    "src/macos/Limare/",
+    "src/macos/Limare.xcodeproj/",
+    "src/macos/LimareTests/",
+    "src/macos/LimareUITests/",
+    "src/macos/RemoteWeb/",
+    "website/",
+    "src/macos/Configuration/"
+  ],
+  "excludedDirectories": ["website/legacy/"],
+  "files": [
+    ".gitignore",
+    ".gitleaks.toml",
+    "README.md",
+    "BUILDING.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "NOTICE.md",
+    "THIRD_PARTY_LICENSES.md",
+    "SECURITY.md",
+    "SUPPORT.md",
+    "RELEASE_NOTES.md",
+    "release-facts.json",
+    "public-content-allowlist.json",
+    "script/app_sources.sh",
+    "script/build_and_run.sh",
+    "script/build_helper.sh",
+    "script/package_cua_driver.sh",
+    "script/package_cloudflared.sh",
+    "script/embed_helpers.sh",
+    "script/sign_helper.sh",
+    "script/bundle_notices.py",
+    "script/sign_release_bundle.py",
+    "script/verify_release_bundle.py",
+    "script/export_public_tree.py"
+  ]
+}

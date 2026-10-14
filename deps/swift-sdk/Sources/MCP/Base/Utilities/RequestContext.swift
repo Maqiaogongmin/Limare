@@ -1,0 +1,42 @@
+import Foundation
+
+/// A context object that wraps a pending request, providing both the request ID
+/// and a Task handle for the asynchronous operation.
+///
+/// This allows you to track and cancel in-flight requests by sending
+/// a CancelledNotification to the receiver (client or server).
+///
+/// - SeeAlso: https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/cancellation
+public struct RequestContext<Output: Sendable & Decodable>: Sendable {
+    /// The unique identifier for this request.
+    public let requestID: ID
+
+    /// The Task representing the asynchronous work for this request.
+    private let requestTask: Task<Output, Error>
+
+    /// Convenience property to await the result.
+    ///
+    /// Example:
+    /// ```swift
+    /// let context = try await client.send(request)
+    /// let result = try await context.value
+    /// ```
+    public var value: Output {
+        get async throws {
+            // Cancelling the awaiting task cancels the request task, whose
+            // cancellation handler resumes the pending continuation (see
+            // `Client.send`). Awaiting `.value` alone would never forward
+            // cancellation to the unstructured request task.
+            try await withTaskCancellationHandler {
+                try await requestTask.value
+            } onCancel: {
+                requestTask.cancel()
+            }
+        }
+    }
+
+    public init(requestID: ID, requestTask: Task<Output, Error>) {
+        self.requestID = requestID
+        self.requestTask = requestTask
+    }
+}

@@ -1,0 +1,105 @@
+{
+  "sourceCommit": "4f9af96bf24caadc957766d884a7eb48a8d90fe6",
+  "files": [
+    {
+      "source": "src/ios/Providers/LLMProvider.swift",
+      "sha256": "b58645eaba486c77fcd4c1b0a7a1459d71d4fa8cb6f855de7445a9b9246f5c1c"
+    },
+    {
+      "source": "src/ios/Providers/LLMTypes.swift",
+      "sha256": "93f621a28f17d644e785aade996250ee4e31efbaac5fd515b52c68124f1e0611"
+    },
+    {
+      "source": "src/ios/Providers/LLMError.swift",
+      "sha256": "ded70e7bb1b0e37b377336c923d448551507c58ae7d68a99982cdb82d41892b4"
+    },
+    {
+      "source": "src/ios/Providers/AgentProvider.swift",
+      "sha256": "13b681988ec2f60c117c12eaba89d94d2f4da7c4f1c962cca2c6164d4ec80913"
+    },
+    {
+      "source": "src/ios/Providers/URLBuilding.swift",
+      "sha256": "7b14abf504bf1d5fcb5e04537946f308d94e959e1467bfe3ca8b551e44141e0d"
+    },
+    {
+      "source": "src/ios/Providers/ThinkingLevelCatalog.swift",
+      "sha256": "20f0dfe64d7737f30e00b37bbee7d3b0caa1db5e5fb62b55740aa1b3fafc8e87"
+    },
+    {
+      "source": "src/ios/Providers/Thinking/ThinkingRule.swift",
+      "sha256": "09a21c62c0bb8510f6d57377a33d50c9259e76d6ec6c65b71f5755818fdbaf25"
+    },
+    {
+      "source": "src/ios/Providers/Thinking/ThinkingWireFormat.swift",
+      "sha256": "07eb7a2e4492d496eac844a69d27ea3c68e2e33f930bbcfcd76e976707f6d736"
+    },
+    {
+      "source": "src/ios/Providers/Thinking/ThinkingRuleCoding.swift",
+      "sha256": "9c3aaa70181b5e9e253d3ec0463c03a36db9793aa53216304cd44e1333890c61"
+    },
+    {
+      "source": "src/ios/Providers/Thinking/ThinkingRuleResolver.swift",
+      "sha256": "ad631089f1026226f19ec33b170e2becf4c203ab58176edd4ff00bf867263706"
+    },
+    {
+      "source": "src/ios/Providers/Anthropic/AnthropicProvider.swift",
+      "sha256": "3f9dbc145123d30669c81b63dfddb874d28ad276f2a7c0e19aa2bbddc35b866a"
+    },
+    {
+      "source": "src/ios/Providers/Anthropic/AnthropicAgentProvider.swift",
+      "sha256": "d6069863fa2663b2a65138d9970f2cab16f67117abb5e88d8e53bbb03bc93579"
+    },
+    {
+      "source": "src/ios/Providers/Gemini/GeminiProvider.swift",
+      "sha256": "1b8e2b0b45d2e10ff28bffc12042d2a39a6f9d39aa09564744905a38090f927d"
+    },
+    {
+      "source": "src/ios/Providers/Gemini/GeminiAgentProvider.swift",
+      "sha256": "c65e62ea83d9fcb30d04c2ddf17af86fbc1a6d85b5554116ace34ed0593f26ab"
+    },
+    {
+      "source": "src/ios/Providers/Gemini/GeminiWireFormat.swift",
+      "sha256": "ebcae3cf454ec211972c953cb0cfbeb8a19c1bf278d997bb57c3e0f61f32a4ed"
+    },
+    {
+      "source": "src/ios/Providers/OpenAI/OpenAIAgentProvider.swift",
+      "sha256": "d5f1abbcdbfa8dbb30f7633378a233b13c2ba7934f185b4e689fe99b517ece8d"
+    }
+  ],
+  "adaptations": [
+    "Extract pure message conversion, history repair, endpoint and thinking helpers from mother sources; retain original source hashes for comparison.",
+    "Keep transport, configuration, credentials, model groups, selection and retry ownership in Limare; exclude mother OAuthHTTPClient, TokenBoxRegistry, config loader and session binding/configuration DTOs.",
+    "Use ImageIO for macOS image conversion; receive host-owned capability metadata and diagnostic sink.",
+    "Add positive minimal tier; reject unknown wire tiers; hide Ultra in host UI.",
+    "Use SwiftAnthropic 2.2.0 MessageParameter, MessageStreamResponse and StreamHandler for signed/redacted thinking. Preserve full nested JSON schemas.",
+    "NativeWireCodec and NativeStreamDecoder expose pure request/event projection for the existing Limare transport; no parallel session or persistent protocol state.",
+    "Public native entry point carries per-call signed thinking and thought signatures through host-owned conversation metadata.",
+    "Native thinkingControlJSON is shared by UI distinct-control admission and request serialization; output caps deduplicate equal budgets.",
+    "Kimi Code uses host-selected compatible effort profile; official four-model catalog remains in Limare.",
+    "Use the exact snake_case encoder/decoder strategies from SwiftAnthropic DefaultAnthropicService/Endpoint; its StreamHandler collects signatures.",
+    "Preserve complete inline tool input and nested original JSON keys before conversion to canonical stream events."
+  ],
+  "excludedSources": [
+    "src/ios/Providers/Anthropic/OAuthHTTPClient.swift"
+  ],
+  "packageFiles": [
+    "Sources/OpenMinisProviders/AgentProvider.swift",
+    "Sources/OpenMinisProviders/Anthropic/AnthropicAgentProvider.swift",
+    "Sources/OpenMinisProviders/Anthropic/AnthropicProvider.swift",
+    "Sources/OpenMinisProviders/Gemini/GeminiAgentProvider.swift",
+    "Sources/OpenMinisProviders/Gemini/GeminiProvider.swift",
+    "Sources/OpenMinisProviders/Gemini/GeminiWireFormat.swift",
+    "Sources/OpenMinisProviders/HostServices.swift",
+    "Sources/OpenMinisProviders/LLMError.swift",
+    "Sources/OpenMinisProviders/LLMProvider.swift",
+    "Sources/OpenMinisProviders/LLMTypes.swift",
+    "Sources/OpenMinisProviders/NativeWireCodec.swift",
+    "Sources/OpenMinisProviders/OpenAIThinkingHelpers.swift",
+    "Sources/OpenMinisProviders/Thinking/ThinkingRule.swift",
+    "Sources/OpenMinisProviders/Thinking/ThinkingRuleCoding.swift",
+    "Sources/OpenMinisProviders/Thinking/ThinkingRuleResolver.swift",
+    "Sources/OpenMinisProviders/Thinking/ThinkingWireFormat.swift",
+    "Sources/OpenMinisProviders/ThinkingLevelCatalog.swift",
+    "Sources/OpenMinisProviders/URLBuilding.swift"
+  ]
+}

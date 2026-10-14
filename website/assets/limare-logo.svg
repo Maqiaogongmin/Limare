@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 340" width="100%" height="100%">
+  <defs>
+    <!-- Accent Teal for the i dot -->
+    <linearGradient id="mintTeal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00D2A0" />
+      <stop offset="100%" stop-color="#00A880" />
+    </linearGradient>
+
+    <!-- Main Stroke Dark Graphite Gradient -->
+    <linearGradient id="mainStroke" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#14171A" />
+      <stop offset="50%" stop-color="#1D2126" />
+      <stop offset="100%" stop-color="#242930" />
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(20, 20)">
+    <!-- 1. The File Silhouette Outer Wedge Contour -->
+    <!-- Handle/Back on Left (L stem), Bottom Baseline, Right Nose, Top Slope -->
+    <path d="M 40 28 L 40 250 C 40 275, 55 285, 80 285 L 760 285 C 800 285, 830 270, 830 255 C 830 240, 780 220, 710 205 L 290 85 C 275 80, 260 85, 245 95 L 45 35 Z" fill="none" stroke="url(#mainStroke)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" />
+
+    <!-- 2. Serrated File Teeth (Top Ridge Cutouts / Code Notch Flutes) -->
+    <path d="M 310 92 L 328 108 M 345 106 L 363 122 M 380 120 L 398 136 M 415 134 L 433 150 M 450 148 L 468 164 M 485 162 L 503 178 M 520 176 L 538 192 M 555 190 L 573 206 M 590 204 L 608 220" fill="none" stroke="url(#mainStroke)" stroke-width="10" stroke-linecap="round" />
+
+    <!-- 3. Letter 'L': Left vertical stroke -->
+    <path d="M 64 28 L 64 245 C 64 265, 80 275, 110 275 L 145 275" fill="none" stroke="url(#mainStroke)" stroke-width="12" stroke-linecap="round" />
+
+    <!-- 4. Letter 'i': Mint Teal Dot + Vertical Stem -->
+    <circle cx="152" cy="162" r="13" fill="url(#mintTeal)" />
+    <path d="M 152 188 L 152 285" fill="none" stroke="url(#mainStroke)" stroke-width="12" stroke-linecap="round" />
+
+    <!-- 5. Letter 'm': Continuous double arch -->
+    <path d="M 152 230 C 152 205, 175 192, 205 192 C 235 192, 255 210, 255 235 L 255 285" fill="none" stroke="url(#mainStroke)" stroke-width="12" stroke-linecap="round" />
+    <path d="M 255 230 C 255 205, 278 192, 308 192 C 338 192, 358 210, 358 235 L 358 285" fill="none" stroke="url(#mainStroke)" stroke-width="12" stroke-linecap="round" />
+
+    <!-- 6. Letter 'a': Circular belly and stem -->
+    <path d="M 470 238 C 470 205, 435 192, 405 192 C 375 192, 358 210, 358 238 C 358 266, 378 285, 410 285 C 442 285, 470 266, 470 238 Z" fill="none" stroke="url(#mainStroke)" stroke-width="12" stroke-linejoin="round" />
+    <path d="M 470 215 L 470 285" fill="none" stroke="url(#mainStroke)" stroke-width="12" stroke-linecap="round" />
+
+    <!-- 7. Letter 'r': Stem and arching arm -->
+    <path d="M 470 285 L 530 285 M 490 285 L 490 205 C 490 205, 508 192, 538 192 C 555 192, 565 198, 570 206" fill="none" stroke="url(#mainStroke)" stroke-width="12" stroke-linecap="round" />
+
+    <!-- 8. Letter 'e': Eye loop and sweeping tail into the file nose -->
+    <path d="M 570 242 L 675 242 C 675 210, 648 192, 615 192 C 580 192, 560 215, 560 245 C 560 275, 585 285, 625 285 C 655 285, 678 275, 690 265" fill="none" stroke="url(#mainStroke)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+</svg>

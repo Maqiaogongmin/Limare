@@ -1,0 +1,20 @@
+{
+  "product": "Limare",
+  "bundleIdentifier": "app.limare.Limare",
+  "version": "0.1.0",
+  "build": "1",
+  "architecture": "arm64",
+  "minimumMacOS": "15.0",
+  "developer": "Maqiaogongmin",
+  "contact": "mail@limare.app",
+  "contactCanReply": false,
+  "privacyURL": "https://limare.app/privacy/",
+  "feedURL": "https://limare.app/appcast.xml",
+  "automaticUpdateChecks": false,
+  "automaticUpdateInstallation": false,
+  "updateSystemProfiling": false,
+  "websiteAnalytics": false,
+  "downloadEnabled": false,
+  "sparkleVersion": "2.10.0",
+  "sparklePublicEDKey": "COk5HI8RTPd/6mQDelNzBf2Wk6zRWZy4dqESfagF210="
+}

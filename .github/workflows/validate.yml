@@ -1,0 +1,30 @@
+name: Validate source
+on:
+  workflow_dispatch:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  website:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - run: npm ci && npm run build && npm test
+        working-directory: website
+  macos:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: xcodebuild -version
+      - name: Build the pinned source without distribution credentials
+        run: >-
+          xcodebuild -project src/macos/Limare.xcodeproj -scheme Limare
+          -configuration Debug -derivedDataPath "$RUNNER_TEMP/limare-build"
+          -onlyUsePackageVersionsFromResolvedFile CODE_SIGNING_ALLOWED=NO ARCHS=arm64 build
+      - name: Provider protocol tests
+        run: swift test --package-path deps/OpenMinisProviders --scratch-path "$RUNNER_TEMP/provider-tests"

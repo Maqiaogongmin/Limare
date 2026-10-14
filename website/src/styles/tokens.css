@@ -1,0 +1,136 @@
+:root {
+  /* Initial palette aligned against real macOS Limare screenshot */
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f4f5f7;
+  --surface-interactive: #ebecee;
+  --sidebar-bg: #f6f6f8;
+  --text: #1d1f23;
+  --text-2: #656d76;
+  --text-muted: #8c959f;
+  --border: #e2e5e9;
+  --border-light: #eceef1;
+
+  --accent: #008f6e;
+  --accent-text: #ffffff;
+  --accent-soft: rgba(0, 143, 110, 0.12);
+  --accent-mac: #007aff;
+
+  --warn: #b26a00;
+  --warn-bg: #fff4e0;
+  --danger: #cf222e;
+  --danger-bg: #ffebe9;
+  --success: #1a7f37;
+  --success-bg: #dafbe1;
+
+  --user-bubble: #e8f5f0;
+  --code-bg: #f6f8fa;
+
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --fs-interface: 13px;
+  --fs-conversation: 15px;
+  --fs-code: 13px;
+
+  --radius-row: 6px;
+  --radius-card: 8px;
+  --radius-modal: 10px;
+  --radius-bubble: 12px;
+  --radius-composer: 14px;
+  --radius-full: 9999px;
+
+  --sidebar-w: 240px;
+  --sidebar-min: 200px;
+  --sidebar-max: 280px;
+  --transcript-max: 760px;
+  --user-msg-max: 560px;
+  --settings-list-w: 230px;
+  --settings-detail-max: 720px;
+
+  --ws-default-w: 460px;
+  --ws-min-w: 320px;
+  --ws-max-w: 700px;
+  --ws-narrow-breakpoint: 420px;
+  --ws-side-by-side-min: 708px;
+  --ws-files-tree-w: 190px;
+  --header-h: 44px;
+
+  --sp-xxs: 4px;
+  --sp-xs: 6px;
+  --sp-sm: 8px;
+  --sp-md: 12px;
+  --sp-std: 16px;
+  --sp-lg: 20px;
+  --sp-xl: 24px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #202225;
+    --surface: #272a2e;
+    --surface-2: #2b2e33;
+    --surface-interactive: #34383e;
+    --sidebar-bg: #191b1d;
+    --text: #eaedf0;
+    --text-2: #9da7b2;
+    --text-muted: #6e7681;
+    --border: #32363b;
+    --border-light: #2c3035;
+
+    --accent: #1fc79a;
+    --accent-text: #08130f;
+    --accent-soft: rgba(31, 199, 154, 0.16);
+    --accent-mac: #0a84ff;
+
+    --warn: #d29922;
+    --warn-bg: #342813;
+    --danger: #f85149;
+    --danger-bg: #3c1e1e;
+    --success: #3fb950;
+    --success-bg: #193220;
+
+    --user-bubble: #1c362e;
+    --code-bg: #1b1d20;
+  }
+}
+
+html[data-theme="light"] {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f4f5f7;
+  --surface-interactive: #ebecee;
+  --sidebar-bg: #f6f6f8;
+  --text: #1d1f23;
+  --text-2: #656d76;
+  --text-muted: #8c959f;
+  --border: #e2e5e9;
+  --border-light: #eceef1;
+
+  --accent: #008f6e;
+  --accent-text: #ffffff;
+  --accent-soft: rgba(0, 143, 110, 0.12);
+
+  --user-bubble: #e8f5f0;
+  --code-bg: #f6f8fa;
+}
+
+html[data-theme="dark"] {
+  --bg: #202225;
+  --surface: #272a2e;
+  --surface-2: #2b2e33;
+  --surface-interactive: #34383e;
+  --sidebar-bg: #191b1d;
+  --text: #eaedf0;
+  --text-2: #9da7b2;
+  --text-muted: #6e7681;
+  --border: #32363b;
+  --border-light: #2c3035;
+
+  --accent: #1fc79a;
+  --accent-text: #08130f;
+  --accent-soft: rgba(31, 199, 154, 0.16);
+
+  --user-bubble: #1c362e;
+  --code-bg: #1b1d20;
+}

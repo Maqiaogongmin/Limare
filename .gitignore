@@ -1,0 +1,59 @@
+# Log/OS Files
+*.log
+
+# IntelliJ
+*.iml
+.idea/
+
+# Xcode
+build/
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+DerivedData/
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+# The macOS app locks its dependency versions; builds use exactly these.
+!src/macos/Limare.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+
+# macOS
+.DS_Store
+
+# Environment and secrets
+.env
+.env.*
+
+# Claude Code
+.claude/
+
+# Xcode debugger state (breakpoints) — personal dev state, never track
+xcshareddata/xcdebugger/
+
+# Packaged helpers (cua-driver, cloudflared), rebuilt by script/build_helper.sh
+dist/
+
+# Website dependencies and artifacts (dist/ above already covers website/dist/ due to unanchored pattern)
+website/node_modules/
+
+# Golden snapshot test output (regenerated on every run)
+snapshots/diffs/
+
+# Generated standalone release pages.
+website/public/privacy/
+website/public/security/
+website/public/support/
+website/public/download/

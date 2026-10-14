@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f5f6f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111315" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Limare">
+  <meta name="referrer" content="no-referrer">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="__ASSET_BASE__css/app.css">
+  <title>Limare</title>
+  <script src="__ASSET_BASE__js/boot.js" defer></script>
+  <script type="module" src="__ASSET_BASE__js/main.js"></script>
+  <!-- Every module at once instead of one import level per round trip; markdown-it loads later, on demand. -->
+  <link rel="modulepreload" href="__ASSET_BASE__js/connection.js">
+  <link rel="modulepreload" href="__ASSET_BASE__js/store.js">
+  <link rel="modulepreload" href="__ASSET_BASE__js/dom.js">
+  <link rel="modulepreload" href="__ASSET_BASE__js/markdown.js">
+  <link rel="modulepreload" href="__ASSET_BASE__js/views/list.js">
+  <link rel="modulepreload" href="__ASSET_BASE__js/views/conversation.js">
+  <link rel="modulepreload" href="__ASSET_BASE__js/views/message.js">
+  <link rel="modulepreload" href="__ASSET_BASE__js/views/approval.js">
+  <link rel="modulepreload" href="__ASSET_BASE__js/views/banner.js">
+  <link rel="modulepreload" href="__ASSET_BASE__js/views/composer.js">
+  <link rel="modulepreload" href="__ASSET_BASE__js/picker.js">
+  <link rel="modulepreload" href="__ASSET_BASE__js/upload.js">
+</head>
+<body>
+  <div id="banner" class="banner" role="status" hidden></div>
+  <main id="app"><div class="loading">正在载入 Limare…</div></main>
+  <div id="approval-layer"></div>
+</body>
+</html>

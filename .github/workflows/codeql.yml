@@ -1,0 +1,22 @@
+name: CodeQL
+on:
+  workflow_dispatch:
+  pull_request:
+permissions:
+  contents: read
+  security-events: write
+jobs:
+  swift:
+    # Public CodeQL scanning is enabled after the candidate repository is made public.
+    if: github.event.repository.private == false
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
+        with:
+          languages: swift
+      - run: >-
+          xcodebuild -project src/macos/Limare.xcodeproj -scheme Limare
+          -configuration Debug -derivedDataPath "$RUNNER_TEMP/limare-codeql"
+          -onlyUsePackageVersionsFromResolvedFile CODE_SIGNING_ALLOWED=NO ARCHS=arm64 build
+      - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4

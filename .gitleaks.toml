@@ -1,0 +1,15 @@
+[extend]
+useDefault = true
+
+# Sparkle requires this 32-byte PUBLIC verification key in distributed source.
+# Its pairing with the local Keychain public key is checked during release setup.
+# Limit the exception to the reviewed fields and files; private keys have no exception.
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Sparkle EdDSA public verification key fields"
+condition = "AND"
+paths = ['''(^|/)release-facts\.json$''', '''(^|/)src/macos/Limare\.xcodeproj/project\.pbxproj$''']
+regexTarget = "match"
+regexes = ['''(?i)(?:INFOPLIST_KEY_SUPublicEDKey\s*=\s*"|sparklePublicEDKey"\s*:\s*")[A-Za-z0-9+/]{43}=''']

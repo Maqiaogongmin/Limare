@@ -1,0 +1,5 @@
+markdown-it 15.0.2 (MIT)
+  source:    https://registry.npmjs.org/markdown-it/-/markdown-it-15.0.2.tgz
+  integrity: sha512-q4IGxMv56jCqT4OCRCADBoDP3LO4MhmTXjFbphHPXs4g3j9Xg5RDnxqN8IF/3vIWEU+VCnUq+7JUg/cfy2E6Qw== (npm, verified)
+  file:      package/dist/browser/markdown-it.esm.min.mjs -> markdown-it.esm.min.js
+  sha256:    528b68ea3be3ed86be7bc9ed2b99e21a4f51d9afcfb01330d0393abe04070f32 (sourceMappingURL comment removed)
