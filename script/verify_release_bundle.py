@@ -60,7 +60,7 @@ def verify(app):
     authorized = profile['Entitlements']
     with tempfile.TemporaryDirectory(prefix='limare-certificate-verification-') as temporary:
         prefix = str(Path(temporary) / 'certificate')
-        run(['codesign', '-d', '--extract-certificates', prefix, str(app)])
+        run(['codesign', '-d', '--extract-certificates=' + prefix, str(app)])
         leaf = Path(prefix + '0').read_bytes()
         if hashlib.sha256(leaf).digest() not in [hashlib.sha256(cert).digest() for cert in profile.get('DeveloperCertificates', [])]:
             raise RuntimeError('App signing certificate is not authorized by its profile')
