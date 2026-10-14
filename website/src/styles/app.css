@@ -964,8 +964,10 @@ body {
 }
 
 .ws-browser-bar {
-  height: 40px;
-  padding: 0 12px;
+  min-height: 40px;
+  height: auto;
+  flex-wrap: wrap;
+  padding: 8px 12px;
   background-color: var(--surface-2);
   border-bottom: 1px solid var(--border);
   display: flex;
@@ -1004,6 +1006,7 @@ body {
 
 .ws-browser-address-box {
   flex: 1;
+  min-width: 120px;
   height: 26px;
   display: flex;
   align-items: center;

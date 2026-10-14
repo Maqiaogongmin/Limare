@@ -1,4 +1,4 @@
-export type Intent = 'intro' | 'privacy' | 'random';
+export type Intent = 'intro' | 'privacy' | 'security' | 'support' | 'random';
 
 const PRIVACY_ALIASES = [
   'privacy policy',
@@ -47,6 +47,8 @@ export function classifyIntent(raw: string): Intent {
   if (PRIVACY_ALIASES.includes(normalized)) {
     return 'privacy';
   }
+  if (['security', 'limare security', "limare's security", '安全', '安全说明', 'limare 安全'].includes(normalized)) return 'security';
+  if (['support', 'limare support', "limare's support", '支持', '使用支持', 'limare 支持'].includes(normalized)) return 'support';
   if (INTRO_ALIASES.includes(normalized)) {
     return 'intro';
   }

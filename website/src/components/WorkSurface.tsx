@@ -8,7 +8,7 @@ import {
   IconArrowLeft,
 } from './Icons';
 import { FAKE_WORKSPACE_FILES } from '../data/mockData';
-import { PRIVACY_POLICY } from '../content/privacy';
+import { DOCUMENTS, documentBody } from '../content/documents';
 
 const mdParser = new MarkdownIt({
   html: false,
@@ -85,6 +85,12 @@ export const WorkSurface: React.FC<WorkSurfaceProps> = ({ isOpen, onClose, isNar
   const [isReloading, setIsReloading] = useState<boolean>(false);
 
   if (!isOpen) return null;
+  const browserDocument = DOCUMENTS.find(doc => browserUrl.includes(`${doc.stem}.html`)) ?? DOCUMENTS[0];
+  const navigateBrowser = (offset: number) => {
+    const index = DOCUMENTS.indexOf(browserDocument);
+    const doc = DOCUMENTS[(index + offset + DOCUMENTS.length) % DOCUMENTS.length];
+    setBrowserUrl(`https://limare.app/${doc.stem}.html`);
+  };
 
   const currentTab = tabs.find((t) => t.id === activeTabId);
   const currentFileItem = FAKE_WORKSPACE_FILES.find((f) => f.path === selectedFile) || FAKE_WORKSPACE_FILES[0];
@@ -400,26 +406,14 @@ export const WorkSurface: React.FC<WorkSurfaceProps> = ({ isOpen, onClose, isNar
                 <button
                   className="ws-nav-btn"
                   title="Back"
-                  onClick={() => {
-                    if (browserUrl.includes('privacy')) {
-                      setBrowserUrl('https://limare.app/what-is-limare.html');
-                    } else {
-                      setBrowserUrl('https://limare.app/privacy/');
-                    }
-                  }}
+                  onClick={() => navigateBrowser(-1)}
                 >
                   ←
                 </button>
                 <button
                   className="ws-nav-btn"
                   title="Forward"
-                  onClick={() => {
-                    if (browserUrl.includes('what-is-limare')) {
-                      setBrowserUrl('https://limare.app/privacy/');
-                    } else {
-                      setBrowserUrl('https://limare.app/what-is-limare.html');
-                    }
-                  }}
+                  onClick={() => navigateBrowser(1)}
                 >
                   →
                 </button>
@@ -439,29 +433,19 @@ export const WorkSurface: React.FC<WorkSurfaceProps> = ({ isOpen, onClose, isNar
               </div>
 
               {/* Quick page switch pills */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <button
-                  className={`ws-pill-btn ${browserUrl.includes('what-is-limare') ? 'active' : ''}`}
-                  onClick={() => setBrowserUrl('https://limare.app/what-is-limare.html')}
-                >
-                  Overview
-                </button>
-                <button
-                  className={`ws-pill-btn ${browserUrl.includes('privacy') ? 'active' : ''}`}
-                  onClick={() => setBrowserUrl('https://limare.app/privacy/')}
-                >
-                  Privacy
-                </button>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {DOCUMENTS.map(doc => (
+                  <button key={doc.id} className={`ws-pill-btn ${browserDocument.id === doc.id ? 'active' : ''}`}
+                    onClick={() => setBrowserUrl(`https://limare.app/${doc.stem}.html`)}>
+                    {doc.id === 'intro' ? 'Overview' : doc.id === 'privacy' ? 'Privacy' : doc.title}
+                  </button>
+                ))}
               </div>
             </div>
 
             {/* Browser Render Canvas */}
             <div className="ws-browser-canvas">
-              {browserUrl.includes('privacy') ? (
-                <PrivacyRulesWebPage />
-              ) : (
-                <WhatIsLimareWebPage />
-              )}
+              <div dangerouslySetInnerHTML={{ __html: documentBody(browserDocument) }} />
             </div>
           </div>
         )}
@@ -501,57 +485,3 @@ const CodeEditorView: React.FC<{
     </div>
   );
 };
-
-// Rendered Web Page Component 1: What is Limare
-const WhatIsLimareWebPage: React.FC = () => {
-  return (
-    <div className="webpage-root">
-      <div className="webpage-hero">
-        <div className="webpage-tag">macOS Native Agent</div>
-        <h1 className="webpage-title">What is Limare?</h1>
-        <p className="webpage-sub">
-          An interactive macOS AI agent engineered for coding, deep research, and terminal workflows. Local-first storage and user-controlled credentials. Model and tool data may be sent to the services you select.
-        </p>
-      </div>
-
-      <div className="webpage-grid">
-        <div className="webpage-card">
-          <div className="card-icon">⚡</div>
-          <h3>Native Swift Shell</h3>
-          <p>A native macOS interface built with SwiftUI and AppKit, with WebKit previews and supporting services.</p>
-        </div>
-
-        <div className="webpage-card">
-          <div className="card-icon">🔑</div>
-          <h3>User-controlled Credentials</h3>
-          <p>Use API keys, supported third-party OAuth, or provider-issued credentials. Limare operates no model relay.</p>
-        </div>
-
-        <div className="webpage-card">
-          <div className="card-icon">🛡️</div>
-          <h3>Permission Controls</h3>
-          <p>Configure access for tools and desktop automation. Approved commands can modify files or contact external services.</p>
-        </div>
-
-        <div className="webpage-card">
-          <div className="card-icon">🧩</div>
-          <h3>MCP & Skill Ecology</h3>
-          <p>Built-in support for Model Context Protocol servers, filesystem tools, and background automation.</p>
-        </div>
-      </div>
-
-      <div className="webpage-footer-box">
-        <div>
-          <div style={{ fontWeight: 600, fontSize: 14 }}>Try Limare for macOS</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Version 0.1.0 · Apple Silicon · macOS 15.0+</div>
-        </div>
-        <a href="/download/" className="header-btn active" style={{ padding: '6px 14px', textDecoration: 'none' }}>Release preparation</a>
-      </div>
-    </div>
-  );
-};
-
-// Render the same policy used by the standalone page and chat.
-const PrivacyRulesWebPage: React.FC = () => (
-  <div className="webpage-root markdown-body" dangerouslySetInnerHTML={{ __html: mdParser.render(PRIVACY_POLICY) }} />
-);

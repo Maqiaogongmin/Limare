@@ -1,4 +1,4 @@
-import { PRIVACY_POLICY } from '../content/privacy';
+import { DOCUMENTS, documentFiles } from '../content/documents';
 export interface ProjectItem {
   id: string;
   name: string;
@@ -74,9 +74,8 @@ export const FAKE_PROJECTS: ProjectItem[] = [
 ];
 
 export const FAKE_CONVERSATIONS: ConversationItem[] = [
-  { id: 'c-1', title: 'Limare AI 助手自我介绍', updatedAt: 'Just now' },
-  { id: 'c-2', title: '推文项目总结与开源状态', updatedAt: '2 hours ago' },
-  { id: 'c-3', title: 'MCP Remote Auth 调研与复盘', updatedAt: 'Yesterday' },
+  { id: 'c-security', title: 'Security', updatedAt: 'Just now' },
+  { id: 'c-support', title: 'Support', updatedAt: 'Just now' },
 ];
 
 export const FAKE_PROVIDERS: ProviderItem[] = [
@@ -126,32 +125,4 @@ export interface WorkspaceFileItem {
   previewUrl?: string;
 }
 
-export const FAKE_WORKSPACE_FILES: WorkspaceFileItem[] = [
-  {
-    path: 'what-is-limare.md', name: 'what-is-limare.md', type: 'markdown', size: '1 KB',
-    content: `# What is Limare?
-
-Limare is a native macOS AI agent with local-first storage and user-controlled credentials. Use API keys, supported third-party OAuth, or provider-issued credentials. Model and tool data can be sent to the services you select.
-
-Version 0.1.0 · Apple Silicon · macOS 15.0+. Limare operates no account, model relay, or conversation storage backend. See the privacy policy for data flows and deletion boundaries.`,
-  },
-  {
-    path: 'what-is-limare.json', name: 'what-is-limare.json', type: 'json', size: '1 KB',
-    content: JSON.stringify({ product: 'Limare', version: '0.1.0', architecture: 'arm64', minimumSystem: 'macOS 15.0', localFirst: true, userControlledCredentials: true, privacyURL: 'https://limare.app/privacy/' }, null, 2),
-  },
-  {
-    path: 'what-is-limare.html', name: 'what-is-limare.html', type: 'html', size: '1 KB',
-    previewUrl: 'https://limare.app/what-is-limare.html',
-    content: '<!doctype html><html lang="en"><meta charset="utf-8"><title>What is Limare?</title><h1>Limare</h1><p>A native, local-first macOS AI agent with user-controlled credentials.</p><p>0.1.0 · Apple Silicon · macOS 15.0+.</p><a href="https://limare.app/privacy/">Privacy and data flows</a></html>',
-  },
-  { path: 'privacy-rules.md', name: 'privacy-rules.md', type: 'markdown', size: '8 KB', content: PRIVACY_POLICY },
-  {
-    path: 'privacy-rules.json', name: 'privacy-rules.json', type: 'json', size: '1 KB',
-    content: JSON.stringify({ policyURL: 'https://limare.app/privacy/', version: '0.1.0', contact: 'mail@limare.app', localFirst: true, thirdPartyTransmission: true }, null, 2),
-  },
-  {
-    path: 'privacy-rules.html', name: 'privacy-rules.html', type: 'html', size: '1 KB',
-    previewUrl: 'https://limare.app/privacy/',
-    content: '<!doctype html><html lang="en"><meta charset="utf-8"><title>Limare Privacy Policy</title><a href="https://limare.app/privacy/">Read the authoritative Limare Privacy Policy</a></html>',
-  },
-];
+export const FAKE_WORKSPACE_FILES: WorkspaceFileItem[] = DOCUMENTS.flatMap(documentFiles);

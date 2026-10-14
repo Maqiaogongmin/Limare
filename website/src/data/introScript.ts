@@ -62,17 +62,47 @@ cd Limare
     delayBefore: 180,
   },
   {
+    kind: 'paragraph', md: '---', delayBefore: 60,
+  },
+  {
+    kind: 'heading', md: '### Choose how you connect', delayBefore: 120,
+  },
+  {
+    kind: 'list',
+    md: `1. **Choose a model endpoint.**
+   - A remote provider using your supported credentials.
+   - A local model endpoint, when configured.
+2. **Review the tools you enable.**
+   - MCP servers, Skills, and Hooks extend the agent.
+   - Browser and desktop automation have their own data and permission boundaries.
+3. **Work in a conversation.** Review results and proposed actions before relying on them.`,
+    delayBefore: 120,
+  },
+  {
+    kind: 'heading', md: '### Release at a glance', delayBefore: 120,
+  },
+  {
+    kind: 'code', lang: 'json', filename: 'Release facts',
+    md: '```json\n' + JSON.stringify({ product: 'Limare', version: CONFIG.version, architecture: 'arm64', minimumMacOS: '15.0', downloadAvailable: CONFIG.downloadEnabled, updateChecks: 'manual' }, null, 2) + '\n```',
+    delayBefore: 120,
+  },
+  {
+    kind: 'paragraph',
+    md: '*Explore the details:* [Privacy Policy](/#privacy) · [Security](/#security) · [Support](/#support).',
+    delayBefore: 120,
+  },
+  {
     kind: 'paragraph',
     md: 'Version 0.1.0 targets Apple Silicon and macOS 15.0+. Downloads will open after release validation.',
     plain: 'Version 0.1.0 targets Apple Silicon and macOS 15.0+. Downloads will open after release validation.',
     delayBefore: 120,
   },
   {
-    kind: 'link',
+    kind: CONFIG.downloadEnabled ? 'link' : 'paragraph',
     emphasis: true,
-    href: CONFIG.downloadEnabled ? CONFIG.downloadURL : '/download/',
-    md: `[**Release preparation**](/download/)`,
-    plain: 'Release preparation',
+    href: CONFIG.downloadEnabled ? CONFIG.downloadURL : undefined,
+    md: CONFIG.downloadEnabled ? `[**Download here**](${CONFIG.downloadURL})` : '**Downloads are not yet available.** Release validation is in progress.',
+    plain: CONFIG.downloadEnabled ? 'Download here' : 'Downloads are not yet available. Release validation is in progress.',
     delayBefore: 120,
   },
 ];

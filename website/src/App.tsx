@@ -16,6 +16,7 @@ import { SettingsView } from './components/SettingsView';
 import { classifyIntent, containsCJK } from './data/intent';
 import { INTRO_SCRIPT } from './data/introScript';
 import { PRIVACY_SCRIPT } from './data/privacyScript';
+import { DOCUMENTS, SECURITY_SCRIPT, SUPPORT_SCRIPT } from './content/documents';
 import { CORPUS_ZH, CORPUS_EN } from './data/corpus';
 import {
   FAKE_PROJECTS,
@@ -23,6 +24,8 @@ import {
   ConversationItem,
 } from './data/mockData';
 import { ScriptBlock, Script } from './types/script';
+
+const chatScripts: Record<string, Script> = { intro: INTRO_SCRIPT, privacy: PRIVACY_SCRIPT, security: SECURITY_SCRIPT, support: SUPPORT_SCRIPT };
 
 export interface ChatMessage {
   id: string;
@@ -93,55 +96,26 @@ export function App() {
 
   // Conversations State
   const [conversations, setConversations] = useState<ConversationItem[]>(FAKE_CONVERSATIONS);
-  const [activeConvId, setActiveConvId] = useState<string>('c-1');
+  const [activeConvId, setActiveConvId] = useState<string>(DOCUMENTS.find(doc => `#${doc.id}` === window.location.hash || window.location.pathname === `/${doc.id}/`)?.conversation ?? 'c-what-is-limare');
   const [archivedCount, setArchivedCount] = useState(5);
   const [activeActionMenuConvId, setActiveActionMenuConvId] = useState<string | null>(null);
 
   // Messages per conversation (in memory)
-  const [conversationMessages, setConversationMessages] = useState<Record<string, ChatMessage[]>>({
-    'c-1': [
-      {
-        id: 'init-1',
-        sender: 'user',
-        rawText: 'What is Limare?',
-      },
-      {
-        id: 'init-2',
-        sender: 'assistant',
-        blocks: INTRO_SCRIPT,
-        status: 'completed',
-        modelName: 'claude-sonnet-5',
-      },
-    ],
-    'c-what-is-limare': [
-      {
-        id: 'wil-u',
-        sender: 'user',
-        rawText: 'What is Limare?',
-      },
-      {
-        id: 'wil-a',
-        sender: 'assistant',
-        blocks: INTRO_SCRIPT,
-        status: 'completed',
-        modelName: 'claude-sonnet-5',
-      },
-    ],
-    'c-privacy-policy': [
-      {
-        id: 'priv-u',
-        sender: 'user',
-        rawText: "Limare's privacy policy",
-      },
-      {
-        id: 'priv-a',
-        sender: 'assistant',
-        blocks: PRIVACY_SCRIPT,
-        status: 'completed',
-        modelName: 'claude-sonnet-5',
-      },
-    ],
-  });
+  const [conversationMessages, setConversationMessages] = useState<Record<string, ChatMessage[]>>(
+    Object.fromEntries(DOCUMENTS.map(doc => [doc.conversation, [
+      { id: `${doc.id}-user`, sender: 'user', rawText: doc.prompt },
+      { id: `${doc.id}-answer`, sender: 'assistant', blocks: chatScripts[doc.id], status: 'completed', modelName: 'claude-sonnet-5' },
+    ]]))
+  );
+
+  useEffect(() => {
+    const navigateDocument = () => {
+      const doc = DOCUMENTS.find(doc => `#${doc.id}` === window.location.hash);
+      if (doc) { setActiveConvId(doc.conversation); setCurrentScreen('chat'); }
+    };
+    window.addEventListener('hashchange', navigateDocument);
+    return () => window.removeEventListener('hashchange', navigateDocument);
+  }, []);
 
   // Composer Input & Popover Candidates
   const [inputText, setInputText] = useState('');
@@ -151,6 +125,7 @@ export function App() {
   const [showModelPicker, setShowModelPicker] = useState(false);
 
   // Streaming Engine State (Lifted to App layer for §6.3.2 lifecycle)
+  const [activeScript, setActiveScript] = useState<Script>(INTRO_SCRIPT);
   const [streamingConvId, setStreamingConvId] = useState<string | null>(null);
   const [streamingBlocks, setStreamingBlocks] = useState<ScriptBlock[]>([]);
   const [currentBlockIdx, setCurrentBlockIdx] = useState<number>(0);
@@ -231,6 +206,7 @@ export function App() {
 
   // Dispatch streaming player for a script
   const playScript = async (targetConvId: string, script: Script) => {
+    setActiveScript(script);
     streamAbortControllerRef.current = false;
     setStreamingConvId(targetConvId);
     setStreamingBlocks([]);
@@ -399,6 +375,10 @@ export function App() {
       targetScript = INTRO_SCRIPT;
     } else if (intent === 'privacy') {
       targetScript = PRIVACY_SCRIPT;
+    } else if (intent === 'security') {
+      targetScript = SECURITY_SCRIPT;
+    } else if (intent === 'support') {
+      targetScript = SUPPORT_SCRIPT;
     } else {
       const sentence = pickRandomCorpus(trimmed);
       targetScript = [
@@ -492,7 +472,7 @@ export function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showModelPicker, activeActionMenuConvId, isInputFocused]);
 
-  const candidates = ['What is Limare?', "Limare's privacy policy"];
+  const candidates = DOCUMENTS.map(doc => doc.prompt);
 
   return (
     <div className="window-frame">
@@ -755,7 +735,7 @@ export function App() {
                                 {currentStreamText !== '' && (
                                   <MarkdownBlockRenderer
                                     block={
-                                      INTRO_SCRIPT[currentBlockIdx] || {
+                                      activeScript[currentBlockIdx] || {
                                         kind: 'paragraph',
                                         md: currentStreamText,
                                       }
@@ -824,6 +804,7 @@ export function App() {
                             value={inputText}
                             rows={1}
                             onFocus={() => setIsInputFocused(true)}
+                            onClick={() => setIsInputFocused(true)}
                             onBlur={() => {
                               // delay slightly so mouse clicks on candidate fire
                               setTimeout(() => setIsInputFocused(false), 200);
@@ -930,15 +911,7 @@ export function App() {
                           <div>Limare can make mistakes. Review tool calls before relying on changes.</div>
                           <div className="demo-license-note">
                             Interactive UI Demo · Simulated Data · GPLv3 ·{' '}
-                            <a
-                              href="/download/"
-                            >
-                              Source and release preparation
-                            </a>
-                            {' · '}<a href="/privacy/">Privacy</a>
-                            {' · '}<a href="/security/">Security</a>
-                            {' · '}<a href="/support/">Support</a>
-                            {' · '}0.1.0
+                            <a href="https://github.com/Maqiaogongmin/Limare" target="_blank" rel="noopener noreferrer">GitHub</a>
                           </div>
                         </div>
                       </div>

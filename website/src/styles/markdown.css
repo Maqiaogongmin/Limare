@@ -43,6 +43,22 @@
   margin-bottom: 4px;
 }
 
+.assistant-body .markdown-body li > ul,
+.assistant-body .markdown-body li > ol {
+  margin-top: 6px;
+  margin-bottom: 8px;
+}
+
+.assistant-body .markdown-body hr {
+  border: 0;
+  border-top: 1px solid var(--border-light);
+  margin: 22px 0;
+}
+
+.assistant-body .markdown-body th {
+  white-space: nowrap;
+}
+
 .markdown-body blockquote {
   border-left: 3px solid var(--accent);
   padding: 6px 14px;
