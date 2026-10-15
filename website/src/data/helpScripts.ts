@@ -52,7 +52,7 @@ Attachments: <sanitized evidence only>
 
 - Security fixes are announced through **GitHub Releases** and the repository's security materials.
 - Update checks are *user-triggered*; Limare does not check for fixes in the background.
-- Public binary downloads remain unavailable until a signed and notarized release is published.
+- The signed and notarized release is available through [GitHub Releases](https://github.com/Maqiaogongmin/Limare/releases/latest).
 - If an artifact is unsafe, downloads and its update feed may be withdrawn.
   - Preserve its version and hash for investigation.
   - Fixes use a **new version and tag**, rather than replacing the source behind an existing tag.
@@ -70,7 +70,7 @@ export const SUPPORT_SCRIPT = toChatScript(`# Support
 
 | Report | Channel | Visibility |
 | --- | --- | --- |
-| Ordinary bug or usage problem | GitHub Issues, once the source repository is published | Public |
+| Ordinary bug or usage problem | [GitHub Issues](https://github.com/Maqiaogongmin/Limare/issues) | Public |
 | Private installation or privacy report | [mail@limare.app](mailto:mail@limare.app) | Private |
 | Suspected vulnerability or leaked credential | Private email; see [Security](/#security) | Keep details private |
 
@@ -127,5 +127,5 @@ Use **Limare → Check for Updates…** to check manually. There is no backgroun
 
 ### Download status
 
-Public downloads remain closed until the source, signed/notarized DMG, anonymous download checks, and update feed have passed release validation. See [What is Limare?](/#intro) for the download entry.
+Download the signed and notarized **Limare 0.1.0** from [GitHub Releases](https://github.com/Maqiaogongmin/Limare/releases/tag/v0.1.0). The release includes SHA-256 checksums and the exact source tag. See [What is Limare?](/#intro) for the download entry.
 `);

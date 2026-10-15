@@ -1,0 +1,14 @@
+<?xml version='1.0' encoding='utf-8'?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+  <channel>
+    <title>Limare updates</title>
+    <link>https://limare.app/</link>
+    <description>Limare release updates</description>
+    <item>
+      <title>Limare 0.1.0</title>
+      <sparkle:releaseNotesLink>https://github.com/Maqiaogongmin/Limare/releases/tag/v0.1.0</sparkle:releaseNotesLink>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/Maqiaogongmin/Limare/releases/download/v0.1.0/Limare.dmg" length="69935162" type="application/octet-stream" sparkle:version="1" sparkle:shortVersionString="0.1.0" sparkle:edSignature="28NSQ2ccJnBYKCo6XSnhJaOI7T4wPSg/eHYMrj3H5rmXji8ybl+PtK5p31M27vFlB9Wq3Q6yNuP0siZyhzBQCg==" />
+    </item>
+  </channel>
+</rss>

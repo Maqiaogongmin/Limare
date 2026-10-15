@@ -14,7 +14,7 @@
   "automaticUpdateInstallation": false,
   "updateSystemProfiling": false,
   "websiteAnalytics": false,
-  "downloadEnabled": false,
+  "downloadEnabled": true,
   "sparkleVersion": "2.10.0",
   "sparklePublicEDKey": "COk5HI8RTPd/6mQDelNzBf2Wk6zRWZy4dqESfagF210="
 }
