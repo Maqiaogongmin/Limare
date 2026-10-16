@@ -675,13 +675,7 @@ export function App() {
                         <div className="transcript-inner">
                           {activeMessages.length === 0 && !streamingConvId && (
                             <div className="chat-empty-state">
-                              <div className="chat-empty-icon">
-                                <img
-                                  src={isDarkMode ? limareAvatarDark : limareAvatar}
-                                  alt="Limare"
-                                  className="chat-empty-app-icon"
-                                />
-                              </div>
+                              <span className="chat-empty-glyph" aria-hidden="true" />
                               <div className="chat-empty-title">Start a conversation</div>
                               <div className="chat-empty-subtitle">
                                 Desktop harness tools are active. Type a message below to begin.

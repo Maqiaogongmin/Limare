@@ -361,43 +361,32 @@ body {
   justify-content: center;
   min-height: 360px;
   text-align: center;
-  color: var(--text-2);
-  gap: 12px;
+  color: color-mix(in srgb, var(--text) 55%, var(--bg));
+  gap: 8px;
   margin: auto 0;
 }
 
-.chat-empty-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 4px;
-}
-
-.chat-empty-app-icon {
+.chat-empty-glyph {
   width: 64px;
   height: 64px;
-  border-radius: 50%;
-  object-fit: contain;
-  user-select: none;
-  -webkit-user-drag: none;
-  box-shadow: 0 0 0 0.5px var(--border);
-  transition: transform 0.2s ease;
-}
-
-.chat-empty-app-icon:hover {
-  transform: scale(1.04);
+  flex-shrink: 0;
+  margin-bottom: 16px;
+  background-color: currentColor;
+  opacity: 0.5;
+  -webkit-mask: url('../../assets/limare-glyph.png') center / contain no-repeat;
+  mask: url('../../assets/limare-glyph.png') center / contain no-repeat;
 }
 
 .chat-empty-title {
   font-size: 16px;
   font-weight: 600;
-  color: var(--text);
+  color: inherit;
 }
 
 .chat-empty-subtitle {
   font-size: 13px;
-  color: var(--text-2);
-  max-width: 380px;
+  color: inherit;
+  max-width: 100%;
   line-height: 1.4;
 }
 
