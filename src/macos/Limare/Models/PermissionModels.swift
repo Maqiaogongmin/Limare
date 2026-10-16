@@ -20,7 +20,7 @@ enum PermissionMode: String, CaseIterable, Codable, Sendable {
         case .helpMeApprove:
             "The same sandbox. Requests that need more access are reviewed automatically."
         case .fullAccess:
-            "Runs commands outside the sandbox and reaches files outside the Workspace without approval. Limare's own data stays protected."
+            "Runs commands outside the sandbox and reaches files outside the Workspace without approval."
         }
     }
 }

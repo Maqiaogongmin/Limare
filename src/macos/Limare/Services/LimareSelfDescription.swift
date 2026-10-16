@@ -20,7 +20,7 @@ enum LimareSelfDescription {
         var lines = [
             "# About Limare, the app you run in",
             "Settings pages: General, Personalization, Permissions, Remote Access, Providers, Model Groups, Skills, MCP, Hooks. When something needs the user, say exactly where to go; when a tool can do it, do it yourself.",
-            "- shell_execute: " + shellLine(facts.permissionMode) + " Limare's own data stays off limits in every mode, and sudo does not work (give the user the Terminal command).",
+            "- shell_execute: " + shellLine(facts.permissionMode) + " sudo does not work (give the user the Terminal command).",
             "- Permission mode \"\(facts.permissionMode.displayName)\": \(facts.permissionMode.detail) Set in Settings → Permissions.",
             "- Never ask for secrets (API keys, tokens, passwords) in the conversation or put them in tool arguments; Limare collects them in its own secure window. Model provider keys go in Settings → Providers.",
         ]
@@ -46,8 +46,8 @@ enum LimareSelfDescription {
 
     private static func shellLine(_ mode: PermissionMode) -> String {
         mode == .fullAccess
-            ? "In Full access it runs outside the sandbox: it writes anywhere, opens apps and URLs (`open` a local server's address to show the user a page in their browser) and uses AppleScript."
-            : "It runs in a sandbox: it reads files, uses the network and can serve on local ports, but writes only to its working folder and temp and cannot open apps or URLs or use AppleScript. For more, set sandbox_permissions \"require_escalated\" with a justification, which asks for approval and runs that command outside the sandbox. The file tools also work outside the working folder."
+            ? "In Full access it runs outside the sandbox with the user's own rights: it writes anywhere, opens apps and URLs (`open` a local server's address to show the user a page in their browser), uses AppleScript, and runs tools that sandbox themselves, such as swift build and xcodebuild."
+            : "It runs in a sandbox: it reads files, uses the network and can serve on local ports, but writes only to its working folder and temp, cannot open apps or URLs or use AppleScript, and cannot touch Limare's own data. For more, set sandbox_permissions \"require_escalated\" with a justification, which asks for approval and runs that command outside the sandbox. The file tools also work outside the working folder."
     }
 
     private static func computerUseLine(_ facts: Facts) -> String {

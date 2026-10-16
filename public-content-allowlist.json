@@ -11,7 +11,9 @@
     "website/",
     "src/macos/Configuration/"
   ],
-  "excludedDirectories": ["website/legacy/"],
+  "excludedDirectories": [
+    "website/legacy/"
+  ],
   "files": [
     ".gitignore",
     ".gitleaks.toml",
@@ -36,6 +38,14 @@
     "script/bundle_notices.py",
     "script/sign_release_bundle.py",
     "script/verify_release_bundle.py",
-    "script/export_public_tree.py"
+    "script/export_public_tree.py",
+    "script/test_limare_build.sh",
+    "script/LimareBuildTests.swift",
+    "script/test_shell_lifecycle_containment.sh",
+    "script/ShellLifecycleContainmentRegressionTests.swift",
+    "script/test_mcp_runtime.sh",
+    "script/MCPRuntimeTests.swift",
+    "script/mcp_runtime_fixture.py",
+    "script/mcp_sdk_swiftc_flags.sh"
   ]
 }

@@ -79,10 +79,18 @@ private final class ShellExecution: @unchecked Sendable {
 
         switch request.boundary {
         case .primaryInteractive:
-            let launch = try MCPExecutionPolicy.launch(executable: "/bin/zsh", arguments: ["-c", request.command], workspace: request.writableRoot,
-                                                        unconfined: request.unconfined)
-            process.executableURL = launch.0
-            process.arguments = launch.1
+            if request.unconfined {
+                // Full access or an approved escalation runs with no Seatbelt profile at all, as
+                // Codex's danger-full-access and Claude Code's unsandboxed commands do. Any profile,
+                // even one that only denies a few roots, makes the process sandboxed, and macOS then
+                // refuses it a sandbox of its own: swift build, xcodebuild and sandbox-exec fail.
+                process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+                process.arguments = ["-c", request.command]
+            } else {
+                let launch = try MCPExecutionPolicy.launch(executable: "/bin/zsh", arguments: ["-c", request.command], workspace: request.writableRoot)
+                process.executableURL = launch.0
+                process.arguments = launch.1
+            }
             let allowed: Set<String> = ["PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "TMPDIR"]
             var environment = ProcessInfo.processInfo.environment.filter { allowed.contains($0.key) || $0.key.hasPrefix("LC_") }
             request.environment.forEach { environment[$0.key] = $0.value }
@@ -240,7 +248,41 @@ private final class ShellExecution: @unchecked Sendable {
         processEnded = true
         let result = makeResultIfReady()
         lock.unlock()
+        guard result == nil else {
+            finishIfReady(result)
+            return
+        }
+        // The pipes normally close when the command exits. A descendant that inherited them
+        // keeps them open, and the group kill misses one that left the process group (any
+        // helper launched through Foundation's Process gets a group of its own), so waiting
+        // for EOF could wait forever. Like Codex's IO drain timeout, give the pipes a short
+        // grace and then report what was read.
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + Self.outputDrainGraceSeconds) { [weak self] in
+            self?.abandonOpenOutput()
+        }
+    }
+
+    private static let outputDrainGraceSeconds: TimeInterval = 2
+
+    private func abandonOpenOutput() {
+        lock.lock()
+        guard !didFinish else {
+            lock.unlock()
+            return
+        }
+        if !stdoutEnded {
+            stdoutBuffer.append(stdoutDecoder.finish())
+            stdoutEnded = true
+        }
+        if !stderrEnded {
+            stderrBuffer.append(stderrDecoder.finish())
+            stderrEnded = true
+        }
+        let result = makeResultIfReady()
+        lock.unlock()
         finishIfReady(result)
+        try? stdoutPipe.fileHandleForReading.close()
+        try? stderrPipe.fileHandleForReading.close()
     }
 
     private func makeOutputEvent(stream: ShellOutputStream, text: String) -> ShellStreamEvent? {

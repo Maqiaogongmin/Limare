@@ -3,6 +3,7 @@ import Combine
 import Sparkle
 
 /// The first release only checks for updates in response to the application menu.
+/// Development builds never start the updater (see LimareBuild).
 /// Keep this app-only integration out of standalone source-based test runners.
 @MainActor
 final class ManualUpdateController: NSObject, ObservableObject, SPUUpdaterDelegate {
@@ -14,6 +15,7 @@ final class ManualUpdateController: NSObject, ObservableObject, SPUUpdaterDelega
         super.init()
         // XCTest hosts must not mutate the user's update preferences or start an updater.
         guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+        guard LimareBuild.current.takesPublicUpdates else { return }
         controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self, userDriverDelegate: nil)
         // Enforce the release policy even if old preferences enabled automatic behavior.
         controller.updater.automaticallyChecksForUpdates = false
@@ -117,8 +119,10 @@ struct LimareApp: App {
         .defaultSize(width: 980, height: 680)
         .commands {
             CommandGroup(after: .appInfo) {
-                Button("Check for Updates…") { updates.checkForUpdates() }
-                    .disabled(!updates.canCheckForUpdates)
+                if LimareBuild.current.takesPublicUpdates {
+                    Button("Check for Updates…") { updates.checkForUpdates() }
+                        .disabled(!updates.canCheckForUpdates)
+                }
             }
             CommandGroup(replacing: .appSettings) {
                 Button("Settings…") {

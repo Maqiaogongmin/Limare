@@ -18,6 +18,8 @@ final class MCPStore {
     private(set) var servers: [MCPServerConfig] = []
     private(set) var statuses: [String: MCPServerStatus] = [:]
     private(set) var toolsByServer: [String: [MCPTool]] = [:]
+    /// Each connected server's initialize `instructions`, discarded with its tool catalog.
+    private(set) var instructionsByServer: [String: String] = [:]
     private(set) var pendingCredentialRequest: MCPCredentialRequest?
     private(set) var credentialPresenceByServer: [String: [String: MCPCredentialPresence]] = [:]
     /// Credential names the last connection attempt found without a stored value.
@@ -184,6 +186,16 @@ final class MCPStore {
         return toolsByServer[server.id] ?? []
     }
 
+    /// The instructions of a server whose tools are currently offered (Claude Code's "MCP Server
+    /// Instructions"); nil when it is not connected or sent none.
+    func currentInstructions(for serverID: String) -> String? {
+        guard let server = servers.first(where: { $0.id == serverID }), !currentDiscoveredTools(for: server).isEmpty,
+              let text = instructionsByServer[serverID]?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
+            return nil
+        }
+        return text
+    }
+
     private func handleUnexpectedStdioTermination(serverID: String, generation: Int, exitCode: Int32) {
         // Only a live session's death is handled here; a process that dies while connecting is
         // reported by the connect attempt, with the server's own (redacted) reason.
@@ -197,17 +209,19 @@ final class MCPStore {
         let reason = "MCP server process exited with code \(exitCode)."
         statuses[serverID] = .failed(message: reason, kind: .processExited)
         toolsByServer.removeValue(forKey: serverID)
+        instructionsByServer.removeValue(forKey: serverID)
         discoveredGenerations.removeValue(forKey: serverID)
         if let connection = connections.removeValue(forKey: serverID) { Task { await connection.stop() } }
         logs.error("MCP", "Server '\(serverID)' \(reason)")
     }
 
-    func simulateDiscoveryForTesting(serverID: String, generation: Int, tools: [MCPTool]) {
+    func simulateDiscoveryForTesting(serverID: String, generation: Int, tools: [MCPTool], instructions: String? = nil) {
         inProgressRefreshTasks[serverID]?.cancel()
         inProgressRefreshTasks.removeValue(forKey: serverID)
         connectionGenerations[serverID] = generation
         discoveredGenerations[serverID] = generation
         toolsByServer[serverID] = tools
+        instructionsByServer[serverID] = instructions
         statuses[serverID] = .connected(toolCount: tools.count)
     }
 
@@ -912,6 +926,7 @@ final class MCPStore {
 
         stopTransport(serverID: server.id)
         toolsByServer.removeValue(forKey: server.id)
+        instructionsByServer.removeValue(forKey: server.id)
         discoveredGenerations.removeValue(forKey: server.id)
 
         if canonical.enabled {
@@ -946,6 +961,7 @@ final class MCPStore {
         stopTransport(serverID: serverID)
         statuses.removeValue(forKey: serverID)
         toolsByServer.removeValue(forKey: serverID)
+        instructionsByServer.removeValue(forKey: serverID)
         discoveredGenerations.removeValue(forKey: serverID)
         connectionGenerations.removeValue(forKey: serverID)
         while let idx = credentialQueue.firstIndex(where: { $0.serverID == serverID }) {
@@ -990,6 +1006,7 @@ final class MCPStore {
 
         stopTransport(serverID: serverID)
         toolsByServer.removeValue(forKey: serverID)
+        instructionsByServer.removeValue(forKey: serverID)
         discoveredGenerations.removeValue(forKey: serverID)
 
         guard servers[index].enabled else {
@@ -1024,6 +1041,7 @@ final class MCPStore {
         _ = nextGeneration(for: serverID)
         stopTransport(serverID: serverID)
         toolsByServer.removeValue(forKey: serverID)
+        instructionsByServer.removeValue(forKey: serverID)
         discoveredGenerations.removeValue(forKey: serverID)
 
         let oauth = usesOAuth(serverID: serverID)
@@ -1115,6 +1133,7 @@ final class MCPStore {
         _ = nextGeneration(for: serverID)
         stopTransport(serverID: serverID)
         toolsByServer.removeValue(forKey: serverID)
+        instructionsByServer.removeValue(forKey: serverID)
         discoveredGenerations.removeValue(forKey: serverID)
         do {
             try secretStore.deleteSecret(serverID: credentialNamespace(for: serverID), key: MCPSecretKey.oauthToken)
@@ -1151,12 +1170,14 @@ final class MCPStore {
         if let server = servers.first(where: { $0.id == serverID }), server.requiresReview {
             statuses[serverID] = .failed(message: "Imported fields await review in Settings before this server can connect.", kind: .other)
             toolsByServer.removeValue(forKey: serverID)
+            instructionsByServer.removeValue(forKey: serverID)
             discoveredGenerations.removeValue(forKey: serverID)
             return
         }
         guard Self.productionSDKAdmitted || isInjectedDiscovery else {
             statuses[serverID] = .configSaved
             toolsByServer.removeValue(forKey: serverID)
+            instructionsByServer.removeValue(forKey: serverID)
             discoveredGenerations.removeValue(forKey: serverID)
             return
         }
@@ -1166,6 +1187,7 @@ final class MCPStore {
         guard server.enabled else {
             statuses[serverID] = .disconnected
             toolsByServer.removeValue(forKey: serverID)
+            instructionsByServer.removeValue(forKey: serverID)
             return
         }
 
@@ -1175,6 +1197,7 @@ final class MCPStore {
 
         do {
             let tools: [MCPTool]
+            var instructions: String?
             if let discovery = toolDiscoveryProvider {
                 let resolved = try await resolveSecretsForConnection(server)
                 tools = try await discovery(resolved)
@@ -1182,6 +1205,7 @@ final class MCPStore {
                 let connection = try await connection(for: server)
                 try await connection.ensureConnected()
                 tools = try await connection.listTools()
+                instructions = await connection.instructions
             }
 
             // Stale result guard
@@ -1190,6 +1214,7 @@ final class MCPStore {
             guard connectionGenerations[serverID, default: 0] == generation else { return }
 
             toolsByServer[serverID] = tools
+            instructionsByServer[serverID] = instructions
             missingCredentials.removeValue(forKey: serverID)
             discoveredGenerations[serverID] = generation
             statuses[serverID] = .connected(toolCount: tools.count)
@@ -1201,6 +1226,7 @@ final class MCPStore {
 
             discoveredGenerations.removeValue(forKey: serverID)
             toolsByServer.removeValue(forKey: serverID)
+            instructionsByServer.removeValue(forKey: serverID)
             if case MCPTransportError.signInRequired = error {
                 statuses[serverID] = .signInRequired
                 logs.info("MCP", "Server '\(serverID)' requires OAuth sign-in.")
@@ -1271,6 +1297,7 @@ final class MCPStore {
             if case MCPTransportError.signInRequired = error {
                 statuses[serverID] = .signInRequired
                 toolsByServer.removeValue(forKey: serverID)
+                instructionsByServer.removeValue(forKey: serverID)
                 discoveredGenerations.removeValue(forKey: serverID)
             }
             let redacted = SecretMasker.redact(error.localizedDescription, secrets: secrets)

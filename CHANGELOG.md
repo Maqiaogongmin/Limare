@@ -4,6 +4,17 @@ All notable behavior and architecture changes to Limare are recorded here. Entri
 
 ## Unreleased
 
+## 0.1.1 — 2026-10-16
+
+- Pass connected MCP servers' initialize instructions into model requests, including deferred tools, with a per-server 4,096-character bound.
+- Launch configured stdio MCP servers with the user's normal rights so they can access their own configuration and logs.
+- Run Full access and approved escalated shell commands without the shell sandbox.
+- Bound output-pipe draining to two seconds after a command exits, even when escaped descendants keep a pipe open.
+- Isolate development builds from the public Sparkle feed and show their source identity.
+- Select helper signing by build channel and explicitly preserve the release channel during nested Developer ID signing.
+- Align the website's new-conversation state and download status with the native app.
+
+
 ### Daily-use fixes from the website-build conversation (2026-10-13)
 
 - `file_list` lists images, PDFs and other binary files. They were hidden, so a folder of screenshots looked empty although `file_read` opens images. Only content search still skips binary files.

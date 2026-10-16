@@ -1,28 +1,15 @@
-# Limare 0.1.0 — release candidate notes
+# Limare 0.1.1
 
-This document describes the intended first release. Public downloads remain
-closed until release validation completes.
+本次更新改善 MCP 兼容性、Shell 执行可靠性和版本更新安全性。
 
-- Native macOS AI agent with projects, conversations, local memory, shell and
-  file tools, a browser, Computer Use, MCP, Skills, Hooks, speech, and optional
-  user-configured Remote Access.
-- User-controlled model credentials: API keys, supported third-party OAuth,
-  and provider-issued credentials. Model/tool data can leave the Mac through
-  the services the user selects.
-- Apple Silicon (`arm64`), macOS **15.0+**. Intel is outside this release scope.
-- First installation uses a Developer ID signed, notarized, stapled DMG.
-- Updates use **Limare > Check for Updates…** only. Automatic checks,
-  automatic installation, and optional Sparkle system profiling are disabled.
-  Follow GitHub Releases and security materials for announcements.
+- **MCP 使用指引**：将已连接服务在初始化时返回的 instructions 传给模型，包含通过工具搜索延迟加载的服务；每个服务最多保留 4,096 个字符，并在截断时提示。
+- **stdio MCP 兼容性**：用户配置的 MCP 服务按当前用户权限运行，可访问自己的配置和日志目录，避免被 Shell 的工作区沙箱阻止启动或写入。
+- **Shell 完全访问**：完全访问模式及已批准的提权命令不再套用 Shell 沙箱，可正常调用 macOS 服务和应用；沙箱模式仍受工作区权限约束。
+- **Shell 退出可靠性**：主命令结束后，即使脱离进程组的后代仍持有输出管道，也只额外等待最多两秒收集输出，避免命令超时后会话持续卡住。
+- **开发版更新隔离**：开发构建显示源码提交信息，不接入公开 Sparkle 更新渠道，避免被较旧正式版替换。
+- **发布签名**：辅助程序按构建渠道选择签名策略，并修正正式导出包的嵌套签名参数传递。
+- **官网展示**：同步新建会话空状态和当前下载状态。
 
-Known limitations: no Intel support; the main app is not Apple App Sandbox;
-third-party service retention and deletion are outside Limare's control;
-native MCP SDK OAuth sign-in remains gated off (this is separate from model
-Provider OAuth such as ChatGPT and OpenRouter);
-`mail@limare.app` receives reports but cannot currently send replies. Exact
-runtime limitations must be updated from the final candidate's acceptance
-results before publication.
+支持 Apple Silicon（arm64）、macOS 15.0 及以上。首次安装下载签名、公证并装订的 DMG；已安装正式版可通过 **Limare → 检查更新…** 手动更新。无后台更新检查或静默安装。
 
-Final publication must record: source commit/tag, build number, dependency
-lock hashes, build tools, final DMG SHA-256, and validation evidence. No
-placeholder binary or checksum may be published.
+已知限制沿用 0.1.0：不支持 Intel；主程序不使用 Apple App Sandbox；第三方服务按各自政策处理数据；原生 MCP SDK OAuth 登录仍未开放；mail@limare.app 当前可收信但不能回信。

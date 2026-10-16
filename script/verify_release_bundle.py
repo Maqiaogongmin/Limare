@@ -46,6 +46,8 @@ def verify(app):
     for key in ['SUEnableAutomaticChecks', 'SUAutomaticallyUpdate', 'SUAllowsAutomaticUpdates', 'SUEnableSystemProfiling']:
         if info.get(key) is not False:
             raise RuntimeError(f'Update policy is not explicitly disabled: {key}')
+    if info.get('LimareBuildChannel') != 'release':
+        raise RuntimeError('App is not a release-channel build; development builds never take public updates')
     if info.get('SUVerifyUpdateBeforeExtraction') is not True:
         raise RuntimeError('EdDSA verification before extraction is not enabled')
 

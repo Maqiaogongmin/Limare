@@ -395,12 +395,13 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = MNV6M9LX23;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
                 INFOPLIST_FILE = "Configuration/Limare-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Limare;
+				LIMARE_BUILD_CHANNEL = development;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Limare requires microphone access for voice input.";
 				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "Limare requires screen recording access to observe the primary display for Computer Use.";
@@ -410,7 +411,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = app.limare.Limare;
 				PRODUCT_NAME = Limare;
 				SUPPORTED_PLATFORMS = macosx;
@@ -431,12 +432,13 @@
 				CODE_SIGN_STYLE = Manual;
 				PROVISIONING_PROFILE_SPECIFIER = Limare;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = MNV6M9LX23;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
                 INFOPLIST_FILE = "Configuration/Limare-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Limare;
+				LIMARE_BUILD_CHANNEL = release;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Limare requires microphone access for voice input.";
 				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "Limare requires screen recording access to observe the primary display for Computer Use.";
@@ -446,7 +448,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = app.limare.Limare;
 				PRODUCT_NAME = Limare;
 				SUPPORTED_PLATFORMS = macosx;

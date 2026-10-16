@@ -3546,6 +3546,23 @@ final class ConversationRunCoordinator {
     }
 
 
+    /// Per-server bound on initialize instructions in the system prompt.
+    static let mcpServerInstructionsLimit = 4_096
+
+    static func mcpServerInstructionsSection(_ entries: [(serverID: String, text: String)]) -> String? {
+        guard !entries.isEmpty else { return nil }
+        let blocks = entries.map { entry -> String in
+            var text = entry.text
+            if text.count > mcpServerInstructionsLimit {
+                text = String(text.prefix(mcpServerInstructionsLimit))
+                    + "\n[Instructions truncated: showing \(mcpServerInstructionsLimit) of \(entry.text.count) characters.]"
+            }
+            return "## \(entry.serverID)\n\(text)"
+        }
+        return "# MCP SERVER INSTRUCTIONS\nThe following MCP servers have provided instructions for how to use their tools and resources:\n\n"
+            + blocks.joined(separator: "\n\n")
+    }
+
     /// More MCP tools than this are deferred behind tool_search.
     static let mcpDeferralThreshold = 15
 
@@ -3774,6 +3791,19 @@ No tools, shell, browser, or file system access are available for this turn. Res
             let mcpToolNames = mcpToolDefs.map(\.function.name).filter { $0.hasPrefix("mcp_") }
             if !mcpToolNames.isEmpty {
                 prompt += "\n\nDiscovered MCP tools are available for this request: \(mcpToolNames.joined(separator: ", "))."
+            }
+        }
+        // Claude Code's "MCP Server Instructions": what each server whose tools this request offers
+        // (loaded or deferred) said about using them in its initialize result.
+        if !validationFailed {
+            var serverIDs: [String] = []
+            for contribution in validatedContributions where contribution.identity.kind == .mcp
+                && !serverIDs.contains(contribution.identity.sourceID) {
+                serverIDs.append(contribution.identity.sourceID)
+            }
+            let entries = serverIDs.compactMap { id in mcp?.currentInstructions(for: id).map { (serverID: id, text: $0) } }
+            if let section = Self.mcpServerInstructionsSection(entries) {
+                prompt += "\n\n" + section
             }
         }
 

@@ -49,6 +49,13 @@ For public releases, mount the signed/notarized DMG and drag Limare.app into
 Applications. Development builds and helper ad-hoc signatures are not public
 release artifacts.
 
+Debug builds and builds from `script/install_limare.sh` are development builds
+(`LIMARE_BUILD_CHANNEL=development`). They show their source commit in
+Settings > General and never check the public update feed, because a published
+release is older than the development line and would replace them. Only the
+Release configuration is the `release` channel, and
+`script/verify_release_bundle.py` rejects any other.
+
 Release operators use Xcode Archive and Developer ID export from the final
 candidate's clean clone, followed by `script/sign_release_bundle.py` and
 `script/verify_release_bundle.py`. A matching Developer ID certificate and

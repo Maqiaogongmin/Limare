@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Sign staged helper code without allowing a Release build to fall back to ad-hoc.
+# Sign staged helper code without allowing a release-channel build to fall back to ad-hoc.
+# The channel, not the Xcode configuration, decides: script/install_limare.sh builds the Release
+# configuration as a development build signed with Apple Development, and needs no Developer ID.
 set -euo pipefail
 
 HELPER_PATH="${1:?usage: sign_helper.sh helper-path}"
-case "${CONFIGURATION:-Debug}" in
-  Debug)
+case "${LIMARE_BUILD_CHANNEL:-}" in
+  development)
     codesign --force --sign - --options runtime --timestamp=none "${HELPER_PATH}"
     ;;
-  Release)
+  release)
     [[ "${CODE_SIGNING_ALLOWED:-YES}" != NO ]] || { echo 'error: Release helper signing cannot be disabled.' >&2; exit 1; }
     SIGNING_IDENTITY="${EXPANDED_CODE_SIGN_IDENTITY:-${CODE_SIGN_IDENTITY:-${CODESIGN_IDENTITY:-}}}"
     [[ -n "${SIGNING_IDENTITY}" && "${SIGNING_IDENTITY}" != - ]] || { echo 'error: Release requires a Developer ID Application identity.' >&2; exit 1; }
@@ -24,6 +26,6 @@ case "${CONFIGURATION:-Debug}" in
     ACTUAL_TEAM="$(printf '%s\n' "${SIGNATURE}" | sed -n 's/^TeamIdentifier=//p')"
     [[ "${ACTUAL_TEAM}" == "${DEVELOPMENT_TEAM}" ]] || { echo 'error: Helper signing team differs from the app team.' >&2; exit 1; }
     ;;
-  *) echo 'error: Unsupported helper signing configuration; use Debug or Release.' >&2; exit 1 ;;
+  *) echo 'error: LIMARE_BUILD_CHANNEL must be development or release.' >&2; exit 1 ;;
 esac
 codesign --verify --strict "${HELPER_PATH}"

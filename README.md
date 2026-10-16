@@ -10,11 +10,11 @@ browser, Computer Use, skills, MCP servers, hooks and persistent memory, and
 work in projects and conversations. It can also be reached from a phone through
 Remote Access.
 
-## First release
+## Download
 
-Version **0.1.0** targets **Apple Silicon (`arm64`) and macOS 15.0+**.
-Public downloads remain closed until the signed, notarized DMG and its exact
-corresponding source have passed release validation. Intel is outside this scope.
+Version **0.1.1** targets **Apple Silicon (`arm64`) and macOS 15.0+**.
+Download the signed, notarized DMG from [GitHub Releases](https://github.com/Maqiaogongmin/Limare/releases/latest).
+The matching source is available with each release. Intel is outside this scope.
 
 Limare uses local-first storage and user-controlled credentials, including API
 keys, supported third-party OAuth, and provider-issued credentials. Models,

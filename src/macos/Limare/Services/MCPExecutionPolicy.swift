@@ -1,18 +1,16 @@
 import Foundation
 import Darwin
 
-/// Kernel boundary for untrusted Agent/stdio descendants. No secret/config IPC authority.
+/// Kernel boundary for confined agent shell commands. No secret/config IPC authority. MCP servers do
+/// not run under it: they are programs the user configured (see `MCPConnection.spawn`).
 /// `basePolicy` is the unchanged text of openai/codex 092d3acd6bec3e3a14bdc7e7a2810ab628ab759d,
 /// codex-rs/sandboxing/src/seatbelt_base_policy.sbpl (Apache-2.0, Copyright 2025 OpenAI; see
 /// LICENSES/codex-Apache-2.0.txt and LICENSES/codex-NOTICE.txt). Modified by Limare: `profile`
 /// appends the workspace/temp write, network and reserved-path rules.
 enum MCPExecutionPolicy {
-    /// `unconfined` is Full access or an approved escalation, which Codex runs outside its
-    /// sandbox (danger-full-access, require_escalated): the command may write anywhere, open
-    /// apps and URLs, and use AppleScript and other macOS services. Only the reserved-root
-    /// denials stay, so Limare's own data is not read or changed by accident; the Keychain is
-    /// guarded by its own access control, as it is for Codex and Claude Code.
-    static func profile(workspace: URL, unconfined: Bool = false, protectedRoots: [URL]? = nil) throws -> String {
+    /// The confined profile. Full access and approved escalations do not use it: ShellRunner
+    /// runs those commands without Seatbelt, as Codex does (danger-full-access, require_escalated).
+    static func profile(workspace: URL, protectedRoots: [URL]? = nil) throws -> String {
         let workspace = TestStorageBootstrap.canonicalize(workspace)
         guard workspace.path != "/" else { throw MCPHostControlError.protectedInfrastructure }
         let roots = protectedRoots ?? MCPInfrastructureBoundary.protectedRoots
@@ -34,22 +32,17 @@ enum MCPExecutionPolicy {
             // kernel spelling. Preserve realpath's bytes, like the mother's OS normalization.
             return components.reduce(String(cString: resolved)) { ($0 as NSString).appendingPathComponent($1) }
         }
-        var policy: String
-        if unconfined {
-            policy = "(version 1)\n(allow default)\n"
-        } else {
-            // Runtime/dependency reads remain available; writes are confined to workspace/temp.
-            // Temp is both $TMPDIR and /tmp, as in Codex's workspace-write roots: zsh writes
-            // here-documents under /tmp (TMPPREFIX), so without it every `<<EOF` fails.
-            policy = basePolicy + "\n(allow file-read*)\n"
-            for root in [workspace, URL(fileURLWithPath: NSTemporaryDirectory()).resolvingSymlinksInPath(), URL(fileURLWithPath: "/tmp")] {
-                policy += "(allow file-write* (subpath " + (try quoted(kernelPath(root))) + "))\n"
-            }
-            // Network as in Codex's seatbelt network policy: inbound too, so a dev server
-            // (vite, python -m http.server) can listen and be reached from the browser.
-            policy += "(allow network-outbound network-inbound network-bind system-socket)\n"
-            policy += "(allow mach-lookup (global-name \"com.apple.mDNSResponder\") (global-name \"com.apple.trustd.agent\"))\n"
+        // Runtime/dependency reads remain available; writes are confined to workspace/temp.
+        // Temp is both $TMPDIR and /tmp, as in Codex's workspace-write roots: zsh writes
+        // here-documents under /tmp (TMPPREFIX), so without it every `<<EOF` fails.
+        var policy = basePolicy + "\n(allow file-read*)\n"
+        for root in [workspace, URL(fileURLWithPath: NSTemporaryDirectory()).resolvingSymlinksInPath(), URL(fileURLWithPath: "/tmp")] {
+            policy += "(allow file-write* (subpath " + (try quoted(kernelPath(root))) + "))\n"
         }
+        // Network as in Codex's seatbelt network policy: inbound too, so a dev server
+        // (vite, python -m http.server) can listen and be reached from the browser.
+        policy += "(allow network-outbound network-inbound network-bind system-socket)\n"
+        policy += "(allow mach-lookup (global-name \"com.apple.mDNSResponder\") (global-name \"com.apple.trustd.agent\"))\n"
         // A preexisting alias of a reserved file is invisible to path rules; refuse to launch.
         guard try MCPInfrastructureBoundary.aliasedProtectedFiles(roots: roots).isEmpty else {
             throw MCPHostControlError.protectedInfrastructure
@@ -63,11 +56,11 @@ enum MCPExecutionPolicy {
         return policy
     }
 
-    static func launch(executable: String, arguments: [String], workspace: URL, unconfined: Bool = false) throws -> (URL, [String]) {
+    static func launch(executable: String, arguments: [String], workspace: URL) throws -> (URL, [String]) {
         guard FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec") else {
             throw MCPHostControlError.protectedInfrastructure
         }
-        let policy = try profile(workspace: workspace, unconfined: unconfined)
+        let policy = try profile(workspace: workspace)
         return (URL(fileURLWithPath: "/usr/bin/sandbox-exec"), ["-p", policy, executable] + arguments)
     }
 

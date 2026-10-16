@@ -36,6 +36,8 @@ actor MCPConnection {
     }
 
     var isConnected: Bool { client != nil }
+    /// The `instructions` the server returned from initialize, for the model's system prompt.
+    private(set) var instructions: String?
 
     func ensureConnected() async throws {
         if client != nil { return }
@@ -53,6 +55,7 @@ actor MCPConnection {
         self.client = nil
         self.child = nil
         self.session = nil
+        instructions = nil
         await client?.disconnect()
         await child?.terminate()
         session?.invalidateAndCancel()
@@ -133,7 +136,8 @@ actor MCPConnection {
         defer { handshakeClient = nil }
         do {
             let timeout = config.isHTTP ? Self.initializeTimeoutSeconds : (config.startupTimeoutSeconds ?? Self.initializeTimeoutSeconds)
-            _ = try await Self.deadline(seconds: timeout) { try await client.connect(transport: transport) }
+            let result = try await Self.deadline(seconds: timeout) { try await client.connect(transport: transport) }
+            instructions = result.instructions
             self.client = client
         } catch {
             let classified = await classify(error)
@@ -146,8 +150,11 @@ actor MCPConnection {
         }
     }
 
-    /// The server program runs under the inherited Seatbelt policy, in its own process group, with
-    /// a filtered environment plus its configured (resolved) variables.
+    /// The server is a program the user configured, so it runs with the user's own rights, as Claude
+    /// Code and Codex run MCP servers: no Seatbelt profile, which would keep it from writing its own
+    /// install folder, caches or config and from sandboxing itself. It gets its own process group, a
+    /// filtered environment plus its configured (resolved) variables, and the workspace as its
+    /// working directory.
     private func spawn(loginPATH: String?) throws -> MCPChildProcess {
         guard let command = config.command?.trimmingCharacters(in: .whitespacesAndNewlines), !command.isEmpty else {
             throw MCPTransportError.commandNotFound("Command is empty")
@@ -155,8 +162,6 @@ actor MCPConnection {
         if command.hasPrefix("/") && !FileManager.default.fileExists(atPath: command) {
             throw MCPTransportError.commandNotFound("Executable not found at path '\(command)'")
         }
-        let launch = try MCPExecutionPolicy.launch(executable: "/bin/zsh", arguments: ["-c", "exec \"$@\"", "--", command] + (config.args ?? []),
-                                                   workspace: workspaceURL)
         let parent = ProcessInfo.processInfo.environment
         var environment = parent.filter { ["PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "TMPDIR"].contains($0.key) || $0.key.hasPrefix("LC_") }
         let home = environment["HOME"] ?? NSHomeDirectory()
@@ -168,7 +173,8 @@ actor MCPConnection {
         for (name, value) in config.env ?? [:] { environment[name] = value }
 
         let onEvent = self.onEvent
-        return try MCPChildProcess(executable: launch.0.path, arguments: launch.1, environment: environment,
+        return try MCPChildProcess(executable: "/bin/zsh", arguments: ["-c", "exec \"$@\"", "--", command] + (config.args ?? []),
+                                   environment: environment,
                                    workingDirectory: workspaceURL) { [weak self] code in
             Task {
                 await self?.childExited()
@@ -236,6 +242,7 @@ actor MCPConnection {
     enum Event: Sendable { case exited(code: Int32), toolListChanged }
     init(config: MCPServerConfig, workspaceURL: URL, onEvent: @escaping @Sendable (Event) async -> Void) {}
     var isConnected: Bool { false }
+    var instructions: String? { nil }
     func ensureConnected() async throws { throw MCPTransportError.spawnFailed("MCP SDK not linked in this test build.") }
     func stop() async {}
     func listTools() async throws -> [MCPTool] { throw MCPTransportError.connectionClosed }

@@ -10,7 +10,7 @@ struct GeneralSettingsView: View {
         SettingsPage {
             SettingsSection(title: "About Limare") {
                 SettingsRow("Version", caption: "Apple Silicon · macOS 15.0+") {
-                    Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown")
+                    Text(LimareBuild.current.displayVersion)
                 }
                 HStack(spacing: 16) {
                     Link("Privacy", destination: URL(string: "https://limare.app/privacy/")!)

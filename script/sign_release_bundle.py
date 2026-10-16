@@ -15,6 +15,9 @@ from verify_release_bundle import macho_files, run, signed_entitlements, verify
 
 
 def sign(app):
+    info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
+    if info.get('LimareBuildChannel') != 'release':
+        raise RuntimeError('Input must be a release-channel Developer ID export')
     main_claims = signed_entitlements(app)
     raw, _ = run(['security', 'cms', '-D', '-i', str(app / 'Contents/embedded.provisionprofile')])
     profile = plistlib.loads(raw)
@@ -27,9 +30,8 @@ def sign(app):
     if len(matches) != 1:
         raise RuntimeError('Expected exactly one valid local Developer ID Application identity')
     identity = matches[0].decode()
-    env = dict(os.environ, CONFIGURATION='Release', DEVELOPMENT_TEAM=teams[0], CODE_SIGN_IDENTITY=identity, EXPANDED_CODE_SIGN_IDENTITY=identity, CODE_SIGNING_ALLOWED='YES')
+    env = dict(os.environ, LIMARE_BUILD_CHANNEL='release', CONFIGURATION='Release', DEVELOPMENT_TEAM=teams[0], CODE_SIGN_IDENTITY=identity, EXPANDED_CODE_SIGN_IDENTITY=identity, CODE_SIGNING_ALLOWED='YES')
     helper_signer = Path(__file__).parent / 'sign_helper.sh'
-    info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
     main_binary = app / 'Contents/MacOS' / info['CFBundleExecutable']
     for path in macho_files(app):
         if path == main_binary:
