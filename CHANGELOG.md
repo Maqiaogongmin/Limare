@@ -7,6 +7,7 @@ All notable behavior and architecture changes to Limare are recorded here. Entri
 ## 0.1.1 — 2026-10-16
 
 - Pass connected MCP servers' initialize instructions into model requests, including deferred tools, with a per-server 4,096-character bound.
+- Correct MCP connection guidance to describe mcp_manage installation limits without claiming every shell is sandboxed.
 - Launch configured stdio MCP servers with the user's normal rights so they can access their own configuration and logs.
 - Run Full access and approved escalated shell commands without the shell sandbox.
 - Bound output-pipe draining to two seconds after a command exits, even when escaped descendants keep a pipe open.

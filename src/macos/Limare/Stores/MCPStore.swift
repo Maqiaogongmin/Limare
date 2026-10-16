@@ -254,7 +254,7 @@ final class MCPStore {
                 ? "Call authenticate: Limare asks the user for an access token in its own secure prompt."
                 : "Call authenticate: Limare asks the user for \(names.joined(separator: ", ")) in its own secure prompt. Never ask for the value in the conversation."
         case .failed(_, .processExited):
-            return "The server program did not start; read its error. If the program is not installed, give the user the install command to run in Terminal (Limare's shell cannot install software system-wide). If it needs a token, add it as a reference with patch and call authenticate. Then call reconnect."
+            return "The server program did not start; read its error. If the program is not installed, give the user the install command to run in Terminal (mcp_manage does not install server programs). If it needs a token, add it as a reference with patch and call authenticate. Then call reconnect."
         case .failed(_, .authentication), .failed(_, .forbidden):
             return "The server rejected the credential. Call authenticate so the user can enter a new one."
         case .failed:
