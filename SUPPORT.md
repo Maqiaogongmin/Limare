@@ -1,6 +1,6 @@
 # Support
 
-Limare 0.1.0 targets **Apple Silicon and macOS 15.0+**.
+Limare 0.1.1 targets **Apple Silicon and macOS 15.0+**.
 
 Use GitHub Issues for public bug reports once the clean source repository is
 published. Include your Limare version, macOS version, expected behavior,

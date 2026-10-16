@@ -1,8 +1,9 @@
+import { CONFIG } from '../config';
 import { toChatScript } from './scriptFromMarkdown';
 
 export const SECURITY_SCRIPT = toChatScript(`# Security
 
-*Permissions, credentials, and private reporting for Limare 0.1.0.*
+*Permissions, credentials, and private reporting for Limare ${CONFIG.version}.*
 
 > **Report security issues privately:** [mail@limare.app](mailto:mail@limare.app).
 > The address receives reports, but cannot currently send replies. There is no promised response deadline.
@@ -35,7 +36,7 @@ Limare supports **Apple Silicon · macOS 15.0+**. The main app does **not** use 
 ### A minimal report
 
 \`\`\`text
-Affected version: 0.1.0
+Affected version: ${CONFIG.version}
 Summary: <describe the suspected issue>
 Impact: <what could be exposed or changed>
 Reproduction:
@@ -62,7 +63,7 @@ For general troubleshooting, see [Support](/#support).
 
 export const SUPPORT_SCRIPT = toChatScript(`# Support
 
-**Limare 0.1.0** · Apple Silicon · macOS 15.0+
+**Limare ${CONFIG.version}** · Apple Silicon · macOS 15.0+
 
 > Start with a short description of what you expected and what actually happened. Share only the evidence needed to explain the problem.
 
@@ -92,7 +93,7 @@ export const SUPPORT_SCRIPT = toChatScript(`# Support
 ### Example report structure
 
 \`\`\`text
-Limare version: 0.1.0
+Limare version: ${CONFIG.version}
 macOS version: <your installed version>
 Mac architecture: Apple Silicon
 
@@ -127,5 +128,5 @@ Use **Limare → Check for Updates…** to check manually. There is no backgroun
 
 ### Download status
 
-Download the signed and notarized **Limare 0.1.0** from [GitHub Releases](https://github.com/Maqiaogongmin/Limare/releases/tag/v0.1.0). The release includes SHA-256 checksums and the exact source tag. See [What is Limare?](/#intro) for the download entry.
+Download the signed and notarized **Limare ${CONFIG.version}** from [GitHub Releases](https://github.com/Maqiaogongmin/Limare/releases/tag/v${CONFIG.version}). The release includes SHA-256 checksums and the exact source tag. See [What is Limare?](/#intro) for the download entry.
 `);

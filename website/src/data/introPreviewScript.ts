@@ -64,8 +64,8 @@ cd Limare
   },
   {
     kind: 'paragraph',
-    md: CONFIG.downloadEnabled ? 'Version 0.1.0 is available for Apple Silicon and macOS 15.0+.' : 'Version 0.1.0 targets Apple Silicon and macOS 15.0+. Downloads will open after release validation.',
-    plain: CONFIG.downloadEnabled ? 'Version 0.1.0 is available for Apple Silicon and macOS 15.0+.' : 'Version 0.1.0 targets Apple Silicon and macOS 15.0+. Downloads will open after release validation.',
+    md: CONFIG.downloadEnabled ? `Version ${CONFIG.version} is available for Apple Silicon and macOS 15.0+.` : `Version ${CONFIG.version} targets Apple Silicon and macOS 15.0+. Downloads will open after release validation.`,
+    plain: CONFIG.downloadEnabled ? `Version ${CONFIG.version} is available for Apple Silicon and macOS 15.0+.` : `Version ${CONFIG.version} targets Apple Silicon and macOS 15.0+. Downloads will open after release validation.`,
     delayBefore: 120,
   },
   {
