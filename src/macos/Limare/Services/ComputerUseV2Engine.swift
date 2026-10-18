@@ -9,6 +9,12 @@ import AppKit
 public protocol ComputerUseActivationProviding: Sendable {
     func isActivated(conversationID: UUID) async -> Bool
     func currentGeneration(conversationID: UUID, runID: UUID) async -> Int
+    /// Why Computer Use is unavailable to the conversation, when there is a reason to tell.
+    func unavailableReason(conversationID: UUID) async -> String?
+}
+
+public extension ComputerUseActivationProviding {
+    func unavailableReason(conversationID: UUID) async -> String? { nil }
 }
 
 /// Abstract protocol for Layer 2 application authorization.
@@ -149,7 +155,8 @@ public final class ComputerUseV2Engine: @unchecked Sendable {
                 status: .denied,
                 actionKind: input.action,
                 targetAppBundleID: nil,
-                detail: "Computer Use is not activated for this conversation."
+                detail: await activationProvider.unavailableReason(conversationID: conversationID)
+                    ?? "Computer Use is not activated for this conversation."
             )
         }
 

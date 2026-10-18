@@ -6,13 +6,14 @@ import SwiftUI
 /// a chosen file opens.
 public struct FilesTreeView: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     @State private var filterQuery: String = ""
 
     let files: FilesSurfaceStore
 
     init(files: FilesSurfaceStore) { self.files = files }
 
-    private var tree: FilesSurfaceStore { appState.files }
+    private var tree: FilesSurfaceStore { window.files }
 
     public var body: some View {
         VStack(spacing: 0) {
@@ -87,7 +88,7 @@ public struct FilesTreeView: View {
             } label: {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: 11, weight: .semibold))
-                    .frame(width: 20, height: 20)
+                    .frame(width: AppControlHeight.iconSmall, height: AppControlHeight.iconSmall)
             }
             .buttonStyle(.plain)
             .foregroundStyle(AppColors.textSecondary)
@@ -100,13 +101,13 @@ public struct FilesTreeView: View {
 
     private var workspaceTitle: String {
         guard let rootURL = tree.rootURL else { return "Workspace" }
-        if let conversation = appState.conversations.activeConversation,
+        if let conversation = window.conversation,
            let project = appState.conversations.project(for: conversation),
            project.workspace?.url.standardizedFileURL == rootURL.standardizedFileURL {
             return project.name
         }
         let name = rootURL.lastPathComponent
-        if let conversation = appState.conversations.activeConversation,
+        if let conversation = window.conversation,
            name.caseInsensitiveCompare(conversation.id.uuidString) == .orderedSame {
             return conversation.title
         }
@@ -195,6 +196,7 @@ public struct FilesTreeView: View {
 
 private struct FileTreeNodeRow: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     let files: FilesSurfaceStore
     let node: FileTreeNode
     let depth: Int
@@ -204,16 +206,16 @@ private struct FileTreeNodeRow: View {
     }
 
     private var isExpanded: Bool {
-        node.isDirectory && appState.files.expandedPaths.contains(node.url.standardizedFileURL.resolvingSymlinksInPath().path)
+        node.isDirectory && window.files.expandedPaths.contains(node.url.standardizedFileURL.resolvingSymlinksInPath().path)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             Button {
                 if node.isDirectory {
-                    appState.files.toggleDirectory(url: node.url)
+                    window.files.toggleDirectory(url: node.url)
                 } else {
-                    appState.openTreeFile(node.url, in: files)
+                    window.openTreeFile(node.url, in: files)
                 }
             } label: {
                 HStack(spacing: AppSpacing.xxSmall) {

@@ -89,6 +89,31 @@ extension AppState {
         }
     }
 
+    static func fileBrowserContentID(for url: URL) -> String {
+        "file:" + url.standardizedFileURL.path
+    }
+
+    /// Opens a local file in the user's own browser tab (never the agent's page), after
+    /// the caller has disclosed that scripts run and the file's folder becomes readable.
+    func openLocalFileInBrowserTab(_ url: URL) {
+        let contentID = Self.fileBrowserContentID(for: url)
+        if workSurface.additionalBrowsers[contentID] == nil {
+            let runtime = BrowserRuntime(
+                websiteDataStore: browser.websiteDataStore,
+                attachmentStore: attachments,
+                artifactStore: artifacts,
+                logs: logs,
+                snapshotProvider: browser.snapshotProvider
+            )
+            workSurface.additionalBrowsers[contentID] = BrowserTab(
+                conversationID: UUID(), runtime: runtime, owner: .user
+            )
+        }
+        workSurface.open(kind: .browser, contentID: contentID,
+                         title: url.lastPathComponent, systemImage: "globe")
+        workSurface.additionalBrowsers[contentID]?.navigateByUser(to: url.standardizedFileURL)
+    }
+
     private func openLinkInBrowserTab(_ url: URL) {
         let contentID = Self.linkBrowserContentID(for: url)
         if workSurface.additionalBrowsers[contentID] != nil {

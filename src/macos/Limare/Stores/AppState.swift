@@ -1,15 +1,40 @@
-import Foundation
+import AppKit
 import Observation
 
 @MainActor
 @Observable
 final class AppState {
-    var screen: AppScreen = .chat
+    /// The window the app opened with, also standing in while no window is open (tests, launch).
+    /// Its stores are the ones `chat`, `workSurface` and `files` name outside a window.
+    let primaryWindow: WindowSession
+    /// Open windows, in the order they opened.
+    private(set) var windows: [WindowSession] = []
+    private(set) var focusedWindowID: UUID?
+    /// The conversation the next window opens on, instead of the focused window's.
+    @ObservationIgnored var pendingWindowConversationID: UUID?
+    /// The window each pending request's sheet opened in.
+    @ObservationIgnored private var sheetHosts: [String: UUID] = [:]
+
+    /// The window menu commands and app-level actions act on: the key window, else the last opened.
+    var focusedWindow: WindowSession {
+        windows.first { $0.id == focusedWindowID } ?? windows.last ?? primaryWindow
+    }
+
+    var screen: AppScreen {
+        get { focusedWindow.screen }
+        set { focusedWindow.screen = newValue }
+    }
+    /// Presentation intent: bumped by the Focus Composer command.
+    var composerFocusRequest: Int {
+        get { focusedWindow.composerFocusRequest }
+        set { focusedWindow.composerFocusRequest = newValue }
+    }
     let logs: DebugLogStore
     let runtimeEvents: RuntimeEventStore
     let providers: ProviderStore
     let workspace: WorkspaceStore
     let permissions: PermissionStore
+    let backgroundNotifier = BackgroundActivityNotifier()
     let skills: SkillStore
     let mcp: MCPStore
     let memory: MemoryStore
@@ -27,8 +52,8 @@ final class AppState {
     let draftArchive: DraftArchiveStore
     let undo: UndoCoordinator
     let browser: BrowserSessionStore
-    let workSurface: WorkSurfaceStore
-    let files: FilesSurfaceStore
+    var workSurface: WorkSurfaceStore { focusedWindow.workSurface }
+    var files: FilesSurfaceStore { focusedWindow.files }
     let hooks: HookStore
     let hookCoordinator: HookSessionCoordinator
     let subagents: SubagentCoordinator
@@ -167,8 +192,6 @@ final class AppState {
         self.attachments = attachments
         self.artifacts = artifactStore
         self.browser = browser
-        self.workSurface = WorkSurfaceStore()
-        self.files = FilesSurfaceStore()
         self.hooks = hooks
         self.hookCoordinator = hookCoordinator
         self.typography = TypographyPreferences.shared
@@ -277,6 +300,7 @@ final class AppState {
         undo.onHoldCleared = { [weak coordinator = chat.runCoordinator] id in coordinator?.startQueuedAfterHold(conversationID: id) }
         self.draftArchive = draftArchive
         self.chat = chat
+        self.primaryWindow = WindowSession(chat: chat)
         self.conversationRuns = chat.runCoordinator
         browser.hasActiveRun = { [weak coordinator = chat.runCoordinator] conversationID in coordinator?.isActive(conversationID: conversationID) == true }
         conversations.onConversationDeleted = { [weak browser, weak chat, weak undoJournal, weak runtimeEvents, weak computerUseAppAuthorization] conversationID in
@@ -284,6 +308,7 @@ final class AppState {
             computerUseAppAuthorization?.forget(conversationID: conversationID)
             runtimeEvents?.removeEvents(conversationID: conversationID)
             chat?.discardArchivedDrafts(conversationID: conversationID)
+            chat?.runCoordinator.forgetContextUsage(conversationID: conversationID)
             undoJournal?.removeAll(conversationID: conversationID)
         }
         chat.runCoordinator.computerUseActivation = computerUseActivation
@@ -356,15 +381,24 @@ final class AppState {
             mayServe: storageRootURL == nil && LimareStorage.isLimareApp
         )
 
+        primaryWindow.app = self
+        let forgetDeleted = conversations.onConversationDeleted
+        conversations.onConversationDeleted = { [weak self] conversationID in
+            self?.windowsLost(conversationID: conversationID)
+            forgetDeleted?(conversationID)
+        }
+        computerUseActivation.conversationIsRunning = { [weak coordinator = chat.runCoordinator] id in
+            coordinator?.isActive(conversationID: id) == true
+        }
+        computerUseActivation.conversationTitle = { [weak conversations] id in
+            conversations?.conversations.first(where: { $0.id == id })?.title
+        }
+
+        // Selecting a conversation shows it in the focused window; other windows keep theirs.
         conversations.onSelectConversation = { [weak self] (conversation: ConversationRecord) in
             guard let self else { return }
-
-            self.voiceInput.cancel()
-            self.voiceOutput.stop()
-            self.conversationRuns.resetForConversationBoundary()
-            self.chat.loadConversation(conversation)
-            self.syncEffectiveWorkspace()
-            self.browser.displayedConversationID = conversation.id
+            self.focusedWindow.show(conversation)
+            self.skills.setWorkspaceURL(self.conversations.effectiveWorkingDirectory(for: conversation.id))
 
             // Selection is presentation state. A background run owns its Hook
             // session and must not be ended or rebound merely by viewing B.
@@ -398,168 +432,140 @@ final class AppState {
         }
     }
 
-    /// Synchronizes the active conversation's effective working directory across FilesSurfaceStore and SkillStore.
-    func addSurface(_ kind: WorkSurfaceKind) {
-        if kind == .browser {
-            if !workSurface.tabs.contains(where: { $0.kind == .browser }) {
-                workSurface.openBrowser()
-            } else {
-                let key = UUID().uuidString
-                let rt = BrowserRuntime(
-                    websiteDataStore: browser.websiteDataStore,
-                    attachmentStore: attachments,
-                    artifactStore: artifacts,
-                    logs: logs,
-                    snapshotProvider: browser.snapshotProvider
-                )
-                let tab = BrowserTab(
-                    conversationID: UUID(),
-                    runtime: rt,
-                    owner: .user
-                )
-                workSurface.additionalBrowsers[key] = tab
-                workSurface.open(kind: .browser, contentID: key, title: "Browser")
-            }
+    // MARK: - Windows
+
+    /// A window opened: it gets the primary window's stores if no window holds them, else its
+    /// own, and shows the requested conversation or the focused window's.
+    func openWindowSession() -> WindowSession {
+        let session: WindowSession
+        if windows.contains(where: { $0 === primaryWindow }) {
+            session = WindowSession(chat: chat.makeWindowCompanion())
+            session.app = self
         } else {
-            openFilesTree()
+            session = primaryWindow
+            session.chat.bindToWindow()
         }
-    }
-
-    /// Shows a Files tab with nothing previewed: one already open, else the navigator, else a new one.
-    private func openFilesTree() {
-        if let tab = workSurface.tabs.first(where: { $0.kind == .files && filesStore(for: $0)?.previewSource == nil }) {
-            filesStore(for: tab)?.clearSelection()
-            workSurface.focus(id: tab.id)
-        } else if !workSurface.tabs.contains(where: { $0.matches(kind: .files, contentID: WorkSurfaceStore.filesNavigatorID) }) {
-            workSurface.openFiles()
+        let conversationID = pendingWindowConversationID ?? focusedWindow.conversationID ?? conversations.activeConversationID
+        pendingWindowConversationID = nil
+        windows.append(session)
+        if let record = conversationID.flatMap({ id in conversations.conversations.first(where: { $0.id == id }) }) {
+            session.show(record)
         } else {
-            let key = UUID().uuidString
-            workSurface.filePreviews[key] = FilesSurfaceStore(rootURL: files.rootURL)
-            workSurface.open(kind: .files, contentID: key)
+            windowContentChanged()
+        }
+        return session
+    }
+
+    /// The window became key: menu commands and app-wide selection now follow it.
+    func windowBecameKey(_ session: WindowSession) {
+        guard windows.contains(where: { $0 === session }) else { return }
+        focusedWindowID = session.id
+        if let id = session.conversationID, conversations.activeConversationID != id {
+            conversations.activeConversationID = id
+            skills.setWorkspaceURL(conversations.effectiveWorkingDirectory(for: id))
         }
     }
 
-    // MARK: - File previews
-    //
-    // A Files tab shows the workspace tree and, once a file is chosen, that file's preview beside
-    // it. A tab showing only the tree opens the first file chosen in place; from a tab that
-    // already shows a file, the next one gets its own tab, so several files stay open at once.
-    // The navigator is the Files tab backed by `files`; every other Files tab has its own store.
-    // Opening a file a tab already shows focuses that tab.
-
-    /// Previews a workspace file in its own tab.
-    func previewWorkspaceFile(_ url: URL) {
-        openPreviewTab { $0.selectFile(url: url) }
-    }
-
-    /// Previews a chat attachment in its own tab.
-    func previewAttachment(_ attachment: ChatAttachment) {
-        openPreviewTab { $0.selectAttachment(attachment: attachment, attachmentStore: attachments) }
-    }
-
-    /// Previews a conversation's artifact in its own tab.
-    func previewArtifact(id: UUID, conversationID: UUID) {
-        guard let artifacts else { return }
-        if let source = workspaceSource(ofArtifact: id, conversationID: conversationID) {
-            previewWorkspaceFile(source)
-            return
+    func windowClosed(_ session: WindowSession) {
+        guard let index = windows.firstIndex(where: { $0 === session }) else { return }
+        windows.remove(at: index)
+        session.chat.closeWindow(releasingRuns: session !== primaryWindow)
+        if focusedWindowID == session.id {
+            focusedWindowID = nil
         }
-        openPreviewTab { $0.selectArtifact(id: id, conversationID: conversationID, artifactStore: artifacts) }
+        windowContentChanged()
     }
 
-    /// The workspace file an artifact was registered from, while it is still there. Such an
-    /// artifact opens as that file, as a file link does in Codex: one tab with the tree's,
-    /// showing the current content. The stored copy stands in once the file is gone.
+    /// Makes `window` the one selection and menu commands act on, before a selection made in it:
+    /// a context menu or a sheet can act in a window that is not key.
+    func focus(_ window: WindowSession) {
+        guard windows.contains(where: { $0 === window }) else { return }
+        focusedWindowID = window.id
+    }
+
+    /// Conversations whose run waits on the user's approval, Computer Use app control first.
+    var conversationsAwaitingApproval: [UUID] {
+        var ids: [UUID] = []
+        for id in [computerUseAppAuthorization.pendingApproval?.conversationID, permissions.pendingApproval?.conversationID] {
+            if let id, !ids.contains(id) { ids.append(id) }
+        }
+        return ids
+    }
+
+    /// Brings a conversation in front of the user: the window already showing it, else the
+    /// focused window, which switches to it. Settings give way to the chat.
+    func reveal(conversationID: UUID?) {
+        let window = conversationID.flatMap { id in windows.first { $0.conversationID == id } } ?? focusedWindow
+        focus(window)
+        window.screen = .chat
+        if let conversationID, window.conversationID != conversationID {
+            conversations.selectConversation(id: conversationID)
+        }
+        NSApp?.activate()
+        window.hostWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    /// Opens a conversation in a window of its own (the caller opens the window).
+    func prepareWindow(for conversationID: UUID) {
+        pendingWindowConversationID = conversationID
+    }
+
+    /// Recomputes what depends on the conversations windows show.
+    func windowContentChanged() {
+        let shown = windows.isEmpty ? [primaryWindow] : windows
+        browser.displayedConversationIDs = Set(shown.compactMap(\.conversationID))
+    }
+
+    /// The window that presents the request `requestID` for `conversationID`: the focused window
+    /// if it shows that conversation, else another window that does, else the focused window.
+    /// Chosen once, so the sheet stays where it opened while focus moves; chosen again only if
+    /// that window closes.
+    func sheetWindowID(for requestID: String, conversationID: UUID?) -> UUID {
+        if let host = sheetHosts[requestID], windows.contains(where: { $0.id == host }) {
+            return host
+        }
+        let focused = focusedWindow
+        var host = focused.id
+        if let conversationID, focused.conversationID != conversationID,
+           let showing = windows.first(where: { $0.conversationID == conversationID }) {
+            host = showing.id
+        }
+        sheetHosts = sheetHosts.filter { $0.key == requestID }
+        sheetHosts[requestID] = host
+        return host
+    }
+
+    /// Windows that showed a deleted conversation move to the selected one.
+    private func windowsLost(conversationID: UUID) {
+        let fallback = conversations.activeConversation
+            ?? conversations.conversations.first(where: { !$0.isArchived && !$0.isNativeDelegationChild })
+        for window in windows where window.conversationID == conversationID {
+            if let fallback { window.show(fallback) }
+        }
+    }
+
+    // MARK: - Work Surface (focused window)
+
+    func addSurface(_ kind: WorkSurfaceKind) { focusedWindow.addSurface(kind) }
+    func previewWorkspaceFile(_ url: URL) { focusedWindow.previewWorkspaceFile(url) }
+    func previewAttachment(_ attachment: ChatAttachment) { focusedWindow.previewAttachment(attachment) }
+    func previewArtifact(id: UUID, conversationID: UUID) { focusedWindow.previewArtifact(id: id, conversationID: conversationID) }
     func workspaceSource(ofArtifact id: UUID, conversationID: UUID) -> URL? {
-        guard let descriptor = try? artifacts?.resolveDescriptor(artifactID: id, conversationID: conversationID),
-              descriptor.producerProvenance == .workspaceRegistration,
-              let source = descriptor.workspaceProvenance,
-              let root = files.rootURL,
-              FileManager.default.fileExists(atPath: source.path),
-              WorkspacePathResolver.isInsideWorkspace(source.standardizedFileURL.resolvingSymlinksInPath(), workspaceURL: root)
-        else { return nil }
-        return source
+        focusedWindow.workspaceSource(ofArtifact: id, conversationID: conversationID)
     }
+    func closeWorkSurfaceTab(id: UUID) { focusedWindow.closeWorkSurfaceTab(id: id) }
+    func openTreeFile(_ url: URL, in store: FilesSurfaceStore) { focusedWindow.openTreeFile(url, in: store) }
+    func filesStore(for tab: WorkSurfaceTab) -> FilesSurfaceStore? { focusedWindow.filesStore(for: tab) }
+    func workSurfaceTitle(for tab: WorkSurfaceTab) -> String { focusedWindow.workSurfaceTitle(for: tab) }
+    func workSurfaceSystemImage(for tab: WorkSurfaceTab) -> String { focusedWindow.workSurfaceSystemImage(for: tab) }
 
-    /// Closes a Work Surface tab. A Files tab forgets the file it showed, the navigator too,
-    /// so Files opens on the tree next time.
-    func closeWorkSurfaceTab(id: UUID) {
-        if let tab = workSurface.tabs.first(where: { $0.id == id }) {
-            filesStore(for: tab)?.clearSelection()
-        }
-        workSurface.close(id: id)
-    }
-
-    /// Opens `url`, chosen in the tree of the tab backed by `store`, the way every file click
-    /// opens (`FileOpening`). A preview goes in that tab when it shows only the tree, otherwise
-    /// in a tab of its own.
-    func openTreeFile(_ url: URL, in store: FilesSurfaceStore) {
-        FileOpening.open(url) {
-            let source = FilePreviewSource.workspace(url.standardizedFileURL.resolvingSymlinksInPath())
-            if let tab = filesTab(showing: source) {
-                workSurface.focus(id: tab.id)
-            } else if store.previewSource == nil {
-                store.selectFile(url: url)
-            } else {
-                previewWorkspaceFile(url)
-            }
-        }
-    }
-
-    /// The store behind a Files tab.
-    func filesStore(for tab: WorkSurfaceTab) -> FilesSurfaceStore? {
-        guard tab.kind == .files else { return nil }
-        return tab.contentID == WorkSurfaceStore.filesNavigatorID ? files : workSurface.filePreviews[tab.contentID]
-    }
-
-    /// A Files tab is named by the file it shows; a browser tab the user opened, by its page,
-    /// as in a browser. The agent's own browser tab stays "Browser".
-    func workSurfaceTitle(for tab: WorkSurfaceTab) -> String {
-        switch tab.kind {
-        case .files:
-            return filesStore(for: tab)?.previewSource?.displayName ?? tab.kind.defaultTitle
-        case .browser:
-            let pageTitle = workSurface.additionalBrowsers[tab.contentID]?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return pageTitle.isEmpty ? tab.title : pageTitle
-        }
-    }
-
-    func workSurfaceSystemImage(for tab: WorkSurfaceTab) -> String {
-        guard tab.kind == .files, filesStore(for: tab)?.previewSource != nil else { return tab.systemImage }
-        return "doc.text"
-    }
-
-    /// Lets `select` validate and load a file into a new store, then focuses a tab already
-    /// showing that file or opens a tab for it. A file that fails validation opens nothing.
-    private func openPreviewTab(_ select: (FilesSurfaceStore) -> Void) {
-        let preview = FilesSurfaceStore(rootURL: files.rootURL)
-        select(preview)
-        guard let source = preview.previewSource else {
-            logs.info("Files", "Nothing to preview: \(preview.previewState)")
-            return
-        }
-        if let tab = filesTab(showing: source) {
-            preview.clearSelection()
-            workSurface.focus(id: tab.id)
-            return
-        }
-        let key = UUID().uuidString
-        workSurface.filePreviews[key] = preview
-        workSurface.open(kind: .files, contentID: key, title: source.displayName)
-    }
-
-    private func filesTab(showing source: FilePreviewSource) -> WorkSurfaceTab? {
-        workSurface.tabs.first { filesStore(for: $0)?.previewSource?.identity == source.identity }
-    }
-
+    /// Points each window's Files, and the skills, at the effective working directory of the
+    /// conversation shown (for skills: the selected one).
     func syncEffectiveWorkspace() {
-        let effectiveRoot = conversations.activeConversationID.map { conversations.effectiveWorkingDirectory(for: $0) }
-        // File tabs belong to a workspace: they close when it changes, and stay open when the
-        // next conversation works in the same one.
-        if effectiveRoot != files.rootURL {
-            workSurface.clearFilePreviews()
+        for window in windows.isEmpty ? [primaryWindow] : windows {
+            window.syncFilesRoot()
         }
-        files.setRootURL(effectiveRoot)
+        let effectiveRoot = conversations.activeConversationID.map { conversations.effectiveWorkingDirectory(for: $0) }
         skills.setWorkspaceURL(effectiveRoot ?? workspace.url)
     }
 }

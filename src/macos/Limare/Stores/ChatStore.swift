@@ -34,44 +34,68 @@ final class ChatStore {
     /// composer when that conversation is selected again.
     @ObservationIgnored private var unarchivedComposers: [UUID: (draft: ArchivedDraft, restoredDraftID: UUID?)] = [:]
     private var standaloneConversationID = UUID()
+    /// Set for the store behind a window: it shows the conversation it last loaded, whatever the
+    /// app-wide selection says, so each window keeps its own conversation. Otherwise (tests,
+    /// before any window opens) it follows `ConversationStore.activeConversationID`.
+    @ObservationIgnored private(set) var isWindowBound = false
+    private var boundConversationID: UUID?
+    /// The conversation `loadConversation` last loaded; nil once the window closed.
+    @ObservationIgnored private(set) var lastLoadedConversationID: UUID?
+
+    /// The conversation this store shows and acts on.
+    var viewedConversationID: UUID? {
+        isWindowBound ? boundConversationID : conversationStore?.activeConversationID
+    }
+
+    var viewedConversation: ConversationRecord? {
+        guard let id = viewedConversationID else { return nil }
+        return conversationStore?.conversations.first(where: { $0.id == id })
+    }
+
+    /// Binds the store to a window, starting from the conversation it shows now.
+    func bindToWindow() {
+        guard !isWindowBound else { return }
+        boundConversationID = conversationStore?.activeConversationID
+        isWindowBound = true
+    }
     private var manualStreamingForTesting: Bool?
 
     var isStreaming: Bool {
         if let manual = manualStreamingForTesting { return manual }
-        guard let id = conversationStore?.activeConversationID else {
+        guard let id = viewedConversationID else {
             return runCoordinator.isActive(conversationID: standaloneConversationID)
         }
         return runCoordinator.isActive(conversationID: id)
     }
 
     var isPausing: Bool {
-        guard let id = conversationStore?.activeConversationID else {
+        guard let id = viewedConversationID else {
             return runCoordinator.isPausing(conversationID: standaloneConversationID)
         }
         return runCoordinator.isPausing(conversationID: id)
     }
 
     var isPaused: Bool {
-        guard let id = conversationStore?.activeConversationID else {
+        guard let id = viewedConversationID else {
             return runCoordinator.isPaused(conversationID: standaloneConversationID)
         }
         return runCoordinator.isPaused(conversationID: id)
     }
 
     var isResumingFromNewMessage: Bool {
-        guard let id = conversationStore?.activeConversationID else {
+        guard let id = viewedConversationID else {
             return runCoordinator.isResumingFromNewMessage(conversationID: standaloneConversationID)
         }
         return runCoordinator.isResumingFromNewMessage(conversationID: id)
     }
 
     func pause() {
-        let convID = conversationStore?.activeConversationID ?? standaloneConversationID
+        let convID = viewedConversationID ?? standaloneConversationID
         runCoordinator.pause(conversationID: convID)
     }
 
     func resume() {
-        let convID = conversationStore?.activeConversationID ?? standaloneConversationID
+        let convID = viewedConversationID ?? standaloneConversationID
         runCoordinator.resume(conversationID: convID)
     }
 
@@ -190,6 +214,49 @@ final class ChatStore {
         attachRunCoordinatorListeners()
     }
 
+    /// A store for another window. It shares this store's runs and dependencies; the transcript
+    /// mirror and the composer are its own.
+    func makeWindowCompanion() -> ChatStore {
+        let companion = ChatStore(
+            providers: providers,
+            workspace: workspace,
+            toolExecutor: toolExecutor,
+            client: client,
+            logs: logs,
+            skills: skills,
+            mcp: mcp,
+            memory: memory,
+            soul: soul,
+            modelGroups: modelGroups,
+            attachmentStore: attachmentStore,
+            visionGroupResolver: visionGroupResolver,
+            representationResolver: representationResolver,
+            titleGenerator: titleGenerator,
+            runtimeModelRegistry: runtimeModelRegistry,
+            browserSessionStore: browserSessionStore,
+            hookCoordinator: hookCoordinator,
+            loopEngine: loopEngine,
+            loopConfiguration: loopConfiguration,
+            runCoordinator: runCoordinator
+        )
+        if let conversationStore { companion.setConversationStore(conversationStore) }
+        if let draftArchive { companion.setDraftArchive(draftArchive) }
+        if let undo { companion.setUndoCoordinator(undo) }
+        companion.bindToWindow()
+        return companion
+    }
+
+    /// The window closed. Its composer content is archived as a draft of its conversation, as
+    /// when the window moves to another conversation; a companion also stops mirroring runs.
+    func closeWindow(releasingRuns: Bool) {
+        switchComposer(to: nil)
+        lastLoadedConversationID = nil
+        if releasingRuns {
+            runSubscription?.cancel()
+            runSubscription = nil
+        }
+    }
+
     func setConversationStore(_ store: ConversationStore) {
         self.conversationStore = store
         self.runCoordinator.setConversationStore(store)
@@ -248,7 +315,7 @@ final class ChatStore {
     }
 
     private func isViewing(conversationID: UUID) -> Bool {
-        if let activeID = conversationStore?.activeConversationID {
+        if let activeID = viewedConversationID {
             return activeID == conversationID
         }
         return conversationID == standaloneConversationID
@@ -265,7 +332,7 @@ final class ChatStore {
         guard pendingAttachments.count < AttachmentStore.maxPendingAttachments else {
             throw AttachmentStoreError.maxPendingAttachmentsExceeded(AttachmentStore.maxPendingAttachments)
         }
-        let attachment = try await importAttachment(from: selection, conversationID: conversationStore?.activeConversationID ?? standaloneConversationID)
+        let attachment = try await importAttachment(from: selection, conversationID: viewedConversationID ?? standaloneConversationID)
         do {
             try validatePendingTotal(adding: attachment)
         } catch {
@@ -358,8 +425,8 @@ final class ChatStore {
             submit(mode: mode, outcomeDeclaration: nil)
             return
         }
-        let conversationID = conversationStore?.activeConversationID ?? standaloneConversationID
-        if let source = interaction.modelSource(for: conversationStore?.activeConversationID),
+        let conversationID = viewedConversationID ?? standaloneConversationID
+        if let source = interaction.modelSource(for: viewedConversationID),
            let refusal = interaction.imageInputRefusal(for: source) {
             logs.info("Chat", "Mentioned images stay as paths: \(refusal)")
             submit(mode: mode, outcomeDeclaration: nil)
@@ -380,7 +447,7 @@ final class ChatStore {
         }
         isAttachingMentionedImages = false
 
-        let composerUnchanged = (conversationStore?.activeConversationID ?? standaloneConversationID) == conversationID
+        let composerUnchanged = (viewedConversationID ?? standaloneConversationID) == conversationID
             && composerConversationID == composerID
             && draft == text
             && pendingAttachments.map(\.id) == attachmentIDs
@@ -437,6 +504,8 @@ final class ChatStore {
     }
 
     func loadConversation(_ record: ConversationRecord) {
+        if isWindowBound { boundConversationID = record.id }
+        lastLoadedConversationID = record.id
         if let runMsgs = runCoordinator.activeRunMessages(for: record.id) {
             messages = runMsgs
         } else {
@@ -453,7 +522,7 @@ final class ChatStore {
     /// Moves the composer to another conversation. Its content is only cleared once it is safe:
     /// archived, already identical to an archived draft, or held in memory after a failed
     /// archive write (with the failure shown to the user).
-    private func switchComposer(to nextConversationID: UUID) {
+    private func switchComposer(to nextConversationID: UUID?) {
         if draftArchive != nil, let previous = composerConversationID,
            let composerDraft = archivableComposerDraft() {
             do {
@@ -479,8 +548,8 @@ final class ChatStore {
         restoreUnarchivedComposer(for: nextConversationID)
     }
 
-    private func restoreUnarchivedComposer(for conversationID: UUID) {
-        guard let held = unarchivedComposers.removeValue(forKey: conversationID) else { return }
+    private func restoreUnarchivedComposer(for conversationID: UUID?) {
+        guard let conversationID, let held = unarchivedComposers.removeValue(forKey: conversationID) else { return }
         draft = held.draft.text
         pendingAttachments = held.draft.attachments
         restoredDraftID = held.restoredDraftID
@@ -491,7 +560,7 @@ final class ChatStore {
     @discardableResult
     func replaceComposerText(_ text: String) -> Bool {
         if let archive = draftArchive,
-           let conversationID = composerConversationID ?? conversationStore?.activeConversationID,
+           let conversationID = composerConversationID ?? viewedConversationID,
            let composerDraft = archivableComposerDraft() {
             do {
                 try archive.archive(composerDraft, conversationID: conversationID)
@@ -570,7 +639,7 @@ final class ChatStore {
     /// cannot start, this returns `false` and no message is committed.
     @discardableResult
     func sendOutcomeRun(declaration: OutcomeRunDeclaration) -> Bool {
-        let conversationID = conversationStore?.activeConversationID ?? standaloneConversationID
+        let conversationID = viewedConversationID ?? standaloneConversationID
         guard canSend, runCoordinator.canStartRun(conversationID: conversationID) else { return false }
         return submit(mode: .steerOrSend, outcomeDeclaration: declaration)
     }
@@ -586,7 +655,7 @@ final class ChatStore {
     /// Records a verification result against the current active conversation run.
     @discardableResult
     func recordVerificationResult(result: VerificationResult) -> Bool {
-        let conversationID = conversationStore?.activeConversationID ?? standaloneConversationID
+        let conversationID = viewedConversationID ?? standaloneConversationID
         return recordVerificationResult(conversationID: conversationID, result: result)
     }
 
@@ -601,7 +670,7 @@ final class ChatStore {
     /// Records an atomic mechanical verification result and evidence receipt pair against the current active conversation run.
     @discardableResult
     func recordMechanicalVerification(result: VerificationResult, receipt: EvidenceReceipt) -> Bool {
-        let conversationID = conversationStore?.activeConversationID ?? standaloneConversationID
+        let conversationID = viewedConversationID ?? standaloneConversationID
         return recordMechanicalVerification(conversationID: conversationID, result: result, receipt: receipt)
     }
 
@@ -630,7 +699,7 @@ final class ChatStore {
         receipt: EvidenceReceipt,
         artifactStore: ArtifactStore? = nil
     ) -> Bool {
-        let conversationID = conversationStore?.activeConversationID ?? standaloneConversationID
+        let conversationID = viewedConversationID ?? standaloneConversationID
         return recordSemanticVerification(
             conversationID: conversationID,
             result: result,
@@ -648,7 +717,7 @@ final class ChatStore {
     /// An explicit outcome declaration is never downgraded into steer/queue.
     @discardableResult
     private func submit(mode: InteractiveSendMode, outcomeDeclaration: OutcomeRunDeclaration?) -> Bool {
-        guard conversationStore?.activeConversation?.isNativeDelegationChild != true else {
+        guard viewedConversation?.isNativeDelegationChild != true else {
             errorMessage = "Native Child history 由独立运行维护；请从父会话发送 steer 或 continue。"
             return false
         }
@@ -657,7 +726,7 @@ final class ChatStore {
 
         let prompt = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let attachmentsToSend = pendingAttachments
-        let targetConversationID = conversationStore?.activeConversationID ?? standaloneConversationID
+        let targetConversationID = viewedConversationID ?? standaloneConversationID
         let input = ConversationInteractionService.Input(
             conversationID: targetConversationID,
             text: draft,
@@ -719,7 +788,7 @@ final class ChatStore {
     /// `ConversationInteractionService.compact`). Refused while a run works on it.
     @discardableResult
     func compactConversation() -> Bool {
-        let conversationID = conversationStore?.activeConversationID ?? standaloneConversationID
+        let conversationID = viewedConversationID ?? standaloneConversationID
         if case .refused(let refusal) = interaction.compact(conversationID: conversationID) {
             errorMessage = Self.message(for: refusal)
             return false
@@ -746,12 +815,12 @@ final class ChatStore {
     }
 
     func stop() {
-        let convID = conversationStore?.activeConversationID ?? standaloneConversationID
+        let convID = viewedConversationID ?? standaloneConversationID
         runCoordinator.stop(conversationID: convID)
     }
 
     func waitForStreaming() async {
-        if let convID = conversationStore?.activeConversationID {
+        if let convID = viewedConversationID {
             await runCoordinator.waitForRun(conversationID: convID)
         } else {
             await runCoordinator.waitForRun(conversationID: standaloneConversationID)
@@ -768,17 +837,17 @@ final class ChatStore {
                 attachmentStore.deleteAttachment(att)
             }
         }
-        let conversationID = conversationStore?.activeConversationID ?? standaloneConversationID
+        let conversationID = viewedConversationID ?? standaloneConversationID
         runCoordinator.discardInteractiveInputs(conversationID: conversationID)
         clearPendingAttachments()
         messages.removeAll()
         conversation.removeAll()
         errorMessage = nil
         browserSessionStore?.resetSession(ownedBy: conversationID)
-        runCoordinator.resetForConversationBoundary()
+        runCoordinator.resetForConversationBoundary(leaving: conversationID)
         runCoordinator.computerUseAppAuthorization?.forget(conversationID: conversationID)
         runCoordinator.subagents?.conversationCleared(conversationID)
-        if let convStore = conversationStore, let activeID = convStore.activeConversationID {
+        if let convStore = conversationStore, let activeID = viewedConversationID {
             convStore.updateConversationMessages(id: activeID, messages: [])
             if let hookCoordinator {
                 let effectiveURL = convStore.effectiveWorkingDirectory(for: activeID)
@@ -796,7 +865,7 @@ final class ChatStore {
     /// queued input or child task is pending. Mirrors the coordinator's authoritative check.
     var retractableUserMessageID: UUID? {
         guard draftArchive != nil, !isStreaming,
-              let conversationID = conversationStore?.activeConversationID,
+              let conversationID = viewedConversationID,
               let candidate = messages.last(where: \.isUserPrompt),
               undo?.openPlan(for: conversationID) == nil,
               runCoordinator.retractionRefusal(conversationID: conversationID, messageID: candidate.id) == nil else {
@@ -822,14 +891,14 @@ final class ChatStore {
 
     /// What undoing the message would do to files. Nil when undo is unavailable.
     func undoPreview(for messageID: UUID, includeLeftovers: Bool = false) -> UndoPreview? {
-        guard let undo, let conversationID = conversationStore?.activeConversationID else { return nil }
+        guard let undo, let conversationID = viewedConversationID else { return nil }
         return undo.preview(conversationID: conversationID, messageID: messageID, includeLeftovers: includeLeftovers)
     }
 
     /// The unfinished undo of the active conversation. Offered even with the switch off, so an
     /// undo interrupted before the switch was turned off can still be finished or cancelled.
     var openUndoPlan: UndoRestorePlan? {
-        guard let conversationID = conversationStore?.activeConversationID else { return nil }
+        guard let conversationID = viewedConversationID else { return nil }
         return undo?.openPlan(for: conversationID)
     }
 
@@ -838,7 +907,7 @@ final class ChatStore {
     /// message gone while its changes stay unreviewable.
     @discardableResult
     func undoLastUserMessage(_ messageID: UUID, restoreFiles: Bool, includeLeftovers: Bool = false, optionalPaths: Set<String> = []) -> UndoOutcome {
-        guard let conversationID = conversationStore?.activeConversationID else { return .refused }
+        guard let conversationID = viewedConversationID else { return .refused }
         if let refusal = runCoordinator.retractionRefusal(conversationID: conversationID, messageID: messageID) {
             errorMessage = Self.retractionMessage(for: refusal)
             return .refused
@@ -957,7 +1026,7 @@ final class ChatStore {
 
     private func retractLastUserMessage(_ messageID: UUID, allowingOpenUndoPlan planID: UUID?) -> Bool {
         guard let archive = draftArchive,
-              let conversationID = conversationStore?.activeConversationID else { return false }
+              let conversationID = viewedConversationID else { return false }
         if let open = undo?.openPlan(for: conversationID), open.id != planID {
             errorMessage = undo?.admissionHoldReason(conversationID: conversationID)
             return false
@@ -1019,7 +1088,7 @@ final class ChatStore {
     // MARK: - Draft Archive
 
     var archivedDrafts: [ArchivedDraft] {
-        guard let conversationID = conversationStore?.activeConversationID else { return [] }
+        guard let conversationID = viewedConversationID else { return [] }
         return draftArchive?.drafts(for: conversationID) ?? []
     }
 
@@ -1027,7 +1096,7 @@ final class ChatStore {
     /// The draft stays archived until the composer content is sent.
     @discardableResult
     func restoreArchivedDraft(_ draftID: UUID) -> Bool {
-        guard let archive = draftArchive, let conversationID = conversationStore?.activeConversationID,
+        guard let archive = draftArchive, let conversationID = viewedConversationID,
               let entry = archive.draft(id: draftID, conversationID: conversationID) else { return false }
         if let composerDraft = archivableComposerDraft() {
             do {
@@ -1050,7 +1119,7 @@ final class ChatStore {
     }
 
     func deleteArchivedDraft(_ draftID: UUID) {
-        guard let archive = draftArchive, let conversationID = conversationStore?.activeConversationID else { return }
+        guard let archive = draftArchive, let conversationID = viewedConversationID else { return }
         do {
             guard let removed = try archive.remove(draftID: draftID, conversationID: conversationID) else { return }
             if restoredDraftID == draftID { restoredDraftID = nil }
@@ -1071,7 +1140,7 @@ final class ChatStore {
     private func archivableComposerDraft() -> ArchivedDraft? {
         guard !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingAttachments.isEmpty else { return nil }
         if let restoredDraftID,
-           let conversationID = composerConversationID ?? conversationStore?.activeConversationID,
+           let conversationID = composerConversationID ?? viewedConversationID,
            let source = draftArchive?.draft(id: restoredDraftID, conversationID: conversationID),
            source.matches(text: draft, attachments: pendingAttachments) {
             return nil
@@ -1084,7 +1153,7 @@ final class ChatStore {
         guard let draftID = restoredDraftID else { return }
         restoredDraftID = nil
         guard let archive = draftArchive,
-              let conversationID = composerConversationID ?? conversationStore?.activeConversationID,
+              let conversationID = composerConversationID ?? viewedConversationID,
               let removed = try? archive.remove(draftID: draftID, conversationID: conversationID) else { return }
         releaseAttachments(of: [removed])
     }

@@ -9,7 +9,7 @@ reproduction steps. Remove API keys, tokens, personal information, and private
 workspace contents from attachments. Do not open a public issue containing
 vulnerability details or secrets.
 
-Limare 0.1.1 supports Apple Silicon on macOS 15.0+. Models, MCP servers,
+Limare 0.1.2 supports Apple Silicon on macOS 15.0+. Models, MCP servers,
 websites, Hooks, shell commands, and desktop automation can process data or
 change your system according to your configuration and permissions. The main
 app is not protected by Apple App Sandbox. See the

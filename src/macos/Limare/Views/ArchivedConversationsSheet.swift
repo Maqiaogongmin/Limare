@@ -3,6 +3,7 @@ import SwiftUI
 struct ArchivedConversationsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
 
     @State private var conversationToDelete: ConversationRecord?
     @State private var isConfirmingDelete = false
@@ -55,6 +56,7 @@ struct ArchivedConversationsSheet: View {
                             Spacer(minLength: AppSpacing.small)
 
                             Button {
+                                appState.focus(window)
                                 appState.conversations.restoreConversation(id: conv.id)
                             } label: {
                                 Label("Restore", systemImage: "arrow.uturn.backward")

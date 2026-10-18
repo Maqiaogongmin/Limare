@@ -4,6 +4,7 @@ import SwiftUI
 /// with compact human navigation controls, ownership affordance, and quiet empty state.
 public struct BrowserSurfaceView: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
 
     @State private var urlInput: String = ""
     @State private var isEditingURL: Bool = false
@@ -15,7 +16,7 @@ public struct BrowserSurfaceView: View {
     init(session: BrowserTab? = nil) { self.session = session }
 
     private var activeConversationID: UUID? {
-        session?.conversationID ?? appState.conversations.activeConversationID
+        session?.conversationID ?? window.conversationID
     }
 
     private var browserStore: BrowserSessionStore {
@@ -26,7 +27,7 @@ public struct BrowserSurfaceView: View {
         if let session {
             return session
         }
-        guard let id = appState.conversations.activeConversationID else { return nil }
+        guard let id = window.conversationID else { return nil }
         return appState.browser.tab(for: id)
     }
 
@@ -44,16 +45,8 @@ public struct BrowserSurfaceView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear {
-            if session == nil {
-                appState.browser.displayedConversationID = appState.conversations.activeConversationID
-            }
-        }
-        .onChange(of: appState.conversations.activeConversationID) { _, newID in
+        .onChange(of: window.conversationID) {
             capacityNotice = nil
-            if session == nil {
-                appState.browser.displayedConversationID = newID
-            }
         }
     }
 
@@ -69,7 +62,7 @@ public struct BrowserSurfaceView: View {
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 12, weight: .semibold))
-                        .frame(width: 20, height: 20)
+                        .frame(width: AppControlHeight.iconSmall, height: AppControlHeight.iconSmall)
                 }
                 .buttonStyle(.plain)
                 .disabled(tab?.canGoBack != true)
@@ -82,7 +75,7 @@ public struct BrowserSurfaceView: View {
                 } label: {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
-                        .frame(width: 20, height: 20)
+                        .frame(width: AppControlHeight.iconSmall, height: AppControlHeight.iconSmall)
                 }
                 .buttonStyle(.plain)
                 .disabled(tab?.canGoForward != true)
@@ -95,7 +88,7 @@ public struct BrowserSurfaceView: View {
                 } label: {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 12, weight: .semibold))
-                        .frame(width: 20, height: 20)
+                        .frame(width: AppControlHeight.iconSmall, height: AppControlHeight.iconSmall)
                 }
                 .buttonStyle(.plain)
                 .disabled(tab?.hasSession != true)
@@ -150,7 +143,7 @@ public struct BrowserSurfaceView: View {
                 } label: {
                     Image(systemName: "arrow.up.right.square")
                         .font(.system(size: 12, weight: .semibold))
-                        .frame(width: 20, height: 20)
+                        .frame(width: AppControlHeight.iconSmall, height: AppControlHeight.iconSmall)
                 }
                 .buttonStyle(.plain)
                 .disabled(tab?.hasSession != true)

@@ -355,7 +355,7 @@ public struct DisclosureSection<Content: View>: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(.easeInOut(duration: 0.18)) {
+                withAnimation(AppMotion.resolved(AppMotion.layout)) {
                     isExpanded.toggle()
                 }
             } label: {

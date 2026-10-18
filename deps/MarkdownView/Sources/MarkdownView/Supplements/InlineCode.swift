@@ -73,24 +73,30 @@ enum InlineCode {
         return result
     }
 
-    /// A blank attachment as wide as the inset. It copies as nothing, so the
-    /// copied text is the code alone.
+    /// A space as wide as the inset: the code font at the size that makes the space that
+    /// wide (smaller than the text, so the line keeps its height). A line may break after it,
+    /// as around the attachment it replaces. It carries an empty
+    /// attachment, so it copies as nothing and the pill tells it from the code. It carries no
+    /// run delegate: CoreText breaks lines around one far more slowly than around a character
+    /// (a 140 KB document with a thousand code spans typeset in 600 ms with delegates, 15 ms
+    /// without).
     ///
-    /// Spacers are shared: the run delegate an attachment carries compares by
-    /// identity, so a fresh spacer would make a rebuilt paragraph unequal to
-    /// the one it replaces, and the label would typeset it again.
+    /// Spacers are shared, so a rebuilt paragraph compares equal to the one it replaces and
+    /// the label does not typeset it again.
     private static func spacer(background: InlineCodeBackground, font: PlatformFont) -> NSAttributedString {
         let key = SpacerKey(background: background, font: font)
         if let spacer = spacers.value(forKey: key) {
             return spacer
         }
-        let attachment = TextLabel.Attachment.hold(
-            attrString: NSAttributedString(),
-            size: CGSize(width: horizontalInset, height: 0),
+        let naturalWidth = CTLineGetTypographicBounds(
+            CTLineCreateWithAttributedString(NSAttributedString(string: " ", attributes: [.font: font])),
+            nil, nil, nil
         )
-        let spacer = attachment.attributedString(attributes: [
-            .font: font,
+        let size = naturalWidth > 0 ? font.pointSize * horizontalInset / CGFloat(naturalWidth) : font.pointSize
+        let spacer = NSAttributedString(string: " ", attributes: [
+            .font: font.withSize(size),
             .inlineCodeBackground: background,
+            .litextAttachment: TextLabel.Attachment.hold(attrString: NSAttributedString()),
         ])
         spacers.setValue(spacer, forKey: key)
         return spacer

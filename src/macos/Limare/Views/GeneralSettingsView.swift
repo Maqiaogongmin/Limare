@@ -4,6 +4,8 @@ struct GeneralSettingsView: View {
     @Environment(AppState.self) private var appState
     @AppStorage(AppearancePreference.storageKey) private var appearance: AppearancePreference = .system
     @AppStorage(StreamingSendPreference.storageKey) private var streamingSendPreference: StreamingSendPreference = .queue
+    @AppStorage(BackgroundActivityNotifier.enabledKey) private var backgroundAlerts = false
+    @State private var notificationsDenied = false
 
     var body: some View {
         @Bindable var typography = appState.typography
@@ -94,6 +96,48 @@ struct GeneralSettingsView: View {
                     .frame(width: 180)
                     .labelsHidden()
                 }
+            }
+
+            SettingsSection(title: "Notifications") {
+                SettingsRow(
+                    "Background Alerts",
+                    caption: "While Limare is in the background, notify when a task of 20 seconds or more ends, or when a tool needs your approval. Notifications never name the tool, command or path."
+                ) {
+                    Toggle(
+                        "",
+                        isOn: Binding(
+                            get: { backgroundAlerts },
+                            set: { enabled in
+                                guard enabled else {
+                                    backgroundAlerts = false
+                                    return
+                                }
+                                Task {
+                                    let allowed = await appState.backgroundNotifier.requestAuthorizationIfNeeded()
+                                    backgroundAlerts = allowed
+                                    notificationsDenied = !allowed
+                                }
+                            }
+                        )
+                    )
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .labelsHidden()
+                    .accessibilityIdentifier("settings.general.backgroundAlerts")
+                    .accessibilityLabel("Background Alerts")
+                }
+                if notificationsDenied {
+                    InlineStatus(
+                        kind: .error,
+                        message: "Notifications are off for Limare in System Settings.",
+                        actionTitle: "打开系统设置",
+                        onAction: { PrivacySettingsOpener.openNotificationSettings() }
+                    )
+                }
+            }
+            .task {
+                notificationsDenied = await appState.backgroundNotifier.isDenied()
+                if notificationsDenied { backgroundAlerts = false }
             }
 
             // Capabilities Section: global app capabilities. Conversation policies (Subagent)
@@ -233,11 +277,11 @@ private struct ComputerUseCapabilitySettingsRow: View {
 
     private func confirmReady() {
         confirmationTask?.cancel()
-        withAnimation(.easeOut(duration: 0.2)) { confirmsReady = true }
+        withAnimation(AppMotion.resolved(AppMotion.confirm)) { confirmsReady = true }
         confirmationTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(3))
             guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.4)) { confirmsReady = false }
+            withAnimation(AppMotion.resolved(AppMotion.confirmHold)) { confirmsReady = false }
         }
     }
 }

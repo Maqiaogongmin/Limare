@@ -88,7 +88,7 @@ struct HookReviewSheet: View {
                     SettingsSection(title: "Technical Details") {
                         VStack(alignment: .leading, spacing: AppSpacing.small) {
                             Button {
-                                withAnimation(.easeInOut(duration: 0.15)) {
+                                withAnimation(AppMotion.resolved(AppMotion.standard)) {
                                     isTechnicalDetailsExpanded.toggle()
                                 }
                             } label: {

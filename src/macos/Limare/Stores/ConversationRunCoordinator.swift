@@ -75,6 +75,8 @@ final class ConversationRunCoordinator {
     private(set) var providerWaits: [UUID: ProviderWait] = [:]
     /// The Compact command's progress and outcome, by conversation.
     private(set) var compactions: [UUID: ManualCompaction] = [:]
+    /// The context budget of each conversation's latest request, for display only.
+    private(set) var contextUsage: [UUID: ContextUsageSnapshot] = [:]
     private(set) var recoveryStore: RuntimeRecoveryStore?
 
     @ObservationIgnored
@@ -1126,8 +1128,9 @@ final class ConversationRunCoordinator {
 
     /// Conversation boundary (switch / end / reset): clear the Layer-1 activation session. App
     /// approvals belong to their conversation and are cleared only with it.
-    func resetForConversationBoundary() {
-        computerUseActivation?.resetForConversationBoundary()
+    /// A window left `conversationID`: the Computer Use session ends if that conversation holds it.
+    func resetForConversationBoundary(leaving conversationID: UUID) {
+        computerUseActivation?.resetForConversationBoundary(leaving: conversationID)
     }
 
     func startRun(
@@ -1215,21 +1218,7 @@ final class ConversationRunCoordinator {
         } else if let explicit = explicitWorkingDirectory {
             scopedWorkspace.restoreWorkspaceConfiguration(WorkspaceConfiguration.from(url: explicit))
         } else {
-            let parentProj = convRecord.flatMap { conversationStore?.project(for: $0) }
-            let effectiveURL = conversationStore?.effectiveWorkingDirectory(for: conversationID)
-            let wsConfig: WorkspaceConfiguration?
-            if let direct = convRecord?.workspace {
-                wsConfig = direct
-            } else if let parent = parentProj?.workspace {
-                wsConfig = parent
-            } else if let effectiveURL {
-                wsConfig = WorkspaceConfiguration.from(url: effectiveURL)
-            } else if let fallback = workspace.configuration {
-                wsConfig = fallback
-            } else {
-                wsConfig = nil
-            }
-            scopedWorkspace.restoreWorkspaceConfiguration(wsConfig)
+            scopedWorkspace.restoreWorkspaceConfiguration(defaultWorkspaceConfiguration(conversationID: conversationID))
         }
 
         let workingDirToPersist = scopedWorkspace.url ?? conversationStore?.managedWorkingDirectory(for: conversationID) ?? URL(fileURLWithPath: "/")
@@ -1420,6 +1409,8 @@ final class ConversationRunCoordinator {
         do {
             let (before, after) = try await performCompaction(conversationID: conversationID, modelSource: modelSource)
             compactions[conversationID] = .finished(tokensBefore: before, tokensAfter: after)
+            // The summary changes what the next request sends, with the same prompt and tools.
+            refreshContextUsagePreview(conversationID: conversationID, modelSource: modelSource)
             if let lastMessageID {
                 conversationStore?.recordCompaction(id: conversationID, marker: CompactionMarker(
                     afterMessageID: lastMessageID, tokensBefore: before, tokensAfter: after, date: Date()))
@@ -2031,7 +2022,7 @@ final class ConversationRunCoordinator {
                 return await self.consumeSteeringInputs(conversationID: conversationID, runID: runID, at: boundary)
             },
             workingContextProvider: { [weak self] systemPrompt in
-                guard let self else { return [] }
+                guard let self else { return AgentLoopEngine.WorkingContext(messages: [], outputRoom: nil) }
                 guard self.activeRuns[conversationID]?.id == runID else { throw CancellationError() }
 
                 let calibrationFactor: Double
@@ -2094,6 +2085,14 @@ final class ConversationRunCoordinator {
                         )
                         self.lastCalibrationBaselines[runID] = working.budget.calibrationBaseline
                         self.lastRequestContexts[runID] = working.messages
+                        self.contextUsage[conversationID] = ContextUsageSnapshot(
+                            conversationID: conversationID,
+                            modelID: modelID,
+                            providerID: provider.id,
+                            budget: working.budget,
+                            origin: .request,
+                            lastActualInputTokens: self.contextUsage[conversationID]?.lastActualInputTokens
+                        )
                         for diag in working.diagnostics {
                             switch diag {
                             case .staleDerivedStateDiscarded:
@@ -2148,7 +2147,8 @@ final class ConversationRunCoordinator {
                             systemPrompt: systemPrompt,
                             fallback: fallbackConversation
                         )
-                        return baseHistory
+                        return AgentLoopEngine.WorkingContext(messages: baseHistory,
+                                                              outputRoom: EffectiveContextLimits.outputRoom(for: working.budget))
                     } catch ContextPlanningControl.sourceChanged {
                         replanAttempt += 1
                         if replanAttempt >= 3 {
@@ -4158,6 +4158,74 @@ No tools, shell, browser, or file system access are available for this turn. Res
         return history
     }
 
+    /// The workspace a run in `conversationID` uses when none is given explicitly: the
+    /// conversation's own, its project's, its effective directory, then the app's.
+    private func defaultWorkspaceConfiguration(conversationID: UUID) -> WorkspaceConfiguration? {
+        let convRecord = conversationStore?.conversations.first(where: { $0.id == conversationID })
+        if let direct = convRecord?.workspace { return direct }
+        if let parent = convRecord.flatMap({ conversationStore?.project(for: $0) })?.workspace { return parent }
+        if let effectiveURL = conversationStore?.effectiveWorkingDirectory(for: conversationID) {
+            return WorkspaceConfiguration.from(url: effectiveURL)
+        }
+        return workspace.configuration
+    }
+
+    /// Estimates the next request of an idle conversation, so its usage shows before anything
+    /// is sent: the system prompt, tools and compaction-aware history a run would build now.
+    /// A run in progress owns the snapshot; its requests write the measured plan instead.
+    func refreshContextUsagePreview(conversationID: UUID, modelSource: ConversationModelSource) {
+        guard canStartRun(conversationID: conversationID), compactions[conversationID]?.isRunning != true else { return }
+        let provider: ProviderConfiguration
+        let modelID: String
+        var groupLimit: Int?
+        switch modelSource {
+        case .direct(let providerID, let directModelID):
+            guard let found = providers.providers.first(where: { $0.id == providerID }) else { return }
+            provider = found
+            modelID = directModelID
+        case .group(let groupID):
+            guard let group = modelGroups?.group(for: groupID),
+                  let candidate = modelGroups?.resolveInitial(for: group, sessionId: conversationID.uuidString, providers: providers.providers)
+            else { return }
+            provider = candidate.provider
+            modelID = candidate.modelID
+            groupLimit = group.contextLimitTokens
+        }
+        let options = ChatInferenceOptions(
+            provider: provider,
+            model: provider.models.first(where: { $0.id == modelID }),
+            groupContextLimitTokens: groupLimit
+        )
+        let messages = conversationMessages(for: conversationID)
+        let manifest = buildRuntimeCapabilityManifest(
+            conversationID: conversationID,
+            workspaceURL: defaultWorkspaceConfiguration(conversationID: conversationID)?.url,
+            conversationHasAttachments: messages.contains(where: { !$0.attachments.isEmpty }),
+            modelID: modelID,
+            options: options
+        )
+        let budget = contextLifecycle.previewBudget(
+            conversationID: conversationID,
+            messages: messages,
+            systemPrompt: manifest.systemPrompt,
+            tools: manifest.toolDefinitions,
+            options: options,
+            calibrationFactor: calibrationStore.factor(conversationID: conversationID, providerID: provider.id, modelID: modelID)
+        )
+        contextUsage[conversationID] = ContextUsageSnapshot(
+            conversationID: conversationID,
+            modelID: modelID,
+            providerID: provider.id,
+            budget: budget,
+            origin: .preview,
+            lastActualInputTokens: contextUsage[conversationID]?.lastActualInputTokens
+        )
+    }
+
+    func forgetContextUsage(conversationID: UUID) {
+        contextUsage.removeValue(forKey: conversationID)
+    }
+
     func handleUsageTelemetry(
         conversationID: UUID,
         runID: UUID,
@@ -4174,6 +4242,11 @@ No tools, shell, browser, or file system access are available for this turn. Res
             rawTotalInputTokens: baseline.rawTotalInputTokens,
             actualInputTokens: inputTokens
         )
+        if var snapshot = contextUsage[conversationID] {
+            snapshot.lastActualInputTokens = inputTokens
+            snapshot.updatedAt = Date()
+            contextUsage[conversationID] = snapshot
+        }
         let observedRatio = Double(inputTokens) / Double(baseline.rawTotalInputTokens)
         logs.info("ContextLifecycle", "Recorded provider telemetry for \(modelID): actual=\(inputTokens) rawTotal=\(baseline.rawTotalInputTokens) (content=\(baseline.rawContentInputTokens) tools=\(baseline.toolReserve)) ratio=\(String(format: "%.2f", observedRatio)) factor=\(String(format: "%.2f", factor))")
     }
@@ -4276,6 +4349,10 @@ private final class CoordinatorLoopObserver: AgentLoopObserver {
 
     func onProviderTransportFailure(_ summary: String) {
         transportFailure = summary
+    }
+
+    func onOutputLimitRaised(from: Int, to: Int) {
+        recordRequestEnd(outcome: "outputLimitRaised", extra: ["outputLimit": "\(from)", "nextOutputLimit": "\(to)"])
     }
 
     func onProviderThinkingResolved(_ metadata: [String: String]) {

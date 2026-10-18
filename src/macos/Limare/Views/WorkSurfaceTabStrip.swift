@@ -5,6 +5,7 @@ import SwiftUI
 /// Frame height matches `AppLayout.workspaceHeaderHeight` (44pt) to ensure pixel-level alignment with Chat Header.
 public struct WorkSurfaceTabStrip: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
 
     public init() {}
 
@@ -13,16 +14,16 @@ public struct WorkSurfaceTabStrip: View {
             // Scrollable / Horizontal Tab List
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: AppSpacing.xxSmall) {
-                    ForEach(appState.workSurface.tabs) { tab in
+                    ForEach(window.workSurface.tabs) { tab in
                         WorkSurfaceTabItemView(
-                            title: appState.workSurfaceTitle(for: tab),
-                            systemImage: appState.workSurfaceSystemImage(for: tab),
-                            isActive: tab.id == appState.workSurface.activeTabID,
+                            title: window.workSurfaceTitle(for: tab),
+                            systemImage: window.workSurfaceSystemImage(for: tab),
+                            isActive: tab.id == window.workSurface.activeTabID,
                             onSelect: {
-                                appState.workSurface.focus(id: tab.id)
+                                window.workSurface.focus(id: tab.id)
                             },
                             onClose: {
-                                appState.closeWorkSurfaceTab(id: tab.id)
+                                window.closeWorkSurfaceTab(id: tab.id)
                             }
                         )
                     }
@@ -31,9 +32,9 @@ public struct WorkSurfaceTabStrip: View {
 
             Spacer(minLength: 0)
 
-            let isExpanded = appState.workSurface.isExpanded
+            let isExpanded = window.workSurface.isExpanded
             Button {
-                appState.workSurface.toggleExpanded()
+                window.workSurface.toggleExpanded()
             } label: {
                 Image(systemName: isExpanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
                     .font(.system(size: 12, weight: .medium))

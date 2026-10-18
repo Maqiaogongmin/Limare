@@ -350,16 +350,29 @@ struct ProviderToolCall: Encodable, Sendable {
     let type = "function"
     let function: Function
     let finishReason: String?
+    /// The max output tokens the request asked for, when the response used all of them.
+    /// Some gateways report `tool_calls` for a cut-off call, so usage is the second witness.
+    let reachedOutputTokenLimit: Int?
 
-    init(id: String, function: Function, finishReason: String? = nil) {
+    init(id: String, function: Function, finishReason: String? = nil, reachedOutputTokenLimit: Int? = nil) {
         self.id = id
         self.function = function
         self.finishReason = finishReason
+        self.reachedOutputTokenLimit = reachedOutputTokenLimit
+    }
+
+    static func finishReasonMeansOutputLimit(_ finishReason: String?) -> Bool {
+        finishReason == "length" || finishReason == "max_tokens" || finishReason == "max_output_tokens"
     }
 
     var isTruncatedByOutputLimit: Bool {
-        guard let finishReason else { return false }
-        return finishReason == "length" || finishReason == "max_tokens" || finishReason == "max_output_tokens"
+        Self.finishReasonMeansOutputLimit(finishReason) || reachedOutputTokenLimit != nil
+    }
+
+    /// Told to the model in place of the tool result: nothing ran, and the call must be smaller.
+    var outputLimitTruncationMessage: String {
+        let limit = reachedOutputTokenLimit.map { "the output limit of \($0) tokens" } ?? "the output token limit"
+        return "The response reached \(limit) (finish_reason: \(finishReason ?? "none")) before this tool call's arguments were complete, so the call was not executed and nothing was changed. Reasoning and tool arguments share this limit. Split the work into smaller tool calls: for a long file, write the first part, then add the rest in further calls."
     }
 
     private enum CodingKeys: String, CodingKey {

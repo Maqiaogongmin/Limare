@@ -102,6 +102,23 @@ struct EffectiveContextLimits: Sendable, Equatable {
         return max(1, min(effective, globalMaxTokensCeiling))
     }
 
+    /// What a default request cut off at its output limit is requested again with (Claude Code's
+    /// max-output escalation): the model's own declared limit, as far as the context window has
+    /// room after the input. Nil when the model declares no limit, since a guess could be refused.
+    static func escalatedOutputLimit(modelMaxOutput: Int?, outputRoom: Int?) -> Int? {
+        guard let modelMaxOutput, modelMaxOutput > 0 else { return nil }
+        let limit = min(modelMaxOutput, globalMaxTokensCeiling, outputRoom ?? globalMaxTokensCeiling)
+        return limit > 0 ? limit : nil
+    }
+
+    /// The output tokens the context window has room for after a request's input: what the
+    /// budget leaves for output plus what the estimate leaves unused (nil when the window is unknown).
+    static func outputRoom(for budget: ContextBudget) -> Int? {
+        guard let window = budget.contextWindow else { return nil }
+        let room = window - budget.estimatedTokens - budget.toolReserve - budget.safetyReserve
+        return max(budget.outputReserve, room)
+    }
+
     /// Estimates token consumption for active tool definitions.
     static func calculateToolReserve(tools: [ChatToolDefinition]) -> Int {
         let toolBytes = (try? JSONEncoder().encode(tools).count) ?? 0

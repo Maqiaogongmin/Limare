@@ -3,7 +3,15 @@ import SwiftUI
 struct ToolCallCard: View {
     let toolCall: ToolCallRecord
     @Environment(AppState.self) private var appState
-    @State private var isManuallyExpanded = false
+    @Environment(WindowSession.self) private var window
+    @State private var isManuallyExpanded: Bool
+
+    @State private var pendingUndo: UndoRequest?
+
+    init(toolCall: ToolCallRecord, isInitiallyExpanded: Bool = false) {
+        self.toolCall = toolCall
+        _isManuallyExpanded = State(initialValue: isInitiallyExpanded)
+    }
 
     private var isExpanded: Bool {
         isManuallyExpanded
@@ -24,16 +32,27 @@ struct ToolCallCard: View {
     }
 
     private var resolvedFileTargetURL: URL? {
-        let workspaceURL = appState.conversations.activeConversationID.map {
+        let workspaceURL = window.conversationID.map {
             appState.conversations.effectiveWorkingDirectory(for: $0)
         } ?? appState.workspace.url
         return ToolCallFileTargetResolver.resolveTargetURL(for: toolCall, in: workspaceURL)
     }
 
+    private var changeNotice: ToolCallChangeNotice? {
+        guard let conversationID = toolCall.owningRunID.flatMap({
+            appState.conversationRuns.conversationID(forRunID: $0)
+        }) ?? window.conversationID else { return nil }
+        return ToolCallChangeTruth.notice(
+            toolState: toolCall.state,
+            providerCallID: toolCall.providerCallID,
+            records: appState.undo.journal.records(for: conversationID)
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(.easeInOut(duration: 0.15)) {
+                withAnimation(AppMotion.resolved(AppMotion.standard)) {
                     isManuallyExpanded = !isExpanded
                 }
             } label: {
@@ -87,6 +106,28 @@ struct ToolCallCard: View {
             }
             .buttonStyle(.plain)
 
+            if let notice = changeNotice {
+                HStack(spacing: AppSpacing.xSmall) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(AppColors.statusWarning)
+                    Text("失败，但文件已被修改（\(notice.paths.count) 个）")
+                        .font(.caption)
+                        .foregroundStyle(AppColors.statusWarning)
+                        .lineLimit(1)
+                        .accessibilityIdentifier("toolcard.changedOnFailure")
+                    if notice.ownerMessageID == window.chat.retractableUserMessageID {
+                        Button("查看撤销") { pendingUndo = UndoRequest(messageID: notice.ownerMessageID) }
+                            .buttonStyle(.link)
+                            .font(.caption)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, AppSpacing.medium)
+                .padding(.bottom, AppSpacing.small)
+                .help(notice.paths.joined(separator: "\n"))
+            }
+
             if let targetURL = resolvedFileTargetURL {
                 FileArtifactCard(fileURL: targetURL)
                     .padding(.horizontal, AppSpacing.medium)
@@ -101,31 +142,37 @@ struct ToolCallCard: View {
                     .padding(AppSpacing.medium)
             }
         }
-        .background(Color.secondary.opacity(0.06))
+        .background(AppColors.surfaceElevated)
         .clipShape(RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous)
                 .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
         )
+        .sheet(item: $pendingUndo) { request in
+            UndoMessageSheet(messageID: request.messageID)
+                .environment(appState)
+        }
     }
 }
 
 private struct ToolCallDetails: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     let toolCall: ToolCallRecord
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.small) {
             let isBrowser = toolCall.name == "browser_use" || toolCall.name.hasSuffix("browser_use")
-            let targetConversationID = toolCall.owningRunID.flatMap { appState.conversationRuns.conversationID(forRunID: $0) } ?? appState.conversations.activeConversationID
+            let targetConversationID = toolCall.owningRunID.flatMap { appState.conversationRuns.conversationID(forRunID: $0) } ?? window.conversationID
             let hasSession = targetConversationID.map { appState.browser.hasSession(for: $0) } ?? false
             if isBrowser && hasSession {
                 HStack {
                     Button {
-                        if let targetConversationID, appState.conversations.activeConversationID != targetConversationID {
+                        if let targetConversationID, window.conversationID != targetConversationID {
+                            appState.focus(window)
                             appState.conversations.selectConversation(id: targetConversationID)
                         }
-                        appState.workSurface.openBrowser()
+                        window.workSurface.openBrowser()
                     } label: {
                         Label("Open Browser", systemImage: "globe")
                     }
@@ -141,13 +188,16 @@ private struct ToolCallDetails: View {
                     Text("Input")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
-                    Text(toolCall.input)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(AppSpacing.small)
-                        .background(Color.secondary.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: AppRadius.small))
+                    ScrollView(.vertical) {
+                        Text(toolCall.input)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: AppLayout.toolInputMaximumHeight)
+                    .padding(AppSpacing.small)
+                    .background(AppColors.surfaceInteractive)
+                    .clipShape(RoundedRectangle(cornerRadius: AppRadius.small))
                 }
             }
 
@@ -164,7 +214,7 @@ private struct ToolCallDetails: View {
                     }
                     .frame(maxHeight: AppLayout.toolOutputMaximumHeight)
                     .padding(AppSpacing.small)
-                    .background(Color.secondary.opacity(0.08))
+                    .background(AppColors.surfaceInteractive)
                     .clipShape(RoundedRectangle(cornerRadius: AppRadius.small))
                 }
             }

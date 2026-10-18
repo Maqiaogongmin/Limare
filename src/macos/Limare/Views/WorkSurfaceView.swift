@@ -4,6 +4,7 @@ import SwiftUI
 /// Hosts the shared Tab Strip and routes to the active surface content (or Launcher when no tabs are open).
 public struct WorkSurfaceView: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
 
     public init() {}
 
@@ -12,20 +13,20 @@ public struct WorkSurfaceView: View {
             // At the bottom of the title row, continuing the line under the chat's title.
             Divider()
 
-            if !appState.workSurface.tabs.isEmpty {
+            if !window.workSurface.tabs.isEmpty {
                 WorkSurfaceTabStrip()
                 Divider()
             }
 
-            if appState.workSurface.tabs.isEmpty {
+            if window.workSurface.tabs.isEmpty {
                 WorkSurfaceLauncherView()
-            } else if let activeTab = appState.workSurface.activeTab {
+            } else if let activeTab = window.workSurface.activeTab {
                 switch activeTab.kind {
                 case .browser:
-                    BrowserSurfaceView(session: appState.workSurface.additionalBrowsers[activeTab.contentID])
+                    BrowserSurfaceView(session: window.workSurface.additionalBrowsers[activeTab.contentID])
                         .id(activeTab.id)
                 case .files:
-                    FilesSurfaceView(previewStore: appState.workSurface.filePreviews[activeTab.contentID])
+                    FilesSurfaceView(previewStore: window.workSurface.filePreviews[activeTab.contentID])
                         .id(activeTab.id)
                 }
             } else {

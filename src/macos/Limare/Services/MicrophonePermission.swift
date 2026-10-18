@@ -43,6 +43,7 @@ public enum PrivacySettingsOpener: Sendable {
     public static let microphoneSettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
     public static let screenRecordingSettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
     public static let privacySecuritySettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Security")
+    public static let notificationSettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.notifications")
 
     @MainActor
     public static func openMicrophoneSettings() {
@@ -52,6 +53,15 @@ public enum PrivacySettingsOpener: Sendable {
             return
         }
         if let url = privacySecuritySettingsURL {
+            NSWorkspace.shared.open(url)
+        }
+        #endif
+    }
+
+    @MainActor
+    public static func openNotificationSettings() {
+        #if canImport(AppKit)
+        if let url = notificationSettingsURL {
             NSWorkspace.shared.open(url)
         }
         #endif

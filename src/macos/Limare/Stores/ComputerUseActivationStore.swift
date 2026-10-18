@@ -101,6 +101,17 @@ final class ComputerUseActivationStore {
     @ObservationIgnored
     private let preferenceFileURL: URL?
 
+    /// Whether a conversation has a run in progress. While the session's conversation has one,
+    /// another conversation's run is refused the session instead of taking it over.
+    @ObservationIgnored
+    var conversationIsRunning: (@MainActor (UUID) -> Bool)?
+    /// A conversation's title, for the refusal message.
+    @ObservationIgnored
+    var conversationTitle: (@MainActor (UUID) -> String?)?
+    /// Runs refused the session: the conversation that held it and the mode to bind with once it is free.
+    @ObservationIgnored
+    private var refusedSessions: [UUID: (holder: UUID, mode: PermissionMode)] = [:]
+
     @ObservationIgnored
     private var monotonicGeneration: UInt64 = 0
     @ObservationIgnored
@@ -304,6 +315,12 @@ final class ComputerUseActivationStore {
             return false
         }
         let current = activeConversationID ?? desiredConversationID
+        if let current, current != conversationID, conversationIsRunning?(current) == true {
+            refusedSessions[conversationID] = (current, currentPermissionMode)
+            logs?.info("ComputerUse", "Computer Use refused to conversation '\(conversationID.uuidString.prefix(8))': conversation '\(current.uuidString.prefix(8))' is using it.")
+            return false
+        }
+        refusedSessions[conversationID] = nil
         if current != conversationID || permissionModeAtActivation != currentPermissionMode {
             if let current {
                 advanceGeneration(conversationID: current)
@@ -316,6 +333,23 @@ final class ComputerUseActivationStore {
         }
         refreshReadiness()
         return isActivated && activeConversationID == conversationID
+    }
+
+    /// Binds a refused run once the conversation that held the session no longer runs.
+    @discardableResult
+    func claimReleasedSession(conversationID: UUID) -> Bool {
+        guard let refused = refusedSessions[conversationID] else { return false }
+        let holder = activeConversationID ?? desiredConversationID
+        if let holder, holder != conversationID, conversationIsRunning?(holder) == true { return false }
+        return bindExecutionSession(conversationID: conversationID, currentPermissionMode: refused.mode)
+    }
+
+    /// Why a refused run cannot use Computer Use, while the other conversation still holds it.
+    func refusalReason(conversationID: UUID) -> String? {
+        guard refusedSessions[conversationID] != nil,
+              let holder = activeConversationID ?? desiredConversationID, holder != conversationID else { return nil }
+        let title = conversationTitle?(holder).map { "「\($0)」" } ?? "另一个会话"
+        return "Computer Use 正由会话\(title)使用，同一时间只能有一个会话控制电脑。请等那个会话的任务结束后再试。"
     }
 
     // MARK: - Layer 1 Activation Lifecycle
@@ -389,8 +423,8 @@ final class ComputerUseActivationStore {
 
     /// Conversation boundary (switch / reset / end / delete) destroys the execution session
     /// (Doc 68 §10.1). The global preference is unchanged; the next Run binds a fresh session.
-    func resetForConversationBoundary() {
-        guard readiness != .off || activeConversationID != nil || desiredConversationID != nil else { return }
+    func resetForConversationBoundary(leaving conversationID: UUID) {
+        guard (activeConversationID ?? desiredConversationID) == conversationID else { return }
         if let activeID = activeConversationID ?? desiredConversationID {
             advanceGeneration(conversationID: activeID)
         }
@@ -417,6 +451,7 @@ final class ComputerUseActivationStore {
     /// Run finished callback: normal completion and generic failure keep the session;
     /// only cancellation ends it (Doc 68 §10.1, §10.2).
     func onRunFinished(conversationID: UUID, status finishStatus: ConversationRunStatus) {
+        refusedSessions[conversationID] = nil
         if finishStatus == .cancelled {
             suspendForRunCancellation(conversationID: conversationID)
         }

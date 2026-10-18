@@ -305,6 +305,89 @@ final class ContextLifecycle {
         }
     }
 
+    /// The budget the next request starts from, for display: the same assembly and estimate as
+    /// the start of `workingMessages`, without its writes. A stale summary is left for the
+    /// next request to discard and is not counted here.
+    func previewBudget(
+        conversationID: UUID,
+        messages: [ChatMessage],
+        systemPrompt: String,
+        tools: [ChatToolDefinition],
+        options: ChatInferenceOptions,
+        calibrationFactor: Double = 1.0
+    ) -> ContextBudget {
+        let state = store.load(conversationID: conversationID).flatMap {
+            Self.validateProvenance(state: $0, messages: messages) ? $0 : nil
+        }
+        var hints = ContextProtectionHints()
+        hints.acknowledgedToolCallIDs = ContextWorkingSetManager.acknowledgedToolCallIDs(in: messages)
+        let current = assemble(messages: messages, state: state, protectionHints: hints)
+        let budget = Self.makeBudget(
+            systemPrompt: systemPrompt,
+            messages: current,
+            tools: tools,
+            options: options,
+            factor: calibrationFactor
+        )
+        // Past the soft threshold a request reduces its working set before it is sent
+        // (`workingMessages`), so the preview measures the reduced one. Compaction, which
+        // needs a model call, is not previewed: a budget still over the limit means it.
+        guard let effectiveBudget = budget.effectiveInputBudget,
+              budget.estimatedTokens > max(1, Int(Double(effectiveBudget) * ContextWorkingSetManager.softThresholdRatio))
+        else { return budget }
+        return Self.reduce(
+            current,
+            budget: budget,
+            effectiveBudget: effectiveBudget,
+            systemPrompt: systemPrompt,
+            tools: tools,
+            options: options,
+            protocolContext: WorkingSetProtocolContext(
+                apiFormat: options.apiFormat,
+                providerID: options.providerID,
+                modelID: options.model?.id
+            ),
+            calibrationFactor: calibrationFactor,
+            targetBudgetRatio: ContextWorkingSetManager.defaultTargetBudgetRatio,
+            protectionHints: hints
+        ).budget
+    }
+
+    /// The deterministic working-set reduction a request runs past the soft threshold, and
+    /// the budget of what it leaves.
+    private static func reduce(
+        _ current: [ChatMessage],
+        budget: ContextBudget,
+        effectiveBudget: Int,
+        systemPrompt: String,
+        tools: [ChatToolDefinition],
+        options: ChatInferenceOptions,
+        protocolContext: WorkingSetProtocolContext,
+        calibrationFactor: Double,
+        targetBudgetRatio: Double,
+        protectionHints: ContextProtectionHints
+    ) -> (messages: [ChatMessage], report: ContextReductionReport, budget: ContextBudget) {
+        let (reduced, report) = ContextWorkingSetManager.reduceWorkingSet(
+            messages: current,
+            systemPrompt: systemPrompt,
+            effectiveInputBudget: effectiveBudget,
+            toolReserve: budget.toolReserve,
+            protocolContext: protocolContext,
+            calibrationFactor: calibrationFactor,
+            targetBudgetRatio: targetBudgetRatio,
+            protectionHints: protectionHints
+        )
+        let reducedBudget = makeBudget(
+            systemPrompt: systemPrompt,
+            messages: reduced,
+            tools: tools,
+            options: options,
+            factor: calibrationFactor,
+            targetBudgetRatio: targetBudgetRatio
+        )
+        return (reduced, report, reducedBudget)
+    }
+
     func workingMessages(
         conversationID: UUID,
         messages: [ChatMessage],
@@ -392,25 +475,19 @@ final class ContextLifecycle {
         )
 
         // Soft threshold or hard threshold exceeded: execute WorkingSet Reduction first
-        let (reducedWorking, reductionReport) = ContextWorkingSetManager.reduceWorkingSet(
-            messages: current,
+        let (reducedWorking, reductionReport, afterReductionBudget) = Self.reduce(
+            current,
+            budget: budget,
+            effectiveBudget: effectiveBudget,
             systemPrompt: systemPrompt,
-            effectiveInputBudget: effectiveBudget,
-            toolReserve: budget.toolReserve,
+            tools: tools,
+            options: options,
             protocolContext: protocolContext,
             calibrationFactor: calibrationFactor,
             targetBudgetRatio: targetBudgetRatio,
             protectionHints: planningHints
         )
         let didReduce = reductionReport.didReduce
-        let afterReductionBudget = Self.makeBudget(
-            systemPrompt: systemPrompt,
-            messages: reducedWorking,
-            tools: tools,
-            options: options,
-            factor: calibrationFactor,
-            targetBudgetRatio: targetBudgetRatio
-        )
 
         // If WorkingSet reduction brought context within hard budget (and towards soft/target budget), proceed without compaction
         if !forceCompaction && !afterReductionBudget.needsCompaction {

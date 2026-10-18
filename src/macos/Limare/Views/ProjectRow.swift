@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ProjectRow: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     let project: ProjectRecord
 
     @State private var isRenaming = false
@@ -41,7 +42,7 @@ struct ProjectRow: View {
 
                         if projectConversations.count > maxInitialConversations {
                             Button {
-                                withAnimation(.easeInOut(duration: 0.15)) {
+                                withAnimation(AppMotion.resolved(AppMotion.standard)) {
                                     isShowingAllConversations.toggle()
                                 }
                             } label: {
@@ -95,7 +96,7 @@ struct ProjectRow: View {
             isSelected: false
         ) {
             Button {
-                withAnimation(.easeInOut(duration: 0.15)) {
+                withAnimation(AppMotion.resolved(AppMotion.standard)) {
                     appState.conversations.toggleProjectExpanded(id: project.id)
                 }
             } label: {
@@ -124,6 +125,7 @@ struct ProjectRow: View {
                 systemImage: "plus",
                 tooltip: "New Conversation in \(project.name)"
             ) {
+                appState.focus(window)
                 appState.conversations.newConversation(projectID: project.id)
             }
 
@@ -150,6 +152,7 @@ struct ProjectRow: View {
     @ViewBuilder
     private var projectMenuItems: some View {
         Button {
+            appState.focus(window)
             appState.conversations.newConversation(projectID: project.id)
         } label: {
             Label("New Conversation in Project", systemImage: "plus")

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SidebarView: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     @State private var isCreatingProject = false
     @State private var isViewingArchived = false
     @State private var searchText = ""
@@ -69,7 +70,7 @@ struct SidebarView: View {
                 isSelected: false,
                 onSelect: {
                     Task { @MainActor in
-                        appState.screen = .settingsGeneral
+                        window.screen = .settingsGeneral
                     }
                 }
             ) {
@@ -94,6 +95,7 @@ struct SidebarView: View {
     private var topBar: some View {
         VStack(spacing: AppSpacing.small) {
             Button {
+                appState.focus(window)
                 appState.conversations.newConversation()
             } label: {
                 HStack(spacing: AppSpacing.small) {

@@ -127,7 +127,7 @@ struct MCPToolsListView: View {
                 Spacer(minLength: AppSpacing.small)
 
                 Button {
-                    withAnimation(.easeInOut(duration: 0.15)) {
+                    withAnimation(AppMotion.resolved(AppMotion.standard)) {
                         if isExpanded {
                             expandedToolIDs.remove(tool.id)
                         } else {

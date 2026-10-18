@@ -3,6 +3,7 @@ import SwiftUI
 struct CreateProjectSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
 
     @State private var projectName = ""
     @State private var selectedWorkspace: WorkspaceConfiguration?
@@ -206,6 +207,7 @@ struct CreateProjectSheet: View {
         let trimmed = projectName.trimmingCharacters(in: .whitespacesAndNewlines)
         let finalName = trimmed.isEmpty ? (selectedWorkspace?.name ?? "New Project") : trimmed
         let project = appState.conversations.newProject(name: finalName, workspace: selectedWorkspace)
+        appState.focus(window)
         appState.conversations.newConversation(projectID: project.id)
         dismiss()
     }

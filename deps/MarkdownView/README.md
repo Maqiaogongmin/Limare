@@ -31,6 +31,13 @@ Every change from upstream is listed here; `git log -- deps/MarkdownView` holds 
    a person typed keeps its lines. Off by default; Limare turns it on for user messages.
    Files: `MarkdownTheme/MarkdownTheme.swift`, `Supplements/InlineNode+Render.swift`.
 
+5. **Inline code is padded with sized spaces, not attachments.** The 4 pt either side of a
+   code span is a space in the code font at the size that makes it 4 pt wide, carrying an
+   empty holder attachment (so it still copies as nothing). Upstream uses a run-delegate
+   attachment, around which CoreText breaks lines about 40× more slowly: a 140 KB document
+   with a thousand code spans took 600 ms to measure at each new width, now 15 ms.
+   File: `Supplements/InlineCode.swift`.
+
 ## Updating
 
 Copy the two source directories from the new upstream tag over these, re-apply the changes

@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ConversationRow: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
+    @Environment(\.openWindow) private var openWindow
     let conversation: ConversationRecord
     var isIndented: Bool = false
 
@@ -10,7 +12,7 @@ struct ConversationRow: View {
     @State private var isConfirmingDelete = false
 
     private var isSelected: Bool {
-        appState.conversations.activeConversationID == conversation.id
+        window.conversationID == conversation.id
     }
 
     private var iconForegroundStyle: Color {
@@ -28,6 +30,7 @@ struct ConversationRow: View {
             isSelected: isSelected,
             isIndented: isIndented,
             onSelect: {
+                appState.focus(window)
                 appState.conversations.selectConversation(id: conversation.id)
             }
         ) {
@@ -41,7 +44,12 @@ struct ConversationRow: View {
                 .truncationMode(.tail)
                 .foregroundStyle(isSelected ? Color.primary : Color.primary.opacity(0.88))
 
-            if appState.conversationRuns.hasInterruptedRun(for: conversation.id) {
+            if appState.conversationsAwaitingApproval.contains(conversation.id) {
+                Image(systemName: "hand.raised.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .help("Waiting for your approval")
+            } else if appState.conversationRuns.hasInterruptedRun(for: conversation.id) {
                 Image(systemName: "exclamationmark.circle.fill")
                     .font(.caption2)
                     .foregroundStyle(.orange)
@@ -117,6 +125,15 @@ struct ConversationRow: View {
     @ViewBuilder
     private var conversationMenuItems: some View {
         Button {
+            appState.prepareWindow(for: conversation.id)
+            openWindow(id: WindowSession.sceneID)
+        } label: {
+            Label("Open in New Window", systemImage: "macwindow.badge.plus")
+        }
+
+        Divider()
+
+        Button {
             renameText = conversation.title
             isRenaming = true
         } label: {
@@ -153,8 +170,9 @@ struct ConversationRow: View {
         }
 
         Button {
+            appState.focus(window)
             appState.conversations.selectConversation(id: conversation.id)
-            appState.chat.compactConversation()
+            window.chat.compactConversation()
         } label: {
             Label("Compact Conversation", systemImage: "arrow.down.right.and.arrow.up.left")
         }

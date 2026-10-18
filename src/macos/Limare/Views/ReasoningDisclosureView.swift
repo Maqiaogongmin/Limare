@@ -7,6 +7,7 @@ import SwiftUI
 struct ReasoningDisclosureView: View {
     let reasoning: String
     let state: ChatMessage.State
+    let hasVisibleOutput: Bool
 
     @State private var isManuallyExpanded: Bool? = nil
 
@@ -14,10 +15,18 @@ struct ReasoningDisclosureView: View {
         isManuallyExpanded ?? false
     }
 
+    var label: String {
+        state == .streaming && !hasVisibleOutput ? "Thinking…" : "Thought process"
+    }
+
+    static func hasVisibleOutput(content: String, toolCalls: [ToolCallRecord]) -> Bool {
+        !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !toolCalls.isEmpty
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(.easeInOut(duration: 0.15)) {
+                withAnimation(AppMotion.resolved(AppMotion.standard)) {
                     isManuallyExpanded = !isExpanded
                 }
             } label: {
@@ -31,7 +40,7 @@ struct ReasoningDisclosureView: View {
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
 
-                    Text(state == .streaming ? "Thinking…" : "Thought process")
+                    Text(label)
                         .font(AppTypography.interfaceSubheadline.weight(.medium))
                         .foregroundStyle(Color.secondary)
 

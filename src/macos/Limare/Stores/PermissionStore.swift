@@ -4,6 +4,8 @@ import Observation
 @MainActor
 @Observable
 final class PermissionStore {
+    /// Called when an approval request is shown (the Background Alerts notifier listens).
+    @ObservationIgnored var onApprovalPresented: ((PendingApproval) -> Void)?
     @ObservationIgnored
     private let defaults: UserDefaults
     @ObservationIgnored
@@ -166,6 +168,7 @@ final class PermissionStore {
             return
         }
         pendingApproval = first.approval
+        onApprovalPresented?(first.approval)
     }
 
     func resolvePendingApproval(id: UUID? = nil, approved: Bool) {

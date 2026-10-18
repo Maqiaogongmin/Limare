@@ -4,6 +4,7 @@ import SwiftUI
 /// Provides consistent visual grammar, hover state, file metadata, and one-click preview.
 public struct FileArtifactCard: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     @State private var isHovered: Bool = false
 
     private let filename: String
@@ -102,24 +103,24 @@ public struct FileArtifactCard: View {
             // Previewed in Files when Limare can, otherwise the default app (see FileOpening).
             switch target {
             case .workspaceFile(let url):
-                FileOpening.open(url) { appState.previewWorkspaceFile(url) }
+                FileOpening.open(url) { window.previewWorkspaceFile(url) }
             case .attachment(let attachment, let store):
                 guard let url = try? store.fileURL(for: attachment) else { return }
-                FileOpening.open(url) { appState.previewAttachment(attachment) }
+                FileOpening.open(url) { window.previewAttachment(attachment) }
             case .artifact(let id, let conversationID, let store):
-                if let source = appState.workspaceSource(ofArtifact: id, conversationID: conversationID) {
-                    FileOpening.open(source) { appState.previewWorkspaceFile(source) }
+                if let source = window.workspaceSource(ofArtifact: id, conversationID: conversationID) {
+                    FileOpening.open(source) { window.previewWorkspaceFile(source) }
                     return
                 }
                 guard let url = try? store.resolveFileURL(artifactID: id, conversationID: conversationID) else { return }
-                FileOpening.open(url) { appState.previewArtifact(id: id, conversationID: conversationID) }
+                FileOpening.open(url) { window.previewArtifact(id: id, conversationID: conversationID) }
             }
         } label: {
             HStack(spacing: AppSpacing.small) {
                 Image(systemName: iconSystemName)
                     .font(.system(size: 15, weight: .regular))
                     .foregroundStyle(AppColors.textSecondary)
-                    .frame(width: 20, height: 20)
+                    .frame(width: AppControlHeight.iconSmall, height: AppControlHeight.iconSmall)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(filename)
@@ -152,7 +153,7 @@ public struct FileArtifactCard: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.12)) {
+            withAnimation(AppMotion.resolved(AppMotion.quick)) {
                 isHovered = hovering
             }
         }

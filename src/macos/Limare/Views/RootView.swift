@@ -1,17 +1,84 @@
 import SwiftUI
+import AppKit
+
+/// One window. It takes a WindowSession when it appears, tells the app when it becomes key, and
+/// gives the session back when it closes.
+struct WindowRootView: View {
+    @Environment(AppState.self) private var appState
+    @State private var session: WindowSession?
+
+    var body: some View {
+        if let session {
+            RootView()
+                .environment(session)
+                .background(WindowLifecycleObserver(
+                    onAttach: { session.hostWindow = $0 },
+                    onBecameKey: { appState.windowBecameKey(session) },
+                    onClose: { appState.windowClosed(session) }
+                ))
+        } else {
+            Color.clear
+                .onAppear { session = appState.openWindowSession() }
+        }
+    }
+}
+
+/// Reports the hosting window, its becoming key and its closing.
+private struct WindowLifecycleObserver: NSViewRepresentable {
+    let onAttach: (NSWindow) -> Void
+    let onBecameKey: () -> Void
+    let onClose: () -> Void
+
+    func makeNSView(context: Context) -> ObserverView { ObserverView() }
+
+    func updateNSView(_ view: ObserverView, context: Context) {
+        view.onAttach = onAttach
+        view.onBecameKey = onBecameKey
+        view.onClose = onClose
+    }
+
+    final class ObserverView: NSView {
+        var onAttach: ((NSWindow) -> Void)?
+        var onBecameKey: (() -> Void)?
+        var onClose: (() -> Void)?
+        nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            observers.forEach { NotificationCenter.default.removeObserver($0) }
+            observers = []
+            guard let window else { return }
+            DispatchQueue.main.async { [weak self] in self?.onAttach?(window) }
+            observers.append(NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.onBecameKey?() }
+            })
+            observers.append(NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.onClose?() }
+            })
+            if window.isKeyWindow {
+                DispatchQueue.main.async { [weak self] in self?.onBecameKey?() }
+            }
+        }
+
+        deinit {
+            observers.forEach { NotificationCenter.default.removeObserver($0) }
+        }
+    }
+}
 
 struct RootView: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
     /// The sidebar's visibility before the Work Surface expanded, restored when it stops.
     @State private var visibilityBeforeExpanding: NavigationSplitViewVisibility?
 
     var body: some View {
-        @Bindable var appState = appState
+        @Bindable var window = window
         NavigationSplitView(columnVisibility: $columnVisibility) {
             ZStack {
-                if appState.screen.isSettings {
-                    SettingsSidebarView(selection: $appState.screen)
+                if window.screen.isSettings {
+                    SettingsSidebarView(selection: $window.screen)
                 } else {
                     SidebarView()
                 }
@@ -22,19 +89,21 @@ struct RootView: View {
                 max: AppLayout.sidebarMaximumWidth
             )
         } detail: {
-            switch appState.screen {
+            switch window.screen {
             case .chat:
                 ChatView()
             default:
-                SettingsDetailView(screen: appState.screen)
+                SettingsDetailView(screen: window.screen)
+                    .safeAreaInset(edge: .bottom) {
+                        ApprovalElsewhereNotice(excluding: nil)
+                            .padding(AppSpacing.small)
+                    }
             }
         }
         .sheet(item: activeSheet) { item in
             switch item {
             case .permission(let approval):
                 PermissionApprovalView(approval: approval)
-            case .appApproval(let appApproval):
-                ComputerUseAppApprovalView(pending: appApproval)
             case .mcpCredential(let credRequest):
                 MCPCredentialPromptView(request: credRequest)
             }
@@ -43,52 +112,49 @@ struct RootView: View {
         .onChange(of: workSurfaceFillsWindow) { _, fills in
             if fills {
                 visibilityBeforeExpanding = columnVisibility
-                withAnimation { columnVisibility = .detailOnly }
+                withAnimation(AppMotion.resolved(AppMotion.panel)) { columnVisibility = .detailOnly }
             } else if let previous = visibilityBeforeExpanding {
                 visibilityBeforeExpanding = nil
-                withAnimation { columnVisibility = previous }
+                withAnimation(AppMotion.resolved(AppMotion.panel)) { columnVisibility = previous }
             }
         }
     }
 
     private var workSurfaceFillsWindow: Bool {
-        !appState.screen.isSettings && appState.workSurface.isPresented && appState.workSurface.coverage == .window
+        !window.screen.isSettings && window.workSurface.isPresented && window.workSurface.coverage == .window
     }
 
     private enum ActiveSheet: Identifiable {
         case permission(PendingApproval)
-        case appApproval(ComputerUseAppApprovalPending)
         case mcpCredential(MCPCredentialRequest)
 
         var id: String {
             switch self {
             case .permission(let p): return "perm-\(p.id)"
-            case .appApproval(let a): return "app-\(a.id)"
             case .mcpCredential(let c): return "mcp-cred-\(c.id)"
             }
         }
     }
 
+    /// A request that belongs to no conversation, when this window is the one to present it: a
+    /// request reaches every window, but only one shows it (`AppState.sheetWindowID`). Approvals
+    /// a conversation waits on are shown in that conversation (`ConversationApprovalArea`).
     private var activeSheet: Binding<ActiveSheet?> {
         Binding(
             get: {
-                if let appApproval = appState.computerUseAppAuthorization.pendingApproval {
-                    return .appApproval(appApproval)
+                let sheet: ActiveSheet
+                if let permission = appState.permissions.pendingApproval, permission.conversationID == nil {
+                    sheet = .permission(permission)
+                } else if let cred = appState.mcp.pendingCredentialRequest {
+                    sheet = .mcpCredential(cred)
+                } else {
+                    return nil
                 }
-                if let permission = appState.permissions.pendingApproval {
-                    return .permission(permission)
-                }
-                if let cred = appState.mcp.pendingCredentialRequest {
-                    return .mcpCredential(cred)
-                }
-                return nil
+                return appState.sheetWindowID(for: sheet.id, conversationID: nil) == window.id ? sheet : nil
             },
             set: { newValue in
                 if newValue == nil {
-                    if let pending = appState.computerUseAppAuthorization.pendingApproval {
-                        appState.computerUseAppAuthorization.resolvePendingApproval(id: pending.id, approved: false)
-                    }
-                    if let perm = appState.permissions.pendingApproval {
+                    if let perm = appState.permissions.pendingApproval, perm.conversationID == nil {
                         appState.permissions.resolvePendingApproval(id: perm.id, approved: false)
                     }
                     if let cred = appState.mcp.pendingCredentialRequest {
@@ -208,88 +274,6 @@ private struct PermissionApprovalView: View {
         }
         .padding(AppSpacing.xLarge)
         .frame(minWidth: AppLayout.approvalMinimumWidth, idealWidth: AppLayout.approvalIdealWidth)
-        .interactiveDismissDisabled()
-    }
-}
-
-private struct ComputerUseAppApprovalView: View {
-    @Environment(AppState.self) private var appState
-    let pending: ComputerUseAppApprovalPending
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.standard) {
-            HStack(alignment: .firstTextBaseline, spacing: AppSpacing.small) {
-                Image(systemName: "hand.raised.fill")
-                    .font(.title2)
-                    .foregroundStyle(AppColors.statusWarning)
-                Text("Authorize App Control")
-                    .font(.title2.weight(.semibold))
-            }
-
-            Text("Allow Limare to CONTROL this App for the current conversation.")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.primary)
-
-            Text("Active desktop control allows Limare to synthesize keyboard and mouse events into this application. This bounds the scope of control, not display visibility.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            GroupBox {
-                VStack(alignment: .leading, spacing: AppSpacing.small) {
-                    HStack {
-                        Text("Application:")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 90, alignment: .leading)
-                        Text(pending.appLocalizedName)
-                            .font(.caption.weight(.medium))
-                            .accessibilityIdentifier("computerUse.appApproval.appName")
-                    }
-
-                    HStack {
-                        Text("Bundle ID:")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 90, alignment: .leading)
-                        Text(pending.bundleID)
-                            .font(.caption.monospaced())
-                            .textSelection(.enabled)
-                            .accessibilityIdentifier("computerUse.appApproval.bundleID")
-                    }
-
-                    HStack {
-                        Text("Scope:")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 90, alignment: .leading)
-                        Text("Active conversation only (cleared on exit)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(AppSpacing.xxSmall)
-            }
-
-            HStack {
-                Button("Block for this conversation", role: .cancel) {
-                    appState.computerUseAppAuthorization.resolvePendingApproval(id: pending.id, approved: false)
-                }
-                .accessibilityIdentifier("computerUse.appApproval.blockConversation")
-
-                Spacer()
-
-                Button("Allow for this conversation") {
-                    appState.computerUseAppAuthorization.resolvePendingApproval(id: pending.id, approved: true)
-                }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
-                .accessibilityIdentifier("computerUse.appApproval.allowConversation")
-            }
-        }
-        .padding(AppSpacing.xLarge)
-        .frame(minWidth: AppLayout.approvalMinimumWidth, idealWidth: AppLayout.approvalIdealWidth)
-        .accessibilityIdentifier("computerUse.appApproval.sheet")
         .interactiveDismissDisabled()
     }
 }

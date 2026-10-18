@@ -18,6 +18,8 @@ protocol AgentLoopObserver: AnyObject, Sendable {
     func onProviderThinkingResolved(_ metadata: [String: String])
     func onProviderRequestToolNames(_ names: [String])
     func onProviderTransportFailure(_ summary: String)
+    /// A response was cut off at `from` output tokens; it is discarded and requested again with `to`.
+    func onOutputLimitRaised(from: Int, to: Int)
 }
 
 extension AgentLoopObserver {
@@ -37,6 +39,7 @@ extension AgentLoopObserver {
     func onProviderThinkingResolved(_ metadata: [String: String]) {}
     func onProviderRequestToolNames(_ names: [String]) {}
     func onProviderTransportFailure(_ summary: String) {}
+    func onOutputLimitRaised(from: Int, to: Int) {}
 }
 
 struct ToolCallAccumulator: Sendable {
@@ -73,7 +76,13 @@ final class AgentLoopEngine {
     typealias PendingUserMessagesProvider = @MainActor (SteeringBoundary) async -> [ChatRequestMessage]
     typealias SafeBoundaryHandler = @MainActor () async throws -> Void
     typealias ToolCallCanceller = @MainActor ([ProviderToolCall]) async throws -> Void
-    typealias WorkingContextProvider = @MainActor (String) async throws -> [ChatRequestMessage]
+    /// The messages for the next request, and how many output tokens the context window still
+    /// has room for after them (nil when the window is unknown).
+    struct WorkingContext: Sendable {
+        let messages: [ChatRequestMessage]
+        let outputRoom: Int?
+    }
+    typealias WorkingContextProvider = @MainActor (String) async throws -> WorkingContext
 
     private let client: any ProviderClient
     private let logs: DebugLogStore
@@ -109,6 +118,10 @@ final class AgentLoopEngine {
         var consecutiveIdenticalToolCount = 0
         var totalTurnsExecuted = 0
         var turnsSinceLastUserPrompt = 0
+        // Claude Code's max-output escalation: a response cut off at the default output limit is
+        // requested again, once, with the model's own limit (`EffectiveContextLimits.escalatedOutputLimit`).
+        var escalatedOutputLimit: Int?
+        var outputRoom: Int?
 
         while true {
             try Task.checkCancellation()
@@ -129,7 +142,7 @@ final class AgentLoopEngine {
             // turn count alone: it stops only for a real terminal cause (final
             // answer, cancellation, provider failure, context exhaustion, fatal
             // persistence error, policy boundary, or the duplicate-call guard).
-            if case .bounded(let maximumTurns) = configuration.turnBudget,
+            if escalatedOutputLimit == nil, case .bounded(let maximumTurns) = configuration.turnBudget,
                turnsSinceLastUserPrompt >= maximumTurns {
                 let error = AgentLoopTerminationReason.turnLimitReached(limit: maximumTurns)
                 logs.error("AgentLoop", error.localizedDescription)
@@ -139,7 +152,8 @@ final class AgentLoopEngine {
             let currentTurnIndex = totalTurnsExecuted
             observer?.onTurnStarted(turnIndex: currentTurnIndex)
             totalTurnsExecuted += 1
-            turnsSinceLastUserPrompt += 1
+            // A request repeated with a raised output limit is the same turn.
+            if escalatedOutputLimit == nil { turnsSinceLastUserPrompt += 1 }
 
             if let systemPromptProvider {
                 let updatedSysPrompt = systemPromptProvider()
@@ -157,8 +171,23 @@ final class AgentLoopEngine {
             // steering is admitted and at a protocol-safe boundary.
             if let workingContextProvider {
                 let systemPrompt = conversation.first(where: { $0.role == "system" })?.content?.textValue ?? ""
-                conversation = try await workingContextProvider(systemPrompt)
+                let working = try await workingContextProvider(systemPrompt)
+                conversation = working.messages
+                outputRoom = working.outputRoom
             }
+            var requestOptions = options
+            if let escalated = escalatedOutputLimit {
+                requestOptions.maxOutputTokens = min(escalated, outputRoom ?? escalated)
+            }
+            // The same limit the request builder puts on the wire, and what a cut-off response
+            // to it is raised to: only a default request, only once.
+            let targetModel = options.model ?? provider.models.first(where: { $0.id == modelID })
+            let requestedOutputLimit = requestOptions.resolvedMaxOutputTokens(for: targetModel)
+            let raisedOutputLimit = escalatedOutputLimit == nil && options.maxOutputTokens == nil
+                ? EffectiveContextLimits.escalatedOutputLimit(modelMaxOutput: targetModel?.maxOutputTokens, outputRoom: outputRoom)
+                    .flatMap { $0 > requestedOutputLimit ? $0 : nil }
+                : nil
+            escalatedOutputLimit = nil
 
             var accumulators: [Int: ToolCallAccumulator] = [:]
             var currentContent = ""
@@ -190,7 +219,7 @@ final class AgentLoopEngine {
                 modelID: modelID,
                 messages: conversation,
                 tools: activeTools,
-                options: options,
+                options: requestOptions,
                 attachmentResolver: attachmentResolver,
                 artifactResolver: artifactResolver,
                 cancellationHandle: streamCancellation,
@@ -252,6 +281,12 @@ final class AgentLoopEngine {
             } catch let ProviderClientError.responsesIncomplete(reason) {
                 try Task.checkCancellation()
                 currentFinishReason = reason
+                if ProviderToolCall.finishReasonMeansOutputLimit(reason), let raised = raisedOutputLimit {
+                    observer?.onOutputLimitRaised(from: requestedOutputLimit, to: raised)
+                    observer?.onAssistantTurnDiscarded()
+                    escalatedOutputLimit = raised
+                    continue
+                }
                 if let usage = diagBox.diagnostics?.usage, usage.hasAuthoritativeInputTokens {
                     observer?.onUsageTelemetryReceived(usage: usage, providerID: provider.id, modelID: modelID)
                 }
@@ -278,13 +313,24 @@ final class AgentLoopEngine {
                 )
             }
 
-            let isOutputTruncated = currentFinishReason == "length" || currentFinishReason == "max_tokens" || currentFinishReason == "max_output_tokens"
+            // A response that used the whole output limit was cut off, whatever finish reason
+            // the gateway reports.
+            let reachedOutputLimit: Int? = (diagBox.diagnostics?.usage?.outputTokens).flatMap {
+                $0 >= requestedOutputLimit ? requestedOutputLimit : nil
+            }
+            let isOutputTruncated = ProviderToolCall.finishReasonMeansOutputLimit(currentFinishReason) || reachedOutputLimit != nil
+            if isOutputTruncated, let raised = raisedOutputLimit {
+                observer?.onOutputLimitRaised(from: requestedOutputLimit, to: raised)
+                observer?.onAssistantTurnDiscarded()
+                escalatedOutputLimit = raised
+                continue
+            }
             var orderedToolCalls = try accumulators.keys.sorted().map { index -> (Int, ProviderToolCall) in
                 guard let accumulator = accumulators[index],
                       !accumulator.id.isEmpty,
                       !accumulator.name.isEmpty else {
                     if isOutputTruncated {
-                        throw ProviderClientError.incompleteToolCall("Provider stream was truncated due to output token limit (finish_reason: \(currentFinishReason ?? "length")) before tool call header could be completed.")
+                        throw ProviderClientError.incompleteToolCall("Provider stream was truncated at the output token limit\(reachedOutputLimit.map { " of \($0) tokens" } ?? "") (finish_reason: \(currentFinishReason ?? "none")) before the tool call header was complete.")
                     }
                     throw ProviderClientError.incompleteToolCall("Provider returned an incomplete tool call.")
                 }
@@ -293,7 +339,8 @@ final class AgentLoopEngine {
                     ProviderToolCall(
                         id: accumulator.id,
                         function: .init(name: accumulator.name, arguments: accumulator.arguments),
-                        finishReason: currentFinishReason
+                        finishReason: currentFinishReason,
+                        reachedOutputTokenLimit: reachedOutputLimit
                     )
                 )
             }
@@ -303,7 +350,7 @@ final class AgentLoopEngine {
                 && advertised.contains(item.1.function.name.lowercased()) {
                 orderedToolCalls[position].1 = ProviderToolCall(id: item.1.id,
                     function: .init(name: item.1.function.name.lowercased(), arguments: item.1.function.arguments),
-                    finishReason: item.1.finishReason)
+                    finishReason: item.1.finishReason, reachedOutputTokenLimit: item.1.reachedOutputTokenLimit)
             }
             let toolCalls = orderedToolCalls.map(\.1)
 

@@ -125,7 +125,13 @@ final class BrowserSessionStore {
 
     var maxLiveTabs: Int = 6
     private(set) var tabs: [UUID: BrowserTab] = [:]
-    var displayedConversationID: UUID?
+    /// Conversations some window shows: their agent tabs are never evicted.
+    var displayedConversationIDs: Set<UUID> = []
+    /// The one displayed conversation, for callers that know a single window.
+    var displayedConversationID: UUID? {
+        get { displayedConversationIDs.first }
+        set { displayedConversationIDs = newValue.map { [$0] } ?? [] }
+    }
     var hasActiveRun: (@MainActor (UUID) -> Bool)?
 
 
@@ -181,7 +187,7 @@ final class BrowserSessionStore {
             let candidateTabs = tabs.values.filter { tab in
                 let hasRun = self.hasActiveRun?(tab.conversationID) == true
                 let isUserControl = tab.owner == .user
-                let isDisplayed = tab.conversationID == self.displayedConversationID
+                let isDisplayed = self.displayedConversationIDs.contains(tab.conversationID)
                 return !hasRun && !isUserControl && !isDisplayed
             }
 
@@ -229,7 +235,7 @@ final class BrowserSessionStore {
             let canEvict = tabs.values.contains { tab in
                 let hasRun = self.hasActiveRun?(tab.conversationID) == true
                 let isUserControl = tab.owner == .user
-                let isDisplayed = tab.conversationID == self.displayedConversationID
+                let isDisplayed = self.displayedConversationIDs.contains(tab.conversationID)
                 return !hasRun && !isUserControl && !isDisplayed
             }
             if !canEvict {

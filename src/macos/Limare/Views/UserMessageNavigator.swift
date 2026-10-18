@@ -57,8 +57,8 @@ struct UserMessageNavigator: View {
                 .transition(.opacity)
             }
         }
-        .animation(.spring(response: 0.22, dampingFraction: 0.85), value: pointerY)
-        .animation(.easeInOut(duration: 0.15), value: hoveredIndex)
+        .animation(AppMotion.resolved(AppMotion.pointer), value: pointerY)
+        .animation(AppMotion.resolved(AppMotion.standard), value: hoveredIndex)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Your messages")
         .accessibilityValue(accessibilityValue)

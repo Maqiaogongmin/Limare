@@ -3,9 +3,10 @@ import AppKit
 
 struct RecoveryBannerView: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
 
     private var activeConversationID: UUID? {
-        appState.conversations.activeConversationID
+        window.conversationID
     }
 
     var body: some View {
@@ -69,7 +70,7 @@ struct RecoveryBannerView: View {
                         }
                         .controlSize(.small)
                     } else if blocked.isModelUnavailable {
-                        if let currentModelSource = appState.conversations.activeConversation?.effectiveModelSource,
+                        if let currentModelSource = window.conversation?.effectiveModelSource,
                            appState.conversationRuns.isModelSourceAvailable(currentModelSource) {
                             Button("Use Current Model") {
                                 appState.conversationRuns.startRecoveryRun(

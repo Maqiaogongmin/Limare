@@ -3,6 +3,7 @@ import SwiftUI
 /// The subagent tasks of a conversation (or, inside a child conversation, its own task).
 struct NativeDelegationTaskView: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     @State private var collapsedConversations: Set<UUID> = []
     @State private var expandedFinished: Set<UUID> = []
     @State private var continuing: SubagentTask?
@@ -30,7 +31,10 @@ struct NativeDelegationTaskView: View {
                     .accessibilityIdentifier("native.delegation.toggle")
                     Spacer()
                     if let task = childTask {
-                        Button("返回父会话") { appState.conversations.selectConversation(id: task.parentConversationID) }
+                        Button("返回父会话") {
+                            appState.focus(window)
+                            appState.conversations.selectConversation(id: task.parentConversationID)
+                        }
                     }
                 }
                 if !collapsedConversations.contains(conversationID) {
@@ -88,7 +92,10 @@ struct NativeDelegationTaskView: View {
             }
             Spacer()
             if !isChild {
-                Button("查看") { appState.conversations.selectConversation(id: task.childConversationID) }
+                Button("查看") {
+                    appState.focus(window)
+                    appState.conversations.selectConversation(id: task.childConversationID)
+                }
             }
             if task.status.isFinished {
                 Button("继续") { instruction = ""; continuing = task }

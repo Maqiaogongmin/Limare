@@ -3,6 +3,7 @@ import AppKit
 
 struct SkillsSettingsView: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     @State private var state = SkillsSettingsState()
 
     private var filteredSkills: [Skill] {
@@ -15,7 +16,7 @@ struct SkillsSettingsView: View {
     }
 
     private var activeEffectiveWorkspaceURL: URL? {
-        guard let activeID = appState.conversations.activeConversationID else { return nil }
+        guard let activeID = window.conversationID else { return nil }
         return appState.conversations.effectiveWorkingDirectory(for: activeID)
     }
 
@@ -256,7 +257,7 @@ private struct SkillDetailSheet: View {
 
                                 if isDescriptionLong {
                                     Button(state.isDescriptionExpanded ? "Show less" : "Show more") {
-                                        withAnimation(.easeInOut(duration: 0.15)) {
+                                        withAnimation(AppMotion.resolved(AppMotion.standard)) {
                                             state.isDescriptionExpanded.toggle()
                                         }
                                     }

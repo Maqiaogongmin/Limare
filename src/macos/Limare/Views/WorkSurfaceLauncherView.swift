@@ -4,6 +4,7 @@ import SwiftUI
 /// Only lists registered, fully available surface definitions (currently Browser).
 public struct WorkSurfaceLauncherView: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
 
     public init() {}
 
@@ -14,7 +15,7 @@ public struct WorkSurfaceLauncherView: View {
             VStack(spacing: AppSpacing.small) {
                 ForEach(WorkSurfaceRegistry.builtInDefinitions) { def in
                     Button {
-                        appState.addSurface(def.kind)
+                        window.addSurface(def.kind)
                     } label: {
                         HStack(spacing: AppSpacing.medium) {
                             Image(systemName: def.systemImage)

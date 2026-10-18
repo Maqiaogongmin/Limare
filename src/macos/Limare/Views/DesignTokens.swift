@@ -26,6 +26,8 @@ enum AppRadius {
 }
 
 enum AppControlHeight {
+    /// The hit size of a toolbar icon button.
+    static let iconSmall: CGFloat = 20
     static let mini: CGFloat = 18
     static let small: CGFloat = 22
     static let regular: CGFloat = 26
@@ -49,9 +51,17 @@ enum AppLayout {
     static let approvalIdealWidth: CGFloat = 600
     static let messageGutterMinimumWidth: CGFloat = 80
     static let toolOutputMaximumHeight: CGFloat = 180
+    /// Long tool arguments (a large file_write, for example) scroll inside this height,
+    /// as the tool output already does.
+    static let toolInputMaximumHeight: CGFloat = 180
+    /// The `/` and `@` menus scroll past this height instead of running off the window.
+    static let composerMenuMaximumHeight: CGFloat = 240
     static let workSurfaceMinimumWidth: CGFloat = 320
     static let workSurfaceIdealWidth: CGFloat = 460
     static let workSurfaceMaximumWidth: CGFloat = 700
+    /// A pointer must move this far before the divider starts resizing: a stray click
+    /// near the panel edge must not change its width.
+    static let workSurfaceDragDeadZone: CGFloat = 4
     static let previewMinimumWidth: CGFloat = workSurfaceMinimumWidth
     static let previewIdealWidth: CGFloat = workSurfaceIdealWidth
     static let previewMaximumWidth: CGFloat = workSurfaceMaximumWidth
@@ -65,6 +75,35 @@ enum AppLayout {
     static let composerDraftExpandedMaximumHeight: CGFloat = 420
     static let userMessageCollapsedMaximumHeight: CGFloat = 130
     static let userMessageExpandedMaximumHeight: CGFloat = 360
+    /// The fade at the bottom of a collapsed user message.
+    static let userMessageCollapseFadeHeight: CGFloat = 28
+}
+
+// MARK: - Motion
+
+@MainActor
+enum AppMotion {
+    /// Small state changes: hover reveals, icon toggles. 0.12s.
+    static let quick = Animation.easeInOut(duration: 0.12)
+    /// The drag handles' hover highlight, which eases out. 0.12s.
+    static let quickOut = Animation.easeOut(duration: 0.12)
+    /// The common disclosure/expand curve. 0.15s.
+    static let standard = Animation.easeInOut(duration: 0.15)
+    /// Layout changes that move more than a few points. 0.18s.
+    static let layout = Animation.easeInOut(duration: 0.18)
+    /// Column/coverage changes. 0.25s.
+    static let panel = Animation.easeInOut(duration: 0.25)
+    /// Confirmation feedback (short) and its hold (longer).
+    static let confirm = Animation.easeOut(duration: 0.2)
+    static let confirmHold = Animation.easeOut(duration: 0.4)
+    /// The message navigator's pointer spring. Slower curves stay here, not inline.
+    static let pointer = Animation.spring(response: 0.22, dampingFraction: 0.85)
+
+    /// Reduce Motion reads the system setting at call time: animations are then skipped
+    /// entirely (`nil`), which is what the setting asks for.
+    static func resolved(_ animation: Animation) -> Animation? {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : animation
+    }
 }
 
 // MARK: - Semantic Design Tokens

@@ -16,6 +16,7 @@ struct MessageListView: View {
     /// Changing it rebuilds the scroll view, as switching conversations does.
     @State private var layoutGeneration = 0
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
 
     var body: some View {
         // Derived once per transcript change; rows receive plain values and skip re-rendering
@@ -177,7 +178,7 @@ struct MessageListView: View {
     private func jumpToUserMessage(_ id: UUID, proxy: ScrollViewProxy) {
         coordinator.userScrolledAway()
         viewport.activeUserMessageID = id
-        withAnimation(.easeInOut(duration: 0.25)) {
+        withAnimation(AppMotion.resolved(AppMotion.panel)) {
             proxy.scrollTo(id, anchor: .top)
         }
     }
@@ -277,7 +278,7 @@ private struct TranscriptEntryView: View, Equatable {
             if let history = entry.history {
                 DisclosureGroup("执行过程 · \(history.count) 条记录") {
                     if let reasoning = message.reasoningContent, !reasoning.isEmpty {
-                        ReasoningDisclosureView(reasoning: reasoning, state: message.state)
+                        ReasoningDisclosureView(reasoning: reasoning, state: message.state, hasVisibleOutput: ReasoningDisclosureView.hasVisibleOutput(content: message.content, toolCalls: message.toolCalls))
                     }
                     ForEach(history) { item in
                         MessageRow(row: item)
@@ -383,7 +384,7 @@ private struct MessageRow: View, Equatable {
             }
 
             if !hidesReasoning, message.role == .assistant, let reasoning = message.reasoningContent, !reasoning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                ReasoningDisclosureView(reasoning: reasoning, state: message.state)
+                ReasoningDisclosureView(reasoning: reasoning, state: message.state, hasVisibleOutput: ReasoningDisclosureView.hasVisibleOutput(content: message.content, toolCalls: message.toolCalls))
                     .padding(.bottom, presentation.showsPrimaryProse ? AppSpacing.xxSmall : 0)
             }
 
@@ -524,17 +525,28 @@ private struct MessageRow: View, Equatable {
     }
 }
 
+/// A user message collapses when its rendered height passes the collapsed maximum; the 1pt
+/// tolerance keeps a message that just fits from flipping on rounding.
+enum UserMessageCollapse {
+    static func isCollapsible(measuredHeight: CGFloat, collapsedMaximum: CGFloat) -> Bool {
+        measuredHeight > collapsedMaximum + 1
+    }
+}
+
 private struct UserMessageTextView: View {
     let content: String
     var onCollapse: (@MainActor () -> Void)? = nil
     @State private var isExpanded = false
+    /// The rendered message's natural height, measured before the collapsed clamp.
+    @State private var measuredHeight: CGFloat = 0
 
     private var isCollapsible: Bool {
-        content.count > 350 || content.filter { $0 == "\n" }.count >= 6
+        UserMessageCollapse.isCollapsible(measuredHeight: measuredHeight, collapsedMaximum: collapsedMaxHeight)
     }
 
     private let collapsedMaxHeight: CGFloat = AppLayout.userMessageCollapsedMaximumHeight
     private let expandedMaxHeight: CGFloat = AppLayout.userMessageExpandedMaximumHeight
+    private let fadeHeight: CGFloat = AppLayout.userMessageCollapseFadeHeight
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.xxSmall) {
@@ -547,11 +559,31 @@ private struct UserMessageTextView: View {
                 .frame(maxHeight: expandedMaxHeight)
             } else {
                 // Rendered like the assistant's replies, so a table or list the user sent reads
-                // as one. A collapsed message is cut at the collapsed height.
+                // as one. Whether it collapses depends on its rendered height, not its length:
+                // the natural height is measured before the clamp, and a collapsed message
+                // fades out at the collapsed height.
                 LimareMarkdownView(source: content, profile: .typed)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                        if abs(height - measuredHeight) > 1 { measuredHeight = height }
+                    }
                     .frame(maxHeight: isCollapsible ? collapsedMaxHeight : nil, alignment: .top)
-                    .clipped()
+                    .mask {
+                        if isCollapsible {
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .black, location: 0),
+                                    .init(color: .black, location: max(0, 1 - fadeHeight / collapsedMaxHeight)),
+                                    .init(color: .clear, location: 1),
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        } else {
+                            Rectangle()
+                        }
+                    }
             }
 
             if isCollapsible {
@@ -596,6 +628,13 @@ private struct UserMessageActionBar: View {
     /// Present only on the retractable last user message.
     var onRetract: (@MainActor () -> Void)? = nil
 
+    private enum Action: Hashable { case retract, copy }
+    /// The bar's buttons are focus stops only where the system makes buttons focusable (Full
+    /// Keyboard Access); a focused button shows the bar instead of leaving an invisible stop.
+    @FocusState private var focusedAction: Action?
+
+    private var isShown: Bool { isVisible || focusedAction != nil }
+
     var body: some View {
         HStack(spacing: AppSpacing.small) {
             if let onRetract {
@@ -606,19 +645,21 @@ private struct UserMessageActionBar: View {
                         .frame(width: 14, height: 14)
                 }
                 .buttonStyle(.plain)
+                .focused($focusedAction, equals: .retract)
                 .help("撤销这条消息")
                 .accessibilityLabel("撤销这条消息")
                 .accessibilityIdentifier("transcript.retractLastMessage")
             }
             if MessageCopyPayloadResolver.canCopy(message: message) {
                 CopyMessageButton(message: message)
+                    .focused($focusedAction, equals: .copy)
             }
         }
         .frame(height: 14)
         .padding(.trailing, AppSpacing.xSmall)
-        .opacity(isVisible ? 1 : 0)
-        .animation(.easeInOut(duration: 0.15), value: isVisible)
-        .allowsHitTesting(isVisible)
+        .opacity(isShown ? 1 : 0)
+        .animation(AppMotion.resolved(AppMotion.standard), value: isShown)
+        .allowsHitTesting(isShown)
     }
 }
 
@@ -673,9 +714,10 @@ private struct TurnCopyButton: View {
 /// status lines do. A slow provider then reads as slow rather than stuck.
 private struct ProviderWaitLabel: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
 
     var body: some View {
-        if let conversationID = appState.conversations.activeConversationID,
+        if let conversationID = window.conversationID,
            let wait = appState.conversationRuns.providerWaits[conversationID] {
             TimelineView(.periodic(from: wait.since, by: 1)) { context in
                 Text(Self.text(for: wait, now: context.date))
@@ -707,10 +749,11 @@ private struct ProviderWaitLabel: View {
 /// no longer be resolved (expired or removed) is left out.
 private struct DeliveredFilesView: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     let artifactIDs: [UUID]
 
     var body: some View {
-        if let store = appState.artifacts, let conversationID = appState.conversations.activeConversationID {
+        if let store = appState.artifacts, let conversationID = window.conversationID {
             let descriptors = artifactIDs.compactMap {
                 try? store.resolveDescriptor(artifactID: $0, conversationID: conversationID)
             }
@@ -727,6 +770,7 @@ private struct DeliveredFilesView: View {
 private struct MessageAttachmentThumbnailView: View {
     let attachment: ChatAttachment
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
 
     var body: some View {
         let url = try? appState.attachments.fileURL(for: attachment)
@@ -738,7 +782,7 @@ private struct MessageAttachmentThumbnailView: View {
             let thumbHeight = max(imgH * scale, 48)
 
             Button {
-                appState.previewAttachment(attachment)
+                window.previewAttachment(attachment)
             } label: {
                 // At most the thumbnail size, narrower when the chat column is: a fixed width
                 // made the row wider than a narrow column, and the transcript widened with it.

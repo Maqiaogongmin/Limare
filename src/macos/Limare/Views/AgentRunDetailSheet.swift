@@ -69,7 +69,7 @@ struct AgentRunDetailSheet: View {
                             }
                         }
                         .padding()
-                        .background(Color.secondary.opacity(0.06))
+                        .background(AppColors.surfaceElevated)
                         .clipShape(RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous))
 
                         // Current Activity if running

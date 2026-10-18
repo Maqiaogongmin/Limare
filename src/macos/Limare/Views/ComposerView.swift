@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct ComposerView: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     @AppStorage(StreamingSendPreference.storageKey) private var streamingSendPreference: StreamingSendPreference = .queue
     @State private var isFileTargeted = false
     @State private var isComposerExpanded = false
@@ -13,6 +14,12 @@ struct ComposerView: View {
     @State private var commandSelection = 0
     /// The draft the user closed the command menu on (Escape); it opens again once the draft changes.
     @State private var commandMenuDismissedDraft: String?
+    /// Bumped to make the editor first responder (Focus Composer).
+    @State private var focusToken = 0
+    /// The highlighted row of the @ mention menu.
+    @State private var mentionSelection = 0
+    /// The draft the user closed the mention menu on (Escape); kept apart from the command menu's.
+    @State private var mentionMenuDismissedDraft: String?
 
     private var currentMaxDraftHeight: CGFloat {
         isComposerExpanded
@@ -28,35 +35,76 @@ struct ComposerView: View {
         guard canSend else { return }
         // Queue or steer is decided now, by what the user saw when pressing send.
         // When the run is paused or pausing, normal send is treated as a direct steer that auto-resumes the run.
-        let isPausedOrPausing = appState.chat.isPaused || appState.chat.isPausing
-        let queueing = (!isPausedOrPausing && appState.chat.isStreaming) && streamingSendPreference == .queue
-        Task { await appState.chat.sendAttachingMentionedImages(queueing: queueing) }
+        let isPausedOrPausing = window.chat.isPaused || window.chat.isPausing
+        let queueing = (!isPausedOrPausing && window.chat.isStreaming) && streamingSendPreference == .queue
+        Task { await window.chat.sendAttachingMentionedImages(queueing: queueing) }
     }
 
     /// The commands the draft is typing, while the editor has focus. Commands take no
     /// attachments, so the menu stays closed while files are attached.
     private var commandMatches: [ComposerCommand] {
-        let draft = appState.chat.draft
-        guard isEditorFocused, draft != commandMenuDismissedDraft, appState.chat.pendingAttachments.isEmpty else { return [] }
+        let draft = window.chat.draft
+        guard isEditorFocused, draft != commandMenuDismissedDraft, window.chat.pendingAttachments.isEmpty else { return [] }
         return ComposerCommand.matches(forDraft: draft)
     }
 
+    /// The `@` token at the end of the draft, while the editor has focus.
+    private var mentionQuery: ComposerMentionQuery? {
+        let draft = window.chat.draft
+        guard isEditorFocused, draft != mentionMenuDismissedDraft else { return nil }
+        return ComposerMentionParser.query(in: draft)
+    }
+
+    /// The folder the conversation's tools work in, as the tool cards resolve it.
+    private var mentionWorkspaceURL: URL? {
+        window.conversationID.map {
+            appState.conversations.effectiveWorkingDirectory(for: $0)
+        } ?? appState.workspace.url
+    }
+
+    private func mentionMatches(for query: ComposerMentionQuery) -> [ComposerMentionCandidate] {
+        guard let workspaceURL = mentionWorkspaceURL else { return [] }
+        return ComposerMentionProvider.candidates(
+            workspaceURL: workspaceURL,
+            directoryPart: query.directoryPart,
+            namePrefix: query.namePrefix
+        )
+    }
+
+    private func runMention(_ candidate: ComposerMentionCandidate) {
+        guard let query = mentionQuery else { return }
+        window.chat.draft = ComposerMentionParser.insertion(of: candidate, into: window.chat.draft, query: query)
+    }
+
     private func handleMenuKey(_ key: ComposerMenuKey) -> Bool {
+        if let query = mentionQuery {
+            let mentions = mentionMatches(for: query)
+            if !mentions.isEmpty {
+                let index = min(mentionSelection, mentions.count - 1)
+                switch key {
+                case .up: mentionSelection = (index - 1 + mentions.count) % mentions.count
+                case .down: mentionSelection = (index + 1) % mentions.count
+                case .accept, .complete: runMention(mentions[index])
+                case .dismiss: mentionMenuDismissedDraft = window.chat.draft
+                }
+                return true
+            }
+        }
         let matches = commandMatches
         guard !matches.isEmpty else { return false }
         let index = min(commandSelection, matches.count - 1)
         switch key {
         case .up: commandSelection = (index - 1 + matches.count) % matches.count
         case .down: commandSelection = (index + 1) % matches.count
-        case .complete: appState.chat.draft = matches[index].invocation
+        case .complete: window.chat.draft = matches[index].invocation
         case .accept: run(matches[index])
-        case .dismiss: commandMenuDismissedDraft = appState.chat.draft
+        case .dismiss: commandMenuDismissedDraft = window.chat.draft
         }
         return true
     }
 
     private func run(_ command: ComposerCommand) {
-        appState.chat.draft = command.invocation
+        window.chat.draft = command.invocation
         handleSend()
     }
 
@@ -65,7 +113,7 @@ struct ComposerView: View {
             ComposerQueueStatusBanner()
 
             VStack(alignment: .leading, spacing: AppSpacing.xSmall) {
-                if !appState.chat.pendingAttachments.isEmpty {
+                if !window.chat.pendingAttachments.isEmpty {
                     ComposerPendingAttachmentsView()
                 }
 
@@ -82,7 +130,8 @@ struct ComposerView: View {
                         onFilesDropped: { urls in
                             importFiles(urls.map { HostFileSelection.droppedByUser(url: $0) })
                         },
-                        onMenuKey: handleMenuKey
+                        onMenuKey: handleMenuKey,
+                        focusToken: focusToken
                     )
                     .frame(height: visibleDraftHeight)
                     .padding(.horizontal, AppSpacing.xxSmall)
@@ -90,7 +139,7 @@ struct ComposerView: View {
 
                     if measuredContentHeight > AppLayout.composerDraftMinimumHeight * 1.5 || isComposerExpanded {
                         Button {
-                            withAnimation(.easeInOut(duration: 0.18)) {
+                            withAnimation(AppMotion.resolved(AppMotion.layout)) {
                                 isComposerExpanded.toggle()
                             }
                         } label: {
@@ -118,16 +167,16 @@ struct ComposerView: View {
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                             .frame(width: AppControlHeight.composerButton, height: AppControlHeight.composerButton)
-                            .background(Color.secondary.opacity(0.08))
+                            .background(AppColors.surfaceInteractive)
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
                     .help("Attach files")
-                    .disabled(appState.voiceInput.state.isActive)
+                    .disabled(isDictatingHere)
 
                     ComposerDraftHistoryButton()
 
-                    if appState.voiceInput.state.isRecording {
+                    if isDictatingHere && appState.voiceInput.state.isRecording {
                         HStack(spacing: 6) {
                             Circle()
                                 .fill(Color.red)
@@ -143,7 +192,7 @@ struct ComposerView: View {
                                 Image(systemName: "xmark")
                                     .font(.system(size: 10, weight: .semibold))
                                     .foregroundStyle(.secondary)
-                                    .frame(width: 20, height: 20)
+                                    .frame(width: AppControlHeight.iconSmall, height: AppControlHeight.iconSmall)
                                     .background(Color.secondary.opacity(0.12))
                                     .clipShape(Circle())
                             }
@@ -156,7 +205,7 @@ struct ComposerView: View {
                                 Image(systemName: "checkmark")
                                     .font(.system(size: 10, weight: .bold))
                                     .foregroundStyle(.white)
-                                    .frame(width: 20, height: 20)
+                                    .frame(width: AppControlHeight.iconSmall, height: AppControlHeight.iconSmall)
                                     .background(Color.accentColor)
                                     .clipShape(Circle())
                             }
@@ -167,7 +216,7 @@ struct ComposerView: View {
                         .padding(.vertical, 4)
                         .background(Color.red.opacity(0.08))
                         .clipShape(Capsule())
-                    } else if appState.voiceInput.state.isTranscribing {
+                    } else if isDictatingHere && appState.voiceInput.state.isTranscribing {
                         HStack(spacing: 6) {
                             ProgressView()
                                 .controlSize(.small)
@@ -177,24 +226,25 @@ struct ComposerView: View {
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(Color.secondary.opacity(0.08))
+                        .background(AppColors.surfaceInteractive)
                         .clipShape(Capsule())
                     } else {
                         Button {
+                            appState.voiceInput.setChatStore(window.chat)
                             appState.voiceInput.start()
                         } label: {
                             Image(systemName: "mic")
                                 .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
                             .frame(width: AppControlHeight.composerButton, height: AppControlHeight.composerButton)
-                            .background(Color.secondary.opacity(0.08))
+                            .background(AppColors.surfaceInteractive)
                             .clipShape(Circle())
                         }
                         .buttonStyle(.plain)
                         .help("Voice input (dictation)")
                     }
 
-                    if let errorMsg = appState.voiceInput.errorMessage, !appState.voiceInput.state.isActive {
+                    if appState.voiceInput.isTarget(window.chat), let errorMsg = appState.voiceInput.errorMessage, !appState.voiceInput.state.isActive {
                         HStack(spacing: 6) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.system(size: 10))
@@ -234,6 +284,8 @@ struct ComposerView: View {
 
                     ComposerThinkingControl()
 
+                    ContextUsageIndicator(conversationID: window.conversationID)
+
                     ComposerModelSelector()
 
                     ComposerRunControls(canSend: canSend, onSend: handleSend)
@@ -242,7 +294,7 @@ struct ComposerView: View {
                 .padding(.bottom, AppSpacing.xxxSmall)
             }
             .padding(AppSpacing.small)
-            .background(Color.secondary.opacity(0.06))
+            .background(AppColors.surfaceElevated)
             .clipShape(RoundedRectangle(cornerRadius: AppRadius.composer, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: AppRadius.composer, style: .continuous)
@@ -255,18 +307,30 @@ struct ComposerView: View {
                 isFileTargeted = targeted
             }
             // Opens upward from the composer, over the transcript, as in Claude Code and Codex.
+            // The guide sits on a container: SwiftUI ignores an alignment guide set inside an
+            // `if` branch of the overlay, which put the menu over the composer.
             .overlay(alignment: .topLeading) {
-                let matches = commandMatches
-                if !matches.isEmpty {
-                    ComposerCommandMenu(
-                        commands: matches,
-                        query: String(appState.chat.draft.dropFirst()),
-                        selection: min(commandSelection, matches.count - 1),
-                        onHover: { commandSelection = $0 },
-                        onChoose: run
-                    )
-                    .alignmentGuide(.top) { $0[.bottom] + AppSpacing.xSmall }
+                let mentions = mentionQuery.map(mentionMatches(for:)) ?? []
+                let matches = mentions.isEmpty ? commandMatches : []
+                VStack(spacing: 0) {
+                    if !mentions.isEmpty {
+                        ComposerMentionMenu(
+                            candidates: mentions,
+                            selection: min(mentionSelection, mentions.count - 1),
+                            onHover: { mentionSelection = $0 },
+                            onChoose: runMention
+                        )
+                    } else if !matches.isEmpty {
+                        ComposerCommandMenu(
+                            commands: matches,
+                            query: String(window.chat.draft.dropFirst()),
+                            selection: min(commandSelection, matches.count - 1),
+                            onHover: { commandSelection = $0 },
+                            onChoose: run
+                        )
+                    }
                 }
+                .alignmentGuide(.top) { $0[.bottom] + AppSpacing.xSmall }
             }
 
             Text("Limare can make mistakes. Review tool calls before relying on changes.")
@@ -279,16 +343,56 @@ struct ComposerView: View {
         .padding(.top, AppSpacing.small)
         .padding(.bottom, AppSpacing.small)
         .background(Color.clear)
-        .onChange(of: appState.chat.draft) { _, newDraft in
+        .onAppear { serveFocusRequest() }
+        .onChange(of: window.composerFocusRequest) { _, _ in
+            serveFocusRequest()
+        }
+        // An idle conversation shows what its next request would use; a run writes its own.
+        .task(id: contextPreviewTrigger) {
+            guard let trigger = contextPreviewTrigger, !trigger.isBusy else { return }
+            appState.conversationRuns.refreshContextUsagePreview(conversationID: trigger.conversationID, modelSource: trigger.modelSource)
+        }
+        .onChange(of: window.chat.draft) { _, newDraft in
             commandSelection = 0
+            mentionSelection = 0
             if newDraft != commandMenuDismissedDraft { commandMenuDismissedDraft = nil }
+            if newDraft != mentionMenuDismissedDraft { mentionMenuDismissedDraft = nil }
             if newDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                withAnimation(.easeInOut(duration: 0.18)) {
+                withAnimation(AppMotion.resolved(AppMotion.layout)) {
                     isComposerExpanded = false
                 }
                 measuredContentHeight = AppLayout.composerDraftMinimumHeight
             }
         }
+    }
+
+    private struct ContextPreviewTrigger: Equatable {
+        let conversationID: UUID
+        let modelSource: ConversationModelSource
+        let messageCount: Int
+        let isBusy: Bool
+    }
+
+    private func serveFocusRequest() {
+        guard window.composerFocusServed != window.composerFocusRequest else { return }
+        window.composerFocusServed = window.composerFocusRequest
+        focusToken += 1
+    }
+
+    private var contextPreviewTrigger: ContextPreviewTrigger? {
+        guard let conversationID = window.conversationID,
+              let modelSource = ModelChoiceCatalog.currentModelSource(conversation: window.conversation,
+                                                                      modelGroups: appState.modelGroups, providers: appState.providers)
+        else { return nil }
+        let runs = appState.conversationRuns
+        let isBusy = !runs.canStartRun(conversationID: conversationID) || runs.compactions[conversationID]?.isRunning == true
+        // Not read during a run, so streamed tokens do not re-evaluate the composer.
+        return ContextPreviewTrigger(
+            conversationID: conversationID,
+            modelSource: modelSource,
+            messageCount: isBusy ? -1 : runs.conversationMessages(for: conversationID).count,
+            isBusy: isBusy
+        )
     }
 
     @MainActor
@@ -310,14 +414,14 @@ struct ComposerView: View {
             // Preserve the user's picker order and retain already committed
             // files if a later selection fails.
             for selection in selections {
-                do { try await appState.chat.addAttachment(from: selection) }
-                catch { appState.chat.errorMessage = error.localizedDescription }
+                do { try await window.chat.addAttachment(from: selection) }
+                catch { window.chat.errorMessage = error.localizedDescription }
             }
         }
     }
 
     private var hasValidModelSource: Bool {
-        if let source = appState.conversations.activeConversation?.effectiveModelSource {
+        if let source = window.conversation?.effectiveModelSource {
             switch source {
             case .group(let groupID):
                 return hasAvailableChatModel(in: groupID)
@@ -351,7 +455,13 @@ struct ComposerView: View {
     }
 
     private var canSend: Bool {
-        appState.chat.canSend && hasValidModelSource && !appState.voiceInput.state.isActive
+        window.chat.canSend && hasValidModelSource && !isDictatingHere
+    }
+
+    /// Dictation is going into this window's composer. The microphone is one, so dictation
+    /// started in another window shows there only.
+    private var isDictatingHere: Bool {
+        appState.voiceInput.isTarget(window.chat) && appState.voiceInput.state.isActive
     }
 
     private func formatRecordingDuration(_ seconds: Int) -> String {
@@ -362,8 +472,8 @@ struct ComposerView: View {
 
     private var draftBinding: Binding<String> {
         Binding(
-            get: { appState.chat.draft },
-            set: { appState.chat.draft = $0 }
+            get: { window.chat.draft },
+            set: { window.chat.draft = $0 }
         )
     }
 }
@@ -378,7 +488,7 @@ private struct ComposerCommandMenu: View {
     let onChoose: (ComposerCommand) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        ComposerMenuScroller(selection: selection) {
             ForEach(Array(commands.enumerated()), id: \.element.id) { index, command in
                 HStack(spacing: AppSpacing.medium) {
                     highlightedName(command.invocation)
@@ -404,6 +514,7 @@ private struct ComposerCommandMenu: View {
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAddTraits(index == selection ? .isSelected : [])
                 .accessibilityAction { onChoose(command) }
+                .id(index)
             }
         }
         .padding(AppSpacing.xxSmall)
@@ -430,10 +541,11 @@ private struct ComposerCommandMenu: View {
 /// or left behind — to bring one back into the composer. Hidden while the archive is empty.
 private struct ComposerDraftHistoryButton: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     @State private var isPresented = false
 
     var body: some View {
-        let drafts = appState.chat.archivedDrafts
+        let drafts = window.chat.archivedDrafts
         if !drafts.isEmpty {
             Button {
                 isPresented.toggle()
@@ -442,7 +554,7 @@ private struct ComposerDraftHistoryButton: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .frame(width: AppControlHeight.composerButton, height: AppControlHeight.composerButton)
-                    .background(Color.secondary.opacity(0.08))
+                    .background(AppColors.surfaceInteractive)
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
@@ -453,12 +565,12 @@ private struct ComposerDraftHistoryButton: View {
                 ComposerDraftHistoryList(
                     drafts: drafts,
                     onRestore: { id in
-                        if appState.chat.restoreArchivedDraft(id) {
+                        if window.chat.restoreArchivedDraft(id) {
                             isPresented = false
                         }
                     },
                     onDelete: { id in
-                        appState.chat.deleteArchivedDraft(id)
+                        window.chat.deleteArchivedDraft(id)
                     }
                 )
             }
@@ -529,9 +641,10 @@ private struct ComposerDraftHistoryList: View {
 
 private struct ComposerQueueStatusBanner: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
 
     private var activeConversationID: UUID? {
-        appState.conversations.activeConversationID
+        window.conversationID
     }
 
     private var queuedCount: Int {
@@ -574,7 +687,7 @@ private struct ComposerQueueStatusBanner: View {
                     .font(.caption)
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
-                } else if !appState.chat.isStreaming {
+                } else if !window.chat.isStreaming {
                     Button("Run Queue") {
                         appState.conversationRuns.resumeQueue(conversationID: convID)
                     }
@@ -592,7 +705,7 @@ private struct ComposerQueueStatusBanner: View {
             }
             .padding(.horizontal, AppSpacing.small)
             .padding(.vertical, 6)
-            .background(isHeld ? Color.orange.opacity(0.1) : Color.secondary.opacity(0.08))
+            .background(isHeld ? Color.orange.opacity(0.1) : AppColors.surfaceInteractive)
             .clipShape(RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous))
         }
     }
@@ -600,26 +713,27 @@ private struct ComposerQueueStatusBanner: View {
 
 private struct ComposerRunControls: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     @AppStorage(StreamingSendPreference.storageKey) private var streamingSendPreference: StreamingSendPreference = .queue
     let canSend: Bool
     var onSend: (() -> Void)? = nil
 
     private var isPausing: Bool {
-        appState.chat.isPausing
+        window.chat.isPausing
     }
 
     private var isPaused: Bool {
-        appState.chat.isPaused
+        window.chat.isPaused
     }
 
     private var isStreaming: Bool {
-        appState.chat.isStreaming
+        window.chat.isStreaming
     }
 
     var body: some View {
         HStack(spacing: AppSpacing.small) {
             if isStreaming {
-                if appState.chat.isResumingFromNewMessage {
+                if window.chat.isResumingFromNewMessage {
                     HStack(spacing: 4) {
                         ProgressView()
                             .controlSize(.mini)
@@ -661,7 +775,7 @@ private struct ComposerRunControls: View {
                 // Pause / Resume control
                 if isPaused {
                     Button {
-                        appState.chat.resume()
+                        window.chat.resume()
                     } label: {
                         Image(systemName: "play.fill")
                             .font(.system(size: 9, weight: .bold))
@@ -675,7 +789,7 @@ private struct ComposerRunControls: View {
                     .accessibilityLabel("Resume run")
                 } else if isPausing {
                     Button {
-                        appState.chat.resume()
+                        window.chat.resume()
                     } label: {
                         ProgressView()
                             .controlSize(.mini)
@@ -688,7 +802,7 @@ private struct ComposerRunControls: View {
                     .accessibilityLabel("Pausing at next boundary")
                 } else {
                     Button {
-                        appState.chat.pause()
+                        window.chat.pause()
                     } label: {
                         Image(systemName: "pause.fill")
                             .font(.system(size: 9, weight: .bold))
@@ -704,7 +818,7 @@ private struct ComposerRunControls: View {
 
                 // Stop control (Red)
                 Button {
-                    appState.chat.stop()
+                    window.chat.stop()
                 } label: {
                     Image(systemName: "stop.fill")
                         .font(.system(size: 8, weight: .bold))
@@ -777,13 +891,14 @@ private struct ComposerRunControls: View {
 
 private struct ComposerPendingAttachmentsView: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: AppSpacing.small) {
-                ForEach(appState.chat.pendingAttachments) { att in
+                ForEach(window.chat.pendingAttachments) { att in
                     PendingAttachmentView(attachment: att) {
-                        appState.chat.removeAttachment(id: att.id)
+                        window.chat.removeAttachment(id: att.id)
                     }
                 }
             }
@@ -795,6 +910,7 @@ private struct ComposerPendingAttachmentsView: View {
 
 private struct PendingAttachmentView: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     let attachment: ChatAttachment
     let onRemove: () -> Void
 
@@ -845,16 +961,33 @@ private struct PendingAttachmentView: View {
 
     private var fileChip: some View {
         HStack(spacing: 8) {
-            Image(systemName: attachment.kind.systemImageName)
-                .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(attachment.filename).lineLimit(1)
-                Text(ByteCountFormatter.string(fromByteCount: Int64(attachment.byteCount), countStyle: .file))
-                    .font(.caption2).foregroundStyle(.secondary)
+            Button {
+                window.previewAttachment(attachment)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: attachment.kind.systemImageName)
+                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(attachment.filename)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Text(ByteCountFormatter.string(fromByteCount: Int64(attachment.byteCount), countStyle: .file))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .help(attachment.filename)
+            .accessibilityLabel("预览 \(attachment.filename)")
+            .accessibilityIdentifier("composer.attachmentPreview")
+
             Button(action: onRemove) {
                 Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-            }.buttonStyle(.plain)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("移除附件")
         }
         .font(.caption)
         .padding(.horizontal, 10).padding(.vertical, 7)
@@ -866,6 +999,7 @@ private struct PendingAttachmentView: View {
 
 struct ComposerModelSelector: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     @AppStorage("limare.composer.recentDirectModels") private var recentDirectModelIDs = ""
     @State private var isShowingModelBrowser = false
 
@@ -885,7 +1019,7 @@ struct ComposerModelSelector: View {
     }
 
     private var currentModelSource: ConversationModelSource? {
-        ModelChoiceCatalog.currentModelSource(conversation: appState.conversations.activeConversation,
+        ModelChoiceCatalog.currentModelSource(conversation: window.conversation,
                                               modelGroups: appState.modelGroups, providers: appState.providers)
     }
 
@@ -896,7 +1030,7 @@ struct ComposerModelSelector: View {
             menu.fixedSize(horizontal: true, vertical: false)
             menu
         }
-        .disabled(appState.chat.isStreaming)
+        .disabled(window.chat.isStreaming)
         .help(activeModelLabel)
         .accessibilityLabel(activeModelLabel)
         .sheet(isPresented: $isShowingModelBrowser) {
@@ -998,7 +1132,7 @@ struct ComposerModelSelector: View {
             Divider()
 
             Button("Configure Providers…") {
-                appState.screen = .settingsProviders
+                window.screen = .settingsProviders
             }
         } label: {
             HStack(spacing: AppSpacing.xxSmall) {
@@ -1018,7 +1152,7 @@ struct ComposerModelSelector: View {
             }
             .padding(.horizontal, AppSpacing.small)
             .padding(.vertical, AppSpacing.xxSmall)
-            .background(Color.secondary.opacity(0.08))
+            .background(AppColors.surfaceInteractive)
             .clipShape(RoundedRectangle(cornerRadius: AppRadius.row))
             .contentShape(Rectangle())
         }
@@ -1042,7 +1176,7 @@ struct ComposerModelSelector: View {
     }
 
     private func selectGroup(_ groupID: String) {
-        if let activeID = appState.conversations.activeConversationID {
+        if let activeID = window.conversationID {
             appState.conversations.setConversationModelSource(id: activeID, source: .group(groupID: groupID))
         }
     }
@@ -1059,7 +1193,7 @@ struct ComposerModelSelector: View {
     }
 
     private func selectDirectModel(providerID: UUID, modelID: String) {
-        guard let activeID = appState.conversations.activeConversationID else { return }
+        guard let activeID = window.conversationID else { return }
         appState.conversations.setConversationModelSource(id: activeID, source: .direct(providerID: providerID, modelID: modelID))
         let selectedID = ModelGroup.makeEntryId(providerID: providerID, modelID: modelID)
         let otherIDs = recentDirectModelIDs.split(separator: "\n").map(String.init).filter { $0 != selectedID }
@@ -1069,6 +1203,7 @@ struct ComposerModelSelector: View {
 
 private struct ComposerModelBrowser: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
@@ -1114,7 +1249,7 @@ private struct ComposerModelBrowser: View {
                 } actions: {
                     Button("Configure Providers…") {
                         dismiss()
-                        appState.screen = .settingsProviders
+                        window.screen = .settingsProviders
                     }
                     .buttonStyle(.borderedProminent)
                 }

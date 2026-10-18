@@ -43,7 +43,7 @@ struct ProjectSection: View {
 
                     if unpinnedProjects.count > maxInitialProjects {
                         Button {
-                            withAnimation(.easeInOut(duration: 0.15)) {
+                            withAnimation(AppMotion.resolved(AppMotion.standard)) {
                                 isShowingAllProjects.toggle()
                             }
                         } label: {
@@ -65,7 +65,7 @@ struct ProjectSection: View {
         } header: {
             HStack(spacing: AppSpacing.xxSmall) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.15)) {
+                    withAnimation(AppMotion.resolved(AppMotion.standard)) {
                         isExpanded.toggle()
                     }
                 } label: {

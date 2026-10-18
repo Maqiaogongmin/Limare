@@ -54,6 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hasHandledAppLaunch = true
         self.appState = state
         state.remoteAccess.start()
+        state.backgroundNotifier.start(appState: state)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -105,8 +106,8 @@ struct LimareApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
-            RootView()
+        WindowGroup(id: WindowSession.sceneID) {
+            WindowRootView()
                 .environment(appState)
                 .onAppear {
                     appDelegate.handleAppLaunch(with: appState)
@@ -126,10 +127,43 @@ struct LimareApp: App {
             }
             CommandGroup(replacing: .appSettings) {
                 Button("Settings…") {
-                    appState.screen = .settingsGeneral
+                    appState.focusedWindow.screen = .settingsGeneral
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
+            WindowCommands(appState: appState)
+            CommandMenu("Conversation") {
+                Button("Focus Composer") {
+                    appState.focusedWindow.screen = .chat
+                    appState.focusedWindow.composerFocusRequest += 1
+                }
+                .keyboardShortcut("l", modifiers: .command)
+                Button(appState.focusedWindow.workSurface.isPresented ? "Hide Work Surface" : "Show Work Surface") {
+                    appState.focusedWindow.workSurface.togglePresented()
+                }
+                .keyboardShortcut("b", modifiers: [.command, .shift])
+            }
+        }
+    }
+}
+
+/// File menu: ⌘N starts a conversation in the focused window; ⌥⌘N opens another window on
+/// the same conversation, as Mail's New Viewer Window does.
+private struct WindowCommands: Commands {
+    let appState: AppState
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button("New Conversation") {
+                appState.focusedWindow.screen = .chat
+                appState.conversations.newConversation()
+            }
+            .keyboardShortcut("n", modifiers: .command)
+            Button("New Window") {
+                openWindow(id: WindowSession.sceneID)
+            }
+            .keyboardShortcut("n", modifiers: [.command, .option])
         }
     }
 }

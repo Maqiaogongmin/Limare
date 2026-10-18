@@ -85,6 +85,13 @@ public final class WorkSurfaceStore {
         return (.none, min(maximum, max(panelMinimum, windowWidth - x)))
     }
 
+    /// The width the panel may take beside the chat, given the room.
+    static func clampedPanelWidth(_ width: Double, windowWidth: Double, sidebarWidth: Double) -> Double {
+        let maximum = max(Double(AppLayout.workSurfaceMinimumWidth),
+                          windowWidth - sidebarWidth - Double(AppLayout.chatMinimumWidth))
+        return min(maximum, max(Double(AppLayout.workSurfaceMinimumWidth), width))
+    }
+
     /// The expand button: covered (by the button or a drag) goes back beside the chat;
     /// beside the chat fills the window.
     public func toggleExpanded() {

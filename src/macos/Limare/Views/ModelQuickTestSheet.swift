@@ -293,7 +293,7 @@ private struct QuickTestCard: View {
             contentBody
         }
         .padding(AppSpacing.medium)
-        .background(Color.secondary.opacity(0.06))
+        .background(AppColors.surfaceElevated)
         .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
     }
 

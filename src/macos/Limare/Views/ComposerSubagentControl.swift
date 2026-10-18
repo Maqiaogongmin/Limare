@@ -5,9 +5,10 @@ import SwiftUI
 /// Turning it off never cancels Children that already exist.
 struct ComposerSubagentControl: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
 
     private var conversation: ConversationRecord? {
-        appState.conversations.activeConversation
+        window.conversation
     }
 
     var body: some View {
@@ -20,7 +21,7 @@ struct ComposerSubagentControl: View {
                     .font(.system(size: 11, weight: enabled ? .semibold : .regular))
                     .foregroundStyle(enabled ? Color.accentColor : AppColors.textMuted)
                     .frame(width: AppControlHeight.composerButton, height: AppControlHeight.composerButton)
-                    .background(enabled ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.08))
+                    .background(enabled ? Color.accentColor.opacity(0.12) : AppColors.surfaceInteractive)
                     .clipShape(Circle())
                     .contentShape(Circle())
             }

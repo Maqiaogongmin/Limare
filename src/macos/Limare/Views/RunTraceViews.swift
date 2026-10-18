@@ -22,7 +22,7 @@ struct ChatRunStatusView: View {
             }
             .padding(.horizontal, AppSpacing.chatHorizontal)
             .padding(.vertical, AppSpacing.xSmall)
-            .background(Color.secondary.opacity(0.06))
+            .background(AppColors.surfaceElevated)
             .sheet(isPresented: $showsDetails) {
                 RunTraceDetailSheet(run: run, trace: trace)
                     .environment(appState)

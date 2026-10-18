@@ -4,6 +4,21 @@ All notable behavior and architecture changes to Limare are recorded here. Entri
 
 ## Unreleased
 
+## 0.1.2 — 2026-10-18
+
+- Give each window its own conversation: ⌘N starts a new conversation, ⌥⌘N opens a new window, and a sidebar conversation can open in a new window. Computer Use stays with one conversation at a time.
+- Show a tool approval as a card above the composer of the conversation that waits on it; other conversations show a notice and a sidebar badge. Requests outside a conversation still use a sheet.
+- Optionally notify when a background run finishes, fails or needs approval; clicking the notification opens its conversation.
+- When a response is cut off at the default 32,000-token output limit, request it again once with the model's declared limit (capped at 128K and the context window's room), so long files are written in one call. Cut-off tool calls are recognised from usage as well as finish reason.
+- Keep the current run's reasoning in the working set, and name the missing or mistyped argument when tool arguments do not fit the schema.
+- Show context usage as a ring with the figures on hover, computed from the request the next send will actually make.
+- Composer: complete `@` file paths, open the `/` and `@` menus above the composer, open a pending attachment from its chip; long user messages collapse by measured height with a fade.
+- Files: highlight code with line numbers, and open an HTML file in the Work Surface browser after a one-time consent.
+- Work Surface divider: a drag dead zone, double-click reset, Escape to cancel, and keyboard and VoiceOver control.
+- Conversation shortcuts (Focus Composer ⌘L, Show/Hide Work Surface ⌘⇧B) and keyboard access to message actions.
+- Tool cards cap their input height and say when a failed call still changed files.
+- Route animations through motion tokens that honour Reduce Motion; pad inline code evenly.
+
 ## 0.1.1 — 2026-10-16
 
 - Pass connected MCP servers' initialize instructions into model requests, including deferred tools, with a per-server 4,096-character bound.

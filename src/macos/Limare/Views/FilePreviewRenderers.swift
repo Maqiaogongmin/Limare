@@ -7,6 +7,7 @@ import PDFKit
 
 public struct FilePreviewToolbar: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     @AppStorage("limare.worksurface.files.treeWidth") private var storedTreeWidth: Double = Double(AppLayout.filesTreeIdealWidth)
     let metadata: FileMetadata
     let onBack: (() -> Void)?
@@ -14,17 +15,21 @@ public struct FilePreviewToolbar: View {
     let onRefresh: () -> Void
     /// Shows the file's source instead of its rendering; nil for files with only one view.
     let showsSource: Binding<Bool>?
+    /// Opens the file in the Work Surface browser, where its scripts run; HTML only.
+    let onOpenInBrowser: (() -> Void)?
 
     public init(
         metadata: FileMetadata,
         onBack: (() -> Void)? = nil,
         onRefresh: @escaping () -> Void,
-        showsSource: Binding<Bool>? = nil
+        showsSource: Binding<Bool>? = nil,
+        onOpenInBrowser: (() -> Void)? = nil
     ) {
         self.metadata = metadata
         self.onBack = onBack
         self.onRefresh = onRefresh
         self.showsSource = showsSource
+        self.onOpenInBrowser = onOpenInBrowser
     }
 
     public var body: some View {
@@ -63,12 +68,27 @@ public struct FilePreviewToolbar: View {
                 } label: {
                     Image(systemName: "chevron.left.forwardslash.chevron.right")
                         .font(.system(size: 12, weight: .semibold))
-                        .frame(width: 20, height: 20)
+                        .frame(width: AppControlHeight.iconSmall, height: AppControlHeight.iconSmall)
                         .foregroundStyle(showsSource.wrappedValue ? Color.accentColor : AppColors.textSecondary)
                 }
                 .buttonStyle(.plain)
                 .help(showsSource.wrappedValue ? "Show Preview" : "Show Source")
                 .accessibilityLabel(showsSource.wrappedValue ? "Show Preview" : "Show Source")
+            }
+
+            if let onOpenInBrowser {
+                Button {
+                    onOpenInBrowser()
+                } label: {
+                    Image(systemName: "safari")
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(width: AppControlHeight.iconSmall, height: AppControlHeight.iconSmall)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(AppColors.textSecondary)
+                .help("在浏览器中打开（会启用脚本并读取文件所在文件夹）")
+                .accessibilityLabel("Open in Browser")
+                .accessibilityIdentifier("files.preview.openInBrowser")
             }
 
             // Refresh
@@ -77,7 +97,7 @@ public struct FilePreviewToolbar: View {
             } label: {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: 12, weight: .semibold))
-                    .frame(width: 20, height: 20)
+                    .frame(width: AppControlHeight.iconSmall, height: AppControlHeight.iconSmall)
             }
             .buttonStyle(.plain)
             .foregroundStyle(AppColors.textSecondary)
@@ -85,11 +105,11 @@ public struct FilePreviewToolbar: View {
 
             // Open in Default App
             Button {
-                appState.files.openInDefaultApp(url: metadata.url)
+                window.files.openInDefaultApp(url: metadata.url)
             } label: {
                 Image(systemName: "arrow.up.right.square")
                     .font(.system(size: 12, weight: .semibold))
-                    .frame(width: 20, height: 20)
+                    .frame(width: AppControlHeight.iconSmall, height: AppControlHeight.iconSmall)
             }
             .buttonStyle(.plain)
             .foregroundStyle(AppColors.textSecondary)
@@ -97,11 +117,11 @@ public struct FilePreviewToolbar: View {
 
             // Reveal in Finder
             Button {
-                appState.files.revealInFinder(url: metadata.url)
+                window.files.revealInFinder(url: metadata.url)
             } label: {
                 Image(systemName: "folder")
                     .font(.system(size: 12, weight: .semibold))
-                    .frame(width: 20, height: 20)
+                    .frame(width: AppControlHeight.iconSmall, height: AppControlHeight.iconSmall)
             }
             .buttonStyle(.plain)
             .foregroundStyle(AppColors.textSecondary)
@@ -109,7 +129,7 @@ public struct FilePreviewToolbar: View {
 
             // Toggle File Tree
             Button {
-                withAnimation(.easeInOut(duration: 0.18)) {
+                withAnimation(AppMotion.resolved(AppMotion.layout)) {
                     if storedTreeWidth <= 20 {
                         storedTreeWidth = Double(AppLayout.filesTreeIdealWidth)
                     } else {
@@ -119,7 +139,7 @@ public struct FilePreviewToolbar: View {
             } label: {
                 Image(systemName: "sidebar.trailing")
                     .font(.system(size: 12, weight: .semibold))
-                    .frame(width: 20, height: 20)
+                    .frame(width: AppControlHeight.iconSmall, height: AppControlHeight.iconSmall)
                     .foregroundStyle(storedTreeWidth > 20 ? Color.accentColor : AppColors.textSecondary)
             }
             .buttonStyle(.plain)
@@ -261,7 +281,7 @@ public struct CodeFilePreviewView: View {
 
             Divider()
 
-            ReadOnlyTextViewRepresentable(text: code, isMonospaced: true)
+            CodePreviewTextView(code: code, language: language)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(AppColors.surfacePrimary)
@@ -616,6 +636,7 @@ private struct RepresentableIsolatedHTMLWebView: NSViewRepresentable {
 
 public struct UnsupportedFilePreviewView: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     let metadata: FileMetadata
 
     public init(metadata: FileMetadata) {
@@ -648,12 +669,12 @@ public struct UnsupportedFilePreviewView: View {
 
             HStack(spacing: AppSpacing.small) {
                 Button("Open in Default App") {
-                    appState.files.openInDefaultApp(url: metadata.url)
+                    window.files.openInDefaultApp(url: metadata.url)
                 }
                 .buttonStyle(.borderedProminent)
 
                 Button("Reveal in Finder") {
-                    appState.files.revealInFinder(url: metadata.url)
+                    window.files.revealInFinder(url: metadata.url)
                 }
                 .buttonStyle(.bordered)
             }
@@ -669,6 +690,7 @@ public struct UnsupportedFilePreviewView: View {
 
 public struct TooLargeFilePreviewView: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     let metadata: FileMetadata
 
     public init(metadata: FileMetadata) {
@@ -701,12 +723,12 @@ public struct TooLargeFilePreviewView: View {
 
             HStack(spacing: AppSpacing.small) {
                 Button("Open in Default App") {
-                    appState.files.openInDefaultApp(url: metadata.url)
+                    window.files.openInDefaultApp(url: metadata.url)
                 }
                 .buttonStyle(.borderedProminent)
 
                 Button("Reveal in Finder") {
-                    appState.files.revealInFinder(url: metadata.url)
+                    window.files.revealInFinder(url: metadata.url)
                 }
                 .buttonStyle(.bordered)
             }

@@ -225,7 +225,7 @@ struct SidebarSearchField: View {
         .padding(.vertical, AppSpacing.xxSmall)
         .background(
             RoundedRectangle(cornerRadius: AppRadius.row)
-                .fill(Color.secondary.opacity(0.08))
+                .fill(AppColors.surfaceInteractive)
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppRadius.row)

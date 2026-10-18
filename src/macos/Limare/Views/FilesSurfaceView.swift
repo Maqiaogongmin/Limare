@@ -4,15 +4,19 @@ import SwiftUI
 /// Supports adaptive layout across the 320pt to 700pt width spectrum with user-adjustable split.
 public struct FilesSurfaceView: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     @AppStorage("limare.worksurface.files.treeWidth") private var storedTreeWidth: Double = Double(AppLayout.filesTreeIdealWidth)
 
     let previewStore: FilesSurfaceStore?
     /// Markdown and HTML show their source instead of the rendering; set from the preview toolbar.
     @State private var showsSource = false
+    /// The user has read, once, what opening an HTML file in the browser allows.
+    @AppStorage("limare.files.htmlBrowserConsent") private var htmlBrowserConsent = false
+    @State private var pendingBrowserExit: URL?
 
     init(previewStore: FilesSurfaceStore? = nil) { self.previewStore = previewStore }
 
-    private var files: FilesSurfaceStore { previewStore ?? appState.files }
+    private var files: FilesSurfaceStore { previewStore ?? window.files }
 
     public var body: some View {
         GeometryReader { geometry in
@@ -26,7 +30,7 @@ public struct FilesSurfaceView: View {
                 // Narrow width: the preview fills the tab; Back goes to the tree in a Files tab
                 // and leaves this file open in its own.
                 previewContentView(onBack: {
-                    appState.addSurface(.files)
+                    window.addSurface(.files)
                 })
             } else {
                 // Wide width (>= 420pt): Adjustable Split View [ Preview (Col 3) | Draggable Divider | Tree (Col 4) ]
@@ -57,6 +61,21 @@ public struct FilesSurfaceView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .confirmationDialog(
+            "在浏览器中打开？",
+            isPresented: Binding(get: { pendingBrowserExit != nil },
+                                 set: { if !$0 { pendingBrowserExit = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("继续") {
+                if let url = pendingBrowserExit { appState.openLocalFileInBrowserTab(url) }
+                pendingBrowserExit = nil
+                htmlBrowserConsent = true
+            }
+            Button("取消", role: .cancel) { pendingBrowserExit = nil }
+        } message: {
+            Text("这会在 Limare 的浏览器里加载该文件：页面脚本会运行，并可读取该文件所在的文件夹。被动预览不会这样做。")
+        }
     }
 
     /// The width the file tree gets beside a preview; a collapsed tree gives its room to it.
@@ -77,11 +96,15 @@ public struct FilesSurfaceView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             case .loaded(let previewData):
+                let htmlURL: URL? = {
+                    if case .html(_, let url) = previewData.content { return url } else { return nil }
+                }()
                 FilePreviewToolbar(
                     metadata: previewData.metadata,
                     onBack: onBack,
                     onRefresh: files.refresh,
-                    showsSource: previewData.content.hasSource ? $showsSource : nil
+                    showsSource: previewData.content.hasSource ? $showsSource : nil,
+                    onOpenInBrowser: htmlURL.map { url in { openInBrowser(url) } }
                 )
                 Divider()
 
@@ -120,6 +143,14 @@ public struct FilesSurfaceView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func openInBrowser(_ url: URL) {
+        if htmlBrowserConsent {
+            appState.openLocalFileInBrowserTab(url)
+        } else {
+            pendingBrowserExit = url
+        }
     }
 
     private var noFileSelectedView: some View {
@@ -170,7 +201,7 @@ public struct DraggableSplitDivider: View {
             Rectangle()
                 .fill(isActive ? Color.accentColor.opacity(0.7) : AppColors.separator)
                 .frame(width: isActive ? 2 : 1)
-                .animation(.easeOut(duration: 0.12), value: isActive)
+                .animation(AppMotion.resolved(AppMotion.quickOut), value: isActive)
 
             // Transparent hit target for easy grabbing (8px)
             Color.clear

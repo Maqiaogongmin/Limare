@@ -440,7 +440,7 @@ private struct HookDetailSheet: View {
         SettingsSection(title: "Advanced") {
             VStack(alignment: .leading, spacing: AppSpacing.small) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.15)) {
+                    withAnimation(AppMotion.resolved(AppMotion.standard)) {
                         state.isAdvancedExpanded.toggle()
                     }
                 } label: {

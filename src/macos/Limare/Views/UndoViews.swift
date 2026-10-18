@@ -10,17 +10,18 @@ struct UndoRequest: Identifiable, Equatable {
 /// effects cannot be undone, and conflicts that block the file restore.
 struct UndoMessageSheet: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     @Environment(\.dismiss) private var dismiss
     let messageID: UUID
     @State private var includeLeftovers = false
     @State private var selectedOptional: Set<String> = []
 
     private var preview: UndoPreview? {
-        appState.chat.undoPreview(for: messageID, includeLeftovers: includeLeftovers)
+        window.chat.undoPreview(for: messageID, includeLeftovers: includeLeftovers)
     }
 
     private var workspaceRoot: String? {
-        guard let id = appState.conversations.activeConversationID else { return nil }
+        guard let id = window.conversationID else { return nil }
         return appState.conversations.effectiveWorkingDirectory(for: id).standardizedFileURL.path
     }
 
@@ -46,13 +47,13 @@ struct UndoMessageSheet: View {
                 Button("取消", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Button("只撤回消息") {
-                    appState.chat.undoLastUserMessage(messageID, restoreFiles: false)
+                    window.chat.undoLastUserMessage(messageID, restoreFiles: false)
                     dismiss()
                 }
                 .accessibilityIdentifier("undo.retractOnly")
                 if let preview, preview.hasFileChanges {
                     Button("撤销并恢复文件") {
-                        appState.chat.undoLastUserMessage(messageID, restoreFiles: true, includeLeftovers: includeLeftovers, optionalPaths: selectedOptional)
+                        window.chat.undoLastUserMessage(messageID, restoreFiles: true, includeLeftovers: includeLeftovers, optionalPaths: selectedOptional)
                         dismiss()
                     }
                     .buttonStyle(.borderedProminent)
@@ -156,9 +157,10 @@ struct UndoMessageSheet: View {
 /// offers the exits; new runs wait until it is resolved. After a cancel, says what stayed.
 struct UndoPlanBanner: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
 
     var body: some View {
-        if let plan = appState.chat.openUndoPlan {
+        if let plan = window.chat.openUndoPlan {
             VStack(alignment: .leading, spacing: AppSpacing.xSmall) {
                 HStack(spacing: AppSpacing.small) {
                     Image(systemName: "arrow.uturn.backward.circle.fill").foregroundStyle(Color.orange)
@@ -166,26 +168,26 @@ struct UndoPlanBanner: View {
                     Spacer()
                     switch plan.phase {
                     case .partiallyFailed:
-                        Button("重试") { appState.chat.resolveOpenUndo(.retry) }
+                        Button("重试") { window.chat.resolveOpenUndo(.retry) }
                             .controlSize(.small)
-                        Button("保留已恢复的文件并撤回消息") { appState.chat.resolveOpenUndo(.keepAndRetract) }
+                        Button("保留已恢复的文件并撤回消息") { window.chat.resolveOpenUndo(.keepAndRetract) }
                             .controlSize(.small)
-                        Button("取消撤销") { appState.chat.resolveOpenUndo(.cancel) }
+                        Button("取消撤销") { window.chat.resolveOpenUndo(.cancel) }
                             .controlSize(.small)
                             .help("停止恢复：已恢复的文件保持现状，其余文件不再恢复，消息保留")
                             .accessibilityIdentifier("undo.cancelPlan")
                     case .filesRestored:
-                        Button("完成撤回") { appState.chat.resolveOpenUndo(.retry) }
+                        Button("完成撤回") { window.chat.resolveOpenUndo(.retry) }
                             .buttonStyle(.borderedProminent)
                             .controlSize(.small)
-                        Button("保留消息") { appState.chat.resolveOpenUndo(.cancel) }
+                        Button("保留消息") { window.chat.resolveOpenUndo(.cancel) }
                             .controlSize(.small)
                             .help("不再撤回消息：已恢复的文件保持现状，消息保留")
                             .accessibilityIdentifier("undo.keepMessage")
                     default:
-                        Button("继续") { appState.chat.resolveOpenUndo(.retry) }
+                        Button("继续") { window.chat.resolveOpenUndo(.retry) }
                             .controlSize(.small)
-                        Button("取消撤销") { appState.chat.resolveOpenUndo(.cancel) }
+                        Button("取消撤销") { window.chat.resolveOpenUndo(.cancel) }
                             .controlSize(.small)
                     }
                 }
@@ -196,7 +198,7 @@ struct UndoPlanBanner: View {
             .padding(.vertical, AppSpacing.small)
             .background(Color.orange.opacity(0.12))
             .accessibilityIdentifier("undo.planBanner")
-        } else if let conversationID = appState.conversations.activeConversationID,
+        } else if let conversationID = window.conversationID,
                   let cancellation = appState.undo.cancellations[conversationID] {
             VStack(alignment: .leading, spacing: AppSpacing.xSmall) {
                 HStack(spacing: AppSpacing.small) {

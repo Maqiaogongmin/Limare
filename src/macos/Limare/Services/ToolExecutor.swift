@@ -662,8 +662,7 @@ final class ToolExecutor {
             input = try BrowserActionInput.parse(from: call.function.arguments)
         } catch {
             if call.isTruncatedByOutputLimit {
-                let reason = call.finishReason ?? "length"
-                throw ToolExecutorError.invalidArguments("Tool call arguments were truncated due to provider token output limit (finish_reason: \(reason)). The payload is incomplete JSON and cannot be executed.")
+                throw ToolExecutorError.invalidArguments(call.outputLimitTruncationMessage)
             }
             throw error
         }
@@ -1433,8 +1432,7 @@ final class ToolExecutor {
             }
         } catch {
             if call.isTruncatedByOutputLimit {
-                let reason = call.finishReason ?? "length"
-                throw ToolExecutorError.invalidArguments("Tool call arguments were truncated due to provider token output limit (finish_reason: \(reason)). The payload is incomplete JSON and cannot be executed.")
+                throw ToolExecutorError.invalidArguments(call.outputLimitTruncationMessage)
             }
             throw ToolExecutorError.invalidArguments("Tool call arguments are malformed or incomplete JSON: \(error.localizedDescription)")
         }
@@ -1771,10 +1769,46 @@ final class ToolExecutor {
             return try JSONDecoder().decode(T.self, from: data)
         } catch {
             if call.isTruncatedByOutputLimit {
-                let reason = call.finishReason ?? "length"
-                throw ToolExecutorError.invalidArguments("Tool call arguments were truncated due to provider token output limit (finish_reason: \(reason)). The payload is incomplete JSON and cannot be executed.")
+                throw ToolExecutorError.invalidArguments(call.outputLimitTruncationMessage)
             }
-            throw ToolExecutorError.invalidArguments("Tool call arguments are malformed or incomplete JSON: \(error.localizedDescription)")
+            throw ToolExecutorError.invalidArguments(Self.argumentDecodingFailure(error, data: data))
+        }
+    }
+
+    /// Well-formed JSON that does not fit the tool's schema names the field, as Claude Code's
+    /// input validation does; only a syntax failure is reported as malformed JSON.
+    nonisolated static func argumentDecodingFailure(_ error: Error, data: Data) -> String {
+        func path(_ codingPath: [CodingKey], appending key: CodingKey? = nil) -> String {
+            let keys = codingPath + (key.map { [$0] } ?? [])
+            return keys.map { $0.intValue.map { "[\($0)]" } ?? $0.stringValue }
+                .joined(separator: ".")
+                .replacingOccurrences(of: ".[", with: "[")
+        }
+        func received() -> String {
+            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return "" }
+            let keys = object.keys.sorted()
+            return keys.isEmpty ? " No arguments were received." : " Received arguments: \(keys.joined(separator: ", "))."
+        }
+        guard let decodingError = error as? DecodingError else {
+            return "Tool call arguments are malformed or incomplete JSON: \(error.localizedDescription)"
+        }
+        switch decodingError {
+        case .keyNotFound(let key, let context):
+            return "Missing required argument '\(path(context.codingPath, appending: key))'." + received()
+        case .typeMismatch(_, let context) where context.codingPath.isEmpty,
+             .valueNotFound(_, let context) where context.codingPath.isEmpty:
+            return "Tool call arguments must be a JSON object."
+        case .typeMismatch(let type, let context):
+            return "Argument '\(path(context.codingPath))' must be of type \(type)." + received()
+        case .valueNotFound(let type, let context):
+            return "Argument '\(path(context.codingPath))' must be a non-null \(type)." + received()
+        case .dataCorrupted(let context):
+            if context.codingPath.isEmpty {
+                return "Tool call arguments are malformed or incomplete JSON: \(error.localizedDescription)"
+            }
+            return "Argument '\(path(context.codingPath))' is invalid: \(context.debugDescription)"
+        @unknown default:
+            return "Tool call arguments are malformed or incomplete JSON: \(error.localizedDescription)"
         }
     }
 

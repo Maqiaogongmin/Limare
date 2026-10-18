@@ -3,8 +3,13 @@ import Foundation
 extension ComputerUseActivationStore: ComputerUseActivationProviding {
     public func isActivated(conversationID: UUID) async -> Bool {
         await MainActor.run {
-            self.isActivated && self.activeConversationID == conversationID
+            self.claimReleasedSession(conversationID: conversationID)
+            return self.isActivated && self.activeConversationID == conversationID
         }
+    }
+
+    public func unavailableReason(conversationID: UUID) async -> String? {
+        await MainActor.run { self.refusalReason(conversationID: conversationID) }
     }
 
     public func currentGeneration(conversationID: UUID, runID: UUID) async -> Int {

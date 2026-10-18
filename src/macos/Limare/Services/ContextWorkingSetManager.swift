@@ -238,6 +238,15 @@ enum ContextWorkingSetManager {
         return nil
     }
 
+    /// First message of the run in progress: the earliest user message the coordinator admitted
+    /// for it. Without run hints nothing counts as the current run.
+    static func currentRunStartIndex(in messages: [ChatMessage], protectionHints: ContextProtectionHints) -> Int {
+        guard !protectionHints.mandatoryUserMessageIDs.isEmpty else { return messages.count }
+        return messages.firstIndex {
+            $0.role == .user && protectionHints.mandatoryUserMessageIDs.contains($0.id)
+        } ?? messages.count
+    }
+
     /// The same indices are used by WorkingSet and Lifecycle's hard-pressure footprint.
     static func mandatoryFloorIndices(in messages: [ChatMessage], protectionHints: ContextProtectionHints) -> Set<Int> {
         let latestMutationID = latestMutationCallID(in: messages)
@@ -357,8 +366,13 @@ enum ContextWorkingSetManager {
             )
         }
 
-        // Level 1: Reasoning & transient metadata reduction in reducible region
-        for idx in reducibleIndices {
+        // Level 1: Reasoning & transient metadata reduction in reducible region.
+        // Reasoning inside the current run is the model's interleaved thinking between tool
+        // calls; providers require it back intact (DeepSeek returns 400 without it, Anthropic
+        // keeps thinking blocks through a tool loop). Pressure from it goes to Levels 2-3 and
+        // compaction instead.
+        let currentRunStart = currentRunStartIndex(in: messages, protectionHints: protectionHints)
+        for idx in reducibleIndices where idx < currentRunStart {
             var modified = false
             if working[idx].reasoningContent != nil {
                 working[idx].reasoningContent = nil

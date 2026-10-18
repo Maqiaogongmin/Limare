@@ -15,6 +15,8 @@ public struct ComposerDraftEditor: View {
     var onContentHeightChange: ((CGFloat) -> Void)?
     /// Offered navigation keys first; returns whether it used the key.
     var onMenuKey: ((ComposerMenuKey) -> Bool)? = nil
+    /// A change makes the editor first responder (the Focus Composer command).
+    var focusToken: Int = 0
 
     public init(
         text: Binding<String>,
@@ -23,10 +25,12 @@ public struct ComposerDraftEditor: View {
         onFocusChange: ((Bool) -> Void)? = nil,
         onContentHeightChange: ((CGFloat) -> Void)? = nil,
         onFilesDropped: (([URL]) -> Void)? = nil,
-        onMenuKey: ((ComposerMenuKey) -> Bool)? = nil
+        onMenuKey: ((ComposerMenuKey) -> Bool)? = nil,
+        focusToken: Int = 0
     ) {
         self._text = text
         self.onMenuKey = onMenuKey
+        self.focusToken = focusToken
         self.placeholder = placeholder
         self.onFilesDropped = onFilesDropped
         self.onSend = onSend
@@ -45,7 +49,8 @@ public struct ComposerDraftEditor: View {
                 onFocusChange?(isFocused)
             },
             onContentHeightChange: onContentHeightChange,
-            onMenuKey: onMenuKey
+            onMenuKey: onMenuKey,
+            focusToken: focusToken
         )
     }
 }
@@ -62,6 +67,7 @@ private struct NativeDraftTextViewRepresentable: NSViewRepresentable {
     let onFocusChange: (Bool) -> Void
     let onContentHeightChange: ((CGFloat) -> Void)?
     let onMenuKey: ((ComposerMenuKey) -> Bool)?
+    let focusToken: Int
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -110,6 +116,7 @@ private struct NativeDraftTextViewRepresentable: NSViewRepresentable {
         scrollView.documentView = textView
         context.coordinator.textView = textView
         context.coordinator.scrollView = scrollView
+        context.coordinator.lastFocusToken = focusToken
         context.coordinator.setupScrollViewObserver(scrollView)
 
         DispatchQueue.main.async {
@@ -127,6 +134,11 @@ private struct NativeDraftTextViewRepresentable: NSViewRepresentable {
         textView.onFocusChange = onFocusChange
         textView.onMenuKey = onMenuKey
         textView.placeholder = placeholder
+        if context.coordinator.lastFocusToken != focusToken {
+            context.coordinator.lastFocusToken = focusToken
+            // A composer that just appeared is not in its window until this update ends.
+            DispatchQueue.main.async { textView.window?.makeFirstResponder(textView) }
+        }
 
         // The height is reported through a callback that sets SwiftUI state, which must not
         // happen during this update: report it on the next main-loop turn.
@@ -170,6 +182,7 @@ private struct NativeDraftTextViewRepresentable: NSViewRepresentable {
         var parent: NativeDraftTextViewRepresentable
         weak var textView: NativeAppKitDraftTextView?
         weak var scrollView: NSScrollView?
+        var lastFocusToken = 0
         nonisolated(unsafe) private var frameObserver: (any NSObjectProtocol)?
 
         init(_ parent: NativeDraftTextViewRepresentable) {

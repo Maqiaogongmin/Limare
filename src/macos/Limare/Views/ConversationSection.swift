@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ConversationSection: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     @AppStorage("limare.sidebar.conversations.expanded") private var isExpanded: Bool = true
     @State private var isShowingAll: Bool = false
     @State private var isAddHovered = false
@@ -34,7 +35,7 @@ struct ConversationSection: View {
 
                     if unpinnedConversations.count > maxInitialConversations {
                         Button {
-                            withAnimation(.easeInOut(duration: 0.15)) {
+                            withAnimation(AppMotion.resolved(AppMotion.standard)) {
                                 isShowingAll.toggle()
                             }
                         } label: {
@@ -56,7 +57,7 @@ struct ConversationSection: View {
         } header: {
             HStack(spacing: AppSpacing.xxSmall) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.15)) {
+                    withAnimation(AppMotion.resolved(AppMotion.standard)) {
                         isExpanded.toggle()
                     }
                 } label: {
@@ -76,6 +77,7 @@ struct ConversationSection: View {
                 Spacer()
 
                 Button {
+                    appState.focus(window)
                     appState.conversations.newConversation()
                 } label: {
                     Image(systemName: "plus")

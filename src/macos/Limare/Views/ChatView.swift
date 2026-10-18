@@ -2,13 +2,14 @@ import SwiftUI
 
 struct ChatView: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     @AppStorage("limare.worksurface.width") private var workSurfaceWidth: Double = Double(AppLayout.workSurfaceIdealWidth)
     /// The user message whose undo is being previewed.
     @State private var pendingUndo: UndoRequest?
     /// Read so toggling the experimental switch re-evaluates which message offers retraction.
 
     var body: some View {
-        @Bindable var workSurface = appState.workSurface
+        @Bindable var workSurface = window.workSurface
         GeometryReader { geometry in
             // Covered (by the expand button or by dragging the panel's edge over the chat), or
             // a split cannot fit both panes: the Work Surface takes the whole width. Its own
@@ -52,11 +53,11 @@ struct ChatView: View {
         })
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                if appState.workSurface.isPresented {
+                if window.workSurface.isPresented {
                     Menu {
                         ForEach(WorkSurfaceRegistry.builtInDefinitions) { def in
                             Button {
-                                appState.addSurface(def.kind)
+                                window.addSurface(def.kind)
                             } label: {
                                 Label(def.title, systemImage: def.systemImage)
                             }
@@ -68,13 +69,13 @@ struct ChatView: View {
                 }
 
                 Button {
-                    appState.workSurface.togglePresented()
+                    window.workSurface.togglePresented()
                 } label: {
                     Label("Work Surface", systemImage: "sidebar.right")
                 }
                 .accessibilityIdentifier("chat.toolbar.workSurface")
                 .accessibilityLabel("Work Surface")
-                .help(appState.workSurface.isPresented ? "Hide Work Surface" : "Show Work Surface")
+                .help(window.workSurface.isPresented ? "Hide Work Surface" : "Show Work Surface")
             }
         }
         .navigationTitle(activeTitle)
@@ -86,7 +87,7 @@ struct ChatView: View {
 
     private var chatColumn: some View {
         VStack(spacing: 0) {
-            if let conversationID = appState.conversations.activeConversationID {
+            if let conversationID = window.conversationID {
                 ChatRunStatusView(conversationID: conversationID)
                 NativeDelegationTaskView(conversationID: conversationID)
             }
@@ -97,7 +98,7 @@ struct ChatView: View {
 
             conversationContent
 
-            if let errorMessage = appState.chat.errorMessage {
+            if let errorMessage = window.chat.errorMessage {
                 ChatErrorBanner(message: errorMessage)
             }
 
@@ -105,7 +106,9 @@ struct ChatView: View {
 
             UndoPlanBanner()
 
-            if let child = appState.conversations.activeConversation, child.isNativeDelegationChild {
+            ConversationApprovalArea()
+
+            if let child = window.conversation, child.isNativeDelegationChild {
                 NativeChildInteractionView(conversationID: child.id)
             } else {
                 ComposerView()
@@ -114,7 +117,7 @@ struct ChatView: View {
     }
 
     private var activeTitle: String {
-        if let conversation = appState.conversations.activeConversation {
+        if let conversation = window.conversation {
             if let project = appState.conversations.project(for: conversation) {
                 return "\(project.name) / \(conversation.title)"
             }
@@ -125,24 +128,25 @@ struct ChatView: View {
 
     @ViewBuilder
     private var conversationContent: some View {
-        if appState.chat.messages.isEmpty {
+        if window.chat.messages.isEmpty {
             EmptyConversationView()
         } else {
-            let conversationID = appState.conversations.activeConversationID
+            let conversationID = window.conversationID
             MessageListView(
-                messages: appState.chat.messages,
-                retractableMessageID: appState.chat.retractableUserMessageID,
+                messages: window.chat.messages,
+                retractableMessageID: window.chat.retractableUserMessageID,
                 onRetract: { pendingUndo = UndoRequest(messageID: $0) },
-                compactionMarkers: appState.conversations.activeConversation?.compactionMarkers ?? [],
+                compactionMarkers: window.conversation?.compactionMarkers ?? [],
                 compaction: conversationID.flatMap { appState.conversationRuns.compactions[$0] }
             )
-            .id(appState.conversations.activeConversationID)
+            .id(window.conversationID)
         }
     }
 }
 
 private struct ChatStatusCallout: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
 
     var body: some View {
         HStack(spacing: AppSpacing.small) {
@@ -157,7 +161,7 @@ private struct ChatStatusCallout: View {
             Spacer()
 
             Button("Configure Provider") {
-                appState.screen = .settingsProviders
+                window.screen = .settingsProviders
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
@@ -176,6 +180,7 @@ private struct ChatStatusCallout: View {
 
 private struct EmptyConversationView: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
 
     var body: some View {
         ContentUnavailableView {
@@ -186,7 +191,7 @@ private struct EmptyConversationView: View {
             }
             .font(.title3.weight(.medium))
         } description: {
-            if let activeConv = appState.conversations.activeConversation,
+            if let activeConv = window.conversation,
                let project = appState.conversations.project(for: activeConv) {
                 if let folder = activeConv.workspace ?? project.workspace {
                     Text("Harness tools are active in \(folder.name). Every file edit and terminal command stays visible here.")
@@ -206,6 +211,7 @@ private struct EmptyConversationView: View {
 
 private struct ChatErrorBanner: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     let message: String
 
     var body: some View {
@@ -222,7 +228,7 @@ private struct ChatErrorBanner: View {
             Spacer()
 
             Button {
-                appState.chat.errorMessage = nil
+                window.chat.errorMessage = nil
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .semibold))
@@ -249,6 +255,7 @@ private struct ChatErrorBanner: View {
 /// window. Dragging back undoes each step. The panel follows the pointer, so the edge stays under it.
 private struct WorkSurfaceEdgeHandle: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     @Binding var width: Double
     /// The detail column in window coordinates: right of the sidebar, or the whole window.
     let detailFrame: CGRect
@@ -257,9 +264,22 @@ private struct WorkSurfaceEdgeHandle: View {
     @State private var isDragging = false
     /// Where the detail column began when the drag started; the sidebar's width while it shows.
     @State private var leadingAtDragStart: CGFloat = 0
+    /// What Escape puts back.
+    @State private var widthAtDragStart: Double?
+    @State private var coverageAtDragStart: WorkSurfaceStore.Coverage?
+    /// Escape ended the drag; the rest of the gesture is ignored until the button comes up.
+    @State private var didCancelDrag = false
+    @State private var escapeMonitor: Any?
+    @FocusState private var isFocused: Bool
+
+    private enum KeyboardStep {
+        static let regular = 8.0
+        static let large = 32.0
+        static let accessibility = 16.0
+    }
 
     var body: some View {
-        let isActive = isHovering || isDragging
+        let isActive = isHovering || isDragging || isFocused
         ZStack {
             Rectangle()
                 .fill(isActive ? Color.accentColor.opacity(0.7) : .clear)
@@ -269,7 +289,7 @@ private struct WorkSurfaceEdgeHandle: View {
                 .contentShape(Rectangle())
         }
         .frame(width: 8)
-        .animation(.easeOut(duration: 0.12), value: isActive)
+        .animation(AppMotion.resolved(AppMotion.quickOut), value: isActive)
         .onHover { hovering in
             isHovering = hovering
             if hovering {
@@ -281,28 +301,101 @@ private struct WorkSurfaceEdgeHandle: View {
         .gesture(
             DragGesture(minimumDistance: 1, coordinateSpace: .global)
                 .onChanged { value in
+                    guard !didCancelDrag else { return }
                     if !isDragging {
+                        guard abs(value.translation.width) >= AppLayout.workSurfaceDragDeadZone else { return }
                         isDragging = true
+                        widthAtDragStart = width
+                        coverageAtDragStart = window.workSurface.coverage
                         leadingAtDragStart = detailFrame.minX > 1
                             ? detailFrame.minX
                             // The sidebar is hidden; if the panel hid it, it comes back on the way.
-                            : (appState.workSurface.coverage == .window ? AppLayout.sidebarIdealWidth : 0)
+                            : (window.workSurface.coverage == .window ? AppLayout.sidebarIdealWidth : 0)
+                        installEscapeMonitor()
                     }
                     follow(pointerX: value.location.x)
                 }
                 .onEnded { _ in
+                    removeEscapeMonitor()
+                    didCancelDrag = false
+                    guard isDragging else { return }
                     isDragging = false
                     if !isHovering { NSCursor.pop() }
                 }
         )
+        .simultaneousGesture(
+            TapGesture(count: 2).onEnded {
+                width = WorkSurfaceStore.clampedPanelWidth(
+                    Double(AppLayout.workSurfaceIdealWidth),
+                    windowWidth: Double(detailFrame.maxX),
+                    sidebarWidth: Double(currentLeading)
+                )
+                window.workSurface.coverage = .none
+            }
+        )
+        .focusable()
+        .focusEffectDisabled()
+        .focused($isFocused)
+        .onKeyPress(phases: .down) { press in
+            let step = press.modifiers.contains(.shift) ? KeyboardStep.large : KeyboardStep.regular
+            switch press.key {
+            case .leftArrow: adjust(by: step)
+            case .rightArrow: adjust(by: -step)
+            default: return .ignored
+            }
+            return .handled
+        }
         .onDisappear {
+            removeEscapeMonitor()
             if isHovering || isDragging { NSCursor.pop() }
         }
-        .accessibilityHidden(true)
+        .accessibilityElement()
+        .accessibilityLabel("Work Surface 宽度")
+        .accessibilityValue("\(Int(width)) 点")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: adjust(by: KeyboardStep.accessibility)
+            case .decrement: adjust(by: -KeyboardStep.accessibility)
+            @unknown default: break
+            }
+        }
+    }
+
+    /// The sidebar's width as laid out now (0 while it is hidden).
+    private var currentLeading: CGFloat {
+        detailFrame.minX > 1 ? detailFrame.minX : 0
+    }
+
+    /// Widens the panel by `delta` points (the edge moves left), within the room beside the chat.
+    private func adjust(by delta: Double) {
+        width = WorkSurfaceStore.clampedPanelWidth(
+            width + delta,
+            windowWidth: Double(detailFrame.maxX),
+            sidebarWidth: Double(currentLeading)
+        )
+    }
+
+    private func installEscapeMonitor() {
+        guard escapeMonitor == nil else { return }
+        escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 53 else { return event }
+            if let widthAtDragStart { width = widthAtDragStart }
+            if let coverageAtDragStart { window.workSurface.coverage = coverageAtDragStart }
+            didCancelDrag = true
+            isDragging = false
+            if !isHovering { NSCursor.pop() }
+            removeEscapeMonitor()
+            return nil
+        }
+    }
+
+    private func removeEscapeMonitor() {
+        if let escapeMonitor { NSEvent.removeMonitor(escapeMonitor) }
+        escapeMonitor = nil
     }
 
     private func follow(pointerX x: CGFloat) {
-        let workSurface = appState.workSurface
+        let workSurface = window.workSurface
         let target = WorkSurfaceStore.edgeDrag(
             pointerX: Double(x),
             sidebarWidth: Double(leadingAtDragStart),

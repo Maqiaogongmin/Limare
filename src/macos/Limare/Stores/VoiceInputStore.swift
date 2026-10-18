@@ -32,6 +32,11 @@ final class VoiceInputStore {
         self.logs = logs
     }
 
+    /// Whether dictation goes into `store`'s composer.
+    func isTarget(_ store: ChatStore) -> Bool {
+        chatStore === store
+    }
+
     func setChatStore(_ store: ChatStore) {
         self.chatStore = store
     }

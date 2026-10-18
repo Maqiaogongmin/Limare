@@ -2,15 +2,16 @@ import SwiftUI
 
 struct ComposerThinkingControl: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
 
     private var currentModelSource: ConversationModelSource? {
-        ModelChoiceCatalog.currentModelSource(conversation: appState.conversations.activeConversation,
+        ModelChoiceCatalog.currentModelSource(conversation: window.conversation,
                                               modelGroups: appState.modelGroups, providers: appState.providers)
     }
 
     private var thinkingState: ComposerThinkingPresentationState {
         ConversationThinkingResolver.resolvePresentationState(
-            conversation: appState.conversations.activeConversation,
+            conversation: window.conversation,
             modelSource: currentModelSource,
             providers: appState.providers.providers,
             modelGroups: appState.modelGroups
@@ -94,20 +95,20 @@ struct ComposerThinkingControl: View {
                 }
                 .padding(.horizontal, AppSpacing.small)
                 .padding(.vertical, AppSpacing.xxSmall)
-                .background(Color.secondary.opacity(0.08))
+                .background(AppColors.surfaceInteractive)
                 .clipShape(RoundedRectangle(cornerRadius: AppRadius.row))
                 .contentShape(Rectangle())
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize(horizontal: true, vertical: false)
-            .disabled(appState.chat.isStreaming)
+            .disabled(window.chat.isStreaming)
             .help("Reasoning & Thinking intensity")
         }
     }
 
     private func selectLevel(_ level: ThinkingLevel?) {
-        if let activeID = appState.conversations.activeConversationID {
+        if let activeID = window.conversationID {
             appState.conversations.setConversationThinkingLevelOverride(id: activeID, level: level)
         }
     }
