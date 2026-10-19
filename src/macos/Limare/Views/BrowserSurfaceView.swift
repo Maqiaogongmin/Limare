@@ -8,6 +8,7 @@ public struct BrowserSurfaceView: View {
 
     @State private var urlInput: String = ""
     @State private var isEditingURL: Bool = false
+    @FocusState private var isURLFieldFocused: Bool
     @State private var validationErrorMessage: String? = nil
     @State private var capacityNotice: String? = nil
 
@@ -68,6 +69,7 @@ public struct BrowserSurfaceView: View {
                 .disabled(tab?.canGoBack != true)
                 .foregroundStyle(tab?.canGoBack == true ? AppColors.textPrimary : AppColors.textMuted)
                 .help("Back")
+                .accessibilityLabel("Back")
 
                 // Forward button
                 Button {
@@ -81,6 +83,7 @@ public struct BrowserSurfaceView: View {
                 .disabled(tab?.canGoForward != true)
                 .foregroundStyle(tab?.canGoForward == true ? AppColors.textPrimary : AppColors.textMuted)
                 .help("Forward")
+                .accessibilityLabel("Forward")
 
                 // Reload button
                 Button {
@@ -94,6 +97,7 @@ public struct BrowserSurfaceView: View {
                 .disabled(tab?.hasSession != true)
                 .foregroundStyle(tab?.hasSession == true ? AppColors.textPrimary : AppColors.textMuted)
                 .help("Reload")
+                .accessibilityLabel("Reload")
 
                 // URL Field
                 HStack(spacing: 4) {
@@ -111,6 +115,7 @@ public struct BrowserSurfaceView: View {
                     })
                     .textFieldStyle(.plain)
                     .font(.caption)
+                    .focused($isURLFieldFocused)
                     .onSubmit {
                         submitURL(store: store, tab: tab)
                     }
@@ -149,6 +154,7 @@ public struct BrowserSurfaceView: View {
                 .disabled(tab?.hasSession != true)
                 .foregroundStyle(tab?.hasSession == true ? AppColors.textPrimary : AppColors.textMuted)
                 .help("Open in Default Browser")
+                .accessibilityLabel("Open in Default Browser")
 
                 if tab?.isLoading == true {
                     ProgressView()
@@ -160,17 +166,17 @@ public struct BrowserSurfaceView: View {
                 if let tab, tab.hasSession {
                     HStack(spacing: AppSpacing.xxSmall) {
                         Circle()
-                            .fill(tab.owner == .agent ? Color.blue : Color.green)
+                            .fill(tab.owner == .agent ? AppColors.statusInfo : AppColors.statusSuccess)
                             .frame(width: 6, height: 6)
 
                         Text(tab.owner.displayName)
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(tab.owner == .agent ? Color.blue : Color.green)
+                            .font(AppTypography.interfaceCaption2.weight(.medium))
+                            .foregroundStyle(tab.owner == .agent ? AppColors.statusInfo : AppColors.statusSuccess)
                     }
                     .padding(.horizontal, AppSpacing.xSmall)
                     .padding(.vertical, 3)
                     .background(
-                        (tab.owner == .agent ? Color.blue : Color.green).opacity(0.12)
+                        (tab.owner == .agent ? AppColors.statusInfo : AppColors.statusSuccess).opacity(0.12)
                     )
                     .clipShape(Capsule())
 
@@ -205,14 +211,16 @@ public struct BrowserSurfaceView: View {
         }
         .padding(.horizontal, AppSpacing.standard)
         .padding(.vertical, AppSpacing.small)
+        // The field shows the page's address; a tab with no page yet ("") never blanks an
+        // address the user just entered.
         .onAppear {
-            if !isEditingURL {
-                urlInput = tab?.currentURL ?? ""
+            if !isEditingURL, let current = tab?.currentURL, !current.isEmpty {
+                urlInput = current
             }
         }
         .onChange(of: tab?.currentURL) { _, newURL in
-            if !isEditingURL {
-                urlInput = newURL ?? ""
+            if !isEditingURL, let newURL, !newURL.isEmpty {
+                urlInput = newURL
             }
         }
     }
@@ -227,11 +235,18 @@ public struct BrowserSurfaceView: View {
             if let tab {
                 capacityNotice = nil
                 tab.navigateByUser(to: url)
+                urlInput = url.absoluteString
+                isURLFieldFocused = false
+                isEditingURL = false
             } else if let convID = activeConversationID {
                 do {
                     let newTab = try store.getOrCreateTab(for: convID)
                     capacityNotice = nil
                     newTab.navigateByUser(to: url)
+                    // Leave the field, so the page's address shows in it once it loads.
+                    urlInput = url.absoluteString
+                    isURLFieldFocused = false
+                    isEditingURL = false
                 } catch {
                     capacityNotice = "浏览器标签已满，等其他对话结束后再试"
                 }
@@ -251,9 +266,10 @@ public struct BrowserSurfaceView: View {
                     .font(.system(size: 24))
                     .foregroundStyle(AppColors.statusWarning)
                 Text(notice)
-                    .font(.subheadline.weight(.medium))
+                    .font(AppTypography.interface)
                     .foregroundStyle(AppColors.textPrimary)
                     .multilineTextAlignment(.center)
+                    .padding(.horizontal, AppSpacing.standard)
             } else {
                 Text("No page loaded")
                     .font(.subheadline.weight(.medium))

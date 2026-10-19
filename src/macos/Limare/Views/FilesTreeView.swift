@@ -17,11 +17,9 @@ public struct FilesTreeView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
+            // No rules: the header, the filter and the tree are set apart by space alone.
             headerView
-            Divider()
-
             searchField
-            Divider()
 
             if let error = tree.treeErrorMessage {
                 unavailableView(error)
@@ -41,42 +39,45 @@ public struct FilesTreeView: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: AppSpacing.xxSmall) {
+        HStack(spacing: AppSpacing.xSmall) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 10))
+                .font(.system(size: 11))
                 .foregroundStyle(AppColors.textMuted)
 
             TextField("Filter files…", text: $filterQuery)
                 .textFieldStyle(.plain)
-                .font(.caption)
+                .font(.system(size: 12.5))
 
             if !filterQuery.isEmpty {
                 Button {
                     filterQuery = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(AppColors.textMuted)
                 }
                 .buttonStyle(.plain)
             }
         }
+        // A borderless field set into the panel.
         .padding(.horizontal, AppSpacing.small)
-        .padding(.vertical, 4)
-        .background(AppColors.surfaceSecondary.opacity(0.6))
-        .clipShape(RoundedRectangle(cornerRadius: AppRadius.row, style: .continuous))
-        .padding(.horizontal, AppSpacing.small)
-        .padding(.vertical, AppSpacing.xxSmall)
+        .frame(height: 28)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(Color.primary.opacity(0.04))
+        )
+        .padding(.horizontal, AppSpacing.medium)
+        .padding(.bottom, AppSpacing.xSmall)
     }
 
     private var headerView: some View {
         HStack(spacing: AppSpacing.xSmall) {
             Image(systemName: "folder")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
+                .font(.system(size: 12))
+                .foregroundStyle(FileTreeStyle.folderIcon)
 
             Text(workspaceTitle)
-                .font(.subheadline.weight(.medium))
+                .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(AppColors.textPrimary)
                 .lineLimit(1)
                 .help("\(workspaceTitle)\n\(tree.rootURL?.path ?? "Workspace")")
@@ -94,9 +95,8 @@ public struct FilesTreeView: View {
             .foregroundStyle(AppColors.textSecondary)
             .help("Refresh Files")
         }
-        .padding(.horizontal, AppSpacing.small)
+        .padding(.horizontal, AppSpacing.medium)
         .frame(height: 36)
-        .background(AppColors.surfaceSecondary.opacity(0.4))
     }
 
     private var workspaceTitle: String {
@@ -140,13 +140,33 @@ public struct FilesTreeView: View {
         return results
     }
 
-    private var treeList: some View {
-        ScrollView(.vertical, showsIndicators: true) {
-            LazyVStack(alignment: .leading, spacing: 1) {
-                ForEach(filteredNodes) { node in
-                    FileTreeNodeRow(files: files, node: node, depth: 0)
+    /// One row per visible node, in display order: an open folder's children follow it as rows of
+    /// their own rather than nesting inside it, so the lazy stack builds and measures only the
+    /// rows on screen. Nested, an open folder of hundreds of files was a single item, built,
+    /// measured and torn down whole on every open, close and preview.
+    private var visibleRows: [FileTreeRow] {
+        var rows: [FileTreeRow] = []
+        func append(_ nodes: [FileTreeNode], depth: Int) {
+            for node in nodes {
+                let isExpanded = node.isDirectory && tree.expandedPaths.contains(node.id)
+                rows.append(FileTreeRow(node: node, depth: depth, isExpanded: isExpanded))
+                if isExpanded, let children = node.children {
+                    append(children, depth: depth + 1)
                 }
             }
+        }
+        append(filteredNodes, depth: 0)
+        return rows
+    }
+
+    private var treeList: some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(visibleRows) { row in
+                    FileTreeNodeRow(files: files, row: row)
+                }
+            }
+            .padding(.horizontal, AppSpacing.xSmall)
             .padding(.vertical, AppSpacing.xxSmall)
         }
     }
@@ -194,69 +214,81 @@ public struct FilesTreeView: View {
     }
 }
 
-private struct FileTreeNodeRow: View {
-    @Environment(AppState.self) private var appState
-    @Environment(WindowSession.self) private var window
-    let files: FilesSurfaceStore
+/// The tree's single, quiet palette: folders a step darker than files, no accent colour.
+private enum FileTreeStyle {
+    static let folderIcon = Color.primary.opacity(0.68)
+    static let fileIcon = Color.secondary.opacity(0.55)
+    static let rowHeight: CGFloat = 26
+    static let rowFill = Color.primary.opacity(0.05)
+}
+
+/// A node where the tree shows it: how deep, and whether its folder is open.
+private struct FileTreeRow: Identifiable {
     let node: FileTreeNode
     let depth: Int
+    let isExpanded: Bool
+
+    var id: String { node.id }
+}
+
+private struct FileTreeNodeRow: View {
+    @Environment(WindowSession.self) private var window
+    let files: FilesSurfaceStore
+    let row: FileTreeRow
+
+    @State private var isHovering = false
+
+    private var node: FileTreeNode { row.node }
+    private var depth: Int { row.depth }
+    private var isExpanded: Bool { row.isExpanded }
 
     private var isSelected: Bool {
         !node.isDirectory && files.selectedFileURL == node.url
     }
 
-    private var isExpanded: Bool {
-        node.isDirectory && window.files.expandedPaths.contains(node.url.standardizedFileURL.resolvingSymlinksInPath().path)
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Button {
+        Button {
+            if node.isDirectory {
+                window.files.toggleDirectory(url: node.url)
+            } else {
+                window.openTreeFile(node.url, in: files)
+            }
+        } label: {
+            HStack(spacing: AppSpacing.xxSmall) {
                 if node.isDirectory {
-                    window.files.toggleDirectory(url: node.url)
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(AppColors.textMuted)
+                        .frame(width: 12)
                 } else {
-                    window.openTreeFile(node.url, in: files)
-                }
-            } label: {
-                HStack(spacing: AppSpacing.xxSmall) {
-                    if node.isDirectory {
-                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(AppColors.textMuted)
-                            .frame(width: 12)
-                    } else {
-                        Spacer()
-                            .frame(width: 12)
-                    }
-
-                    Image(systemName: node.sfSymbol)
-                        .font(.system(size: 11))
-                        .foregroundStyle(node.isDirectory ? Color.accentColor : AppColors.textSecondary)
-                        .frame(width: 16)
-
-                    Text(node.name)
-                        .font(.caption)
-                        .foregroundStyle(isSelected ? Color.accentColor : AppColors.textPrimary)
-                        .lineLimit(1)
-
                     Spacer()
+                        .frame(width: 12)
                 }
-                .padding(.leading, CGFloat(depth * 14) + AppSpacing.small)
-                .padding(.trailing, AppSpacing.small)
-                .padding(.vertical, 4)
-                .background(
-                    isSelected ? AppColors.selection : (node.isDirectory ? Color.clear : Color.clear)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: AppRadius.small, style: .continuous))
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
 
-            if isExpanded, let children = node.children {
-                ForEach(children) { child in
-                    FileTreeNodeRow(files: files, node: child, depth: depth + 1)
-                }
+                // An outlined folder: a filled one reads heavier than the names beside it.
+                Image(systemName: node.isDirectory ? "folder" : node.sfSymbol)
+                    .font(.system(size: 12))
+                    .foregroundStyle(node.isDirectory ? FileTreeStyle.folderIcon : FileTreeStyle.fileIcon)
+                    .frame(width: 18)
+
+                Text(node.name)
+                    .font(.system(size: 13, weight: isSelected ? .medium : .regular))
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                Spacer(minLength: 0)
             }
+            .padding(.leading, CGFloat(depth * 14) + AppSpacing.xSmall)
+            .padding(.trailing, AppSpacing.xSmall)
+            .frame(height: FileTreeStyle.rowHeight)
+            .background(
+                RoundedRectangle(cornerRadius: AppRadius.row, style: .continuous)
+                    .fill(isSelected || isHovering ? FileTreeStyle.rowFill : Color.clear)
+            )
+            .contentShape(Rectangle())
+            .onHover { isHovering = $0 }
         }
+        .buttonStyle(.plain)
     }
 }

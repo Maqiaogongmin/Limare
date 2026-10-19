@@ -3,6 +3,9 @@ import SwiftUI
 struct ComposerThinkingControl: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowSession.self) private var window
+    /// A narrow composer: the icon alone, so the model's name keeps the room. Decided up front;
+    /// left to the row, the room reserved for the level went to the spacer instead of the model.
+    var isCompact = false
 
     private var currentModelSource: ConversationModelSource? {
         ModelChoiceCatalog.currentModelSource(conversation: window.conversation,
@@ -26,85 +29,69 @@ struct ComposerThinkingControl: View {
 
     var body: some View {
         if thinkingState.isVisible {
-            Menu {
-                if thinkingState.isGroupSource {
-                    if let defaultLabel = thinkingState.menuGroupDefaultLabel {
-                        Button {
-                            selectLevel(nil)
-                        } label: {
-                            if thinkingState.requestedOverride == nil {
-                                Label(defaultLabel, systemImage: "checkmark")
-                            } else {
-                                Text(defaultLabel)
-                            }
-                        }
+            // In a narrow composer the level's name gives way first, so the model's name can stay.
+            menu(showsLevel: !isCompact)
+                .disabled(window.chat.isStreaming)
+                .help("Reasoning & Thinking intensity: \(thinkingState.displayLabel)")
+        }
+    }
 
-                        Divider()
-                    }
+    private func menu(showsLevel: Bool) -> some View {
+        Menu {
+            if thinkingState.isGroupSource {
+                if let defaultLabel = thinkingState.menuGroupDefaultLabel {
+                    // Toggles draw the menu's own checkmark on the current level.
+                    Toggle(defaultLabel, isOn: Binding(
+                        get: { thinkingState.requestedOverride == nil },
+                        set: { _ in selectLevel(nil) }
+                    ))
 
-                    ForEach(thinkingState.availableLevels, id: \.self) { level in
-                        Button {
-                            selectLevel(level)
-                        } label: {
-                            let isSelected = thinkingState.requestedOverride == level
-                            if isSelected {
-                                Label(level.displayName, systemImage: "checkmark")
-                            } else {
-                                Text(level.displayName)
-                            }
-                        }
-                    }
-                } else {
-                    Button {
-                        selectLevel(.off)
-                    } label: {
-                        let isSelected = thinkingState.requestedOverride == .off || (thinkingState.requestedOverride == nil && thinkingState.effectiveLevel == .off)
-                        if isSelected {
-                            Label(offLabel, systemImage: "checkmark")
-                        } else {
-                            Text(offLabel)
-                        }
-                    }
-
-                    ForEach(thinkingState.availableLevels.filter { $0 != .off }, id: \.self) { level in
-                        Button {
-                            selectLevel(level)
-                        } label: {
-                            let isSelected = thinkingState.requestedOverride == level
-                            if isSelected {
-                                Label(level.displayName, systemImage: "checkmark")
-                            } else {
-                                Text(level.displayName)
-                            }
-                        }
-                    }
+                    Divider()
                 }
-            } label: {
-                HStack(spacing: AppSpacing.xxSmall) {
-                    Image(systemName: "brain.head.profile")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
 
+                ForEach(thinkingState.availableLevels, id: \.self) { level in
+                    Toggle(level.displayName, isOn: Binding(
+                        get: { thinkingState.requestedOverride == level },
+                        set: { _ in selectLevel(level) }
+                    ))
+                }
+            } else {
+                Toggle(offLabel, isOn: Binding(
+                    get: { thinkingState.requestedOverride == .off || (thinkingState.requestedOverride == nil && thinkingState.effectiveLevel == .off) },
+                    set: { _ in selectLevel(.off) }
+                ))
+
+                ForEach(thinkingState.availableLevels.filter { $0 != .off }, id: \.self) { level in
+                    Toggle(level.displayName, isOn: Binding(
+                        get: { thinkingState.requestedOverride == level },
+                        set: { _ in selectLevel(level) }
+                    ))
+                }
+            }
+        } label: {
+            HStack(spacing: AppSpacing.xxSmall) {
+                Image(systemName: "brain.head.profile")
+                    .font(.system(size: 11))
+
+                if showsLevel {
                     Text(thinkingState.displayLabel)
-                        .font(.caption.weight(.medium))
+                        .font(.system(size: 12, weight: .medium))
                         .lineLimit(1)
 
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.tertiary)
+                        .opacity(0.7)
                 }
-                .padding(.horizontal, AppSpacing.small)
-                .padding(.vertical, AppSpacing.xxSmall)
-                .background(AppColors.surfaceInteractive)
-                .clipShape(RoundedRectangle(cornerRadius: AppRadius.row))
-                .contentShape(Rectangle())
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize(horizontal: true, vertical: false)
-            .disabled(window.chat.isStreaming)
-            .help("Reasoning & Thinking intensity")
+            .composerPill()
         }
+        // A plain button style keeps the label's own quiet colour, which the borderless
+        // menu style overrides.
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityLabel("Thinking: \(thinkingState.displayLabel)")
     }
 
     private func selectLevel(_ level: ThinkingLevel?) {

@@ -44,20 +44,24 @@ struct CodeLineIndex: Equatable {
 }
 
 /// Read-only code with syntax highlighting (when the file is small enough) and a line-number
-/// gutter. Lines never wrap; the text scrolls both ways while the gutter stays put.
+/// gutter. Code lines never wrap and the text scrolls both ways while the gutter stays put;
+/// prose sources (Markdown) wrap to the width, numbered by their source lines.
 struct CodePreviewTextView: View {
     let code: String
     let language: String
+    let wrapsLines: Bool
 
-    init(code: String, language: String) {
+    init(code: String, language: String, wrapsLines: Bool = false) {
         self.code = code
         self.language = language
+        self.wrapsLines = wrapsLines
     }
 
     var body: some View {
         CodePreviewTextRepresentable(
             code: code,
             language: language,
+            wrapsLines: wrapsLines,
             codePointSize: CGFloat(TypographyPreferences.shared.codeSize),
             conversationPointSize: CGFloat(TypographyPreferences.shared.conversationSize)
         )
@@ -67,6 +71,7 @@ struct CodePreviewTextView: View {
 private struct CodePreviewTextRepresentable: NSViewRepresentable {
     let code: String
     let language: String
+    let wrapsLines: Bool
     let codePointSize: CGFloat
     let conversationPointSize: CGFloat
 
@@ -81,7 +86,7 @@ private struct CodePreviewTextRepresentable: NSViewRepresentable {
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
         scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = true
+        scrollView.hasHorizontalScroller = !wrapsLines
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = false
@@ -92,12 +97,15 @@ private struct CodePreviewTextRepresentable: NSViewRepresentable {
         textView.isRichText = true
         textView.drawsBackground = false
         textView.allowsUndo = false
-        textView.isHorizontallyResizable = true
+        textView.isHorizontallyResizable = !wrapsLines
         textView.isVerticallyResizable = true
-        textView.autoresizingMask = []
+        textView.autoresizingMask = wrapsLines ? [.width] : []
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        textView.textContainer?.widthTracksTextView = false
-        textView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainer?.widthTracksTextView = wrapsLines
+        textView.textContainer?.containerSize = NSSize(
+            width: wrapsLines ? scrollView.contentSize.width : CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
         textView.textContainerInset = NSSize(width: 0, height: AppSpacing.small)
 
         scrollView.documentView = textView
@@ -147,10 +155,20 @@ private struct CodePreviewTextRepresentable: NSViewRepresentable {
                 profile: .document
             )
             let map = CodeHighlighter.current.highlight(key: nil, content: code, language: language, theme: theme)
-            return map.apply(to: code, with: theme)
+            return Self.fillingMissingFont(map.apply(to: code, with: theme), with: font)
         }
         #endif
         return NSAttributedString(string: code, attributes: [.font: font, .foregroundColor: NSColor.labelColor])
+    }
+
+    /// Runs the highlighter left without a font (blank lines among them) take the code font, so
+    /// every line, empty or not, is as tall as the others and its number lines up.
+    static func fillingMissingFont(_ text: NSAttributedString, with font: NSFont) -> NSAttributedString {
+        let result = NSMutableAttributedString(attributedString: text)
+        result.enumerateAttribute(.font, in: NSRange(location: 0, length: result.length)) { value, range, _ in
+            if value == nil { result.addAttribute(.font, value: font, range: range) }
+        }
+        return result
     }
 }
 
@@ -170,6 +188,7 @@ final class LineNumberRulerView: NSRulerView {
         self.textView = textView
         super.init(scrollView: nil, orientation: .verticalRuler)
         clientView = textView
+        clipsToBounds = true
     }
 
     @available(*, unavailable)
@@ -203,6 +222,19 @@ final class LineNumberRulerView: NSRulerView {
         needsDisplay = true
     }
 
+    /// The ruler paints itself, inside its own bounds: the stock drawing filled the dirty rect,
+    /// which since macOS 14 may reach past the view, so its divider ran up through the header
+    /// rows above the code, and its translucent fill let code scrolled sideways show through.
+    /// It fills with the Work Surface sheet's colour, which the code lies on.
+    override func draw(_ dirtyRect: NSRect) {
+        AppColors.workSurfaceNSColor.setFill()
+        bounds.fill()
+        let hairline = 1 / (window?.backingScaleFactor ?? 2)
+        NSColor.separatorColor.setFill()
+        NSRect(x: bounds.maxX - hairline, y: bounds.minY, width: hairline, height: bounds.height).fill()
+        drawHashMarksAndLabels(in: dirtyRect)
+    }
+
     override func drawHashMarksAndLabels(in rect: NSRect) {
         guard let textView, let layoutManager = textView.textLayoutManager,
               let contentManager = layoutManager.textContentManager else { return }
@@ -217,8 +249,11 @@ final class LineNumberRulerView: NSRulerView {
             guard frame.maxY + origin.y >= visible.minY else { return true }
             let offset = contentManager.offset(from: layoutManager.documentRange.location, to: fragment.rangeInElement.location)
             let label = String(index.line(containing: offset) + 1) as NSString
-            let lineTop = frame.minY + (fragment.textLineFragments.first?.typographicBounds.minY ?? 0)
-            let pointInRuler = convert(NSPoint(x: 0, y: lineTop + origin.y), from: textView)
+            // Each number sits on its line's baseline: an empty line's typographic bounds start
+            // higher than a filled one's, so aligning tops drew blank lines' numbers too high.
+            let line = fragment.textLineFragments.first
+            let baseline = frame.minY + (line?.typographicBounds.minY ?? 0) + (line?.glyphOrigin.y ?? font.ascender)
+            let pointInRuler = convert(NSPoint(x: 0, y: baseline - font.ascender + origin.y), from: textView)
             let size = label.size(withAttributes: attributes)
             label.draw(at: NSPoint(x: ruleThickness - Metrics.horizontalPadding - size.width, y: pointInRuler.y), withAttributes: attributes)
             return true

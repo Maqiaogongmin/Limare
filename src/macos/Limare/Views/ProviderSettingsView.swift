@@ -10,13 +10,8 @@ public struct ProviderSettingsView: View {
     public init() {}
 
     public var body: some View {
-        HSplitView {
+        HStack(spacing: 0) {
             providerSidebar
-                .frame(
-                    minWidth: AppSemanticLayout.resourceSidebarMinimumWidth,
-                    idealWidth: AppSemanticLayout.resourceSidebarIdealWidth,
-                    maxWidth: AppSemanticLayout.resourceSidebarMaximumWidth
-                )
 
             providerDetail
                 .frame(
@@ -96,62 +91,53 @@ public struct ProviderSettingsView: View {
 
     // MARK: - Left Sidebar List
 
-    // The header is the List's section header, as in Model Groups, so the whole column
-    // sits on the List's own sidebar background instead of a second, opaque one.
+    // The page title already says Providers; the list's header holds only its add button.
     private var providerSidebar: some View {
-        List(selection: $state.selection) {
-            Section {
-                ForEach(appState.providers.providers) { provider in
-                    let isSelected = state.selection == provider.id && !state.isNew
-                    let hasKey = appState.providers.hasStoredAPIKey(providerID: provider.id) || provider.authenticationMode == .none
-                    let statusColor: Color? = hasKey ? nil : AppColors.statusWarning
-                    let subtitle: String = {
-                        if !hasKey {
-                            return "Needs API Key"
-                        }
-                        let count = provider.models.count
-                        return count == 0 ? "Configured • 0 models" : "\(count) \(count == 1 ? "model" : "models")"
-                    }()
+        SettingsMasterList {
+            HStack {
+                Spacer()
+                Button {
+                    state.beginNewProvider()
+                } label: {
+                    Label("Add Provider", systemImage: "plus")
+                }
+                .buttonStyle(.settingsOutline)
+                .help("Add a new AI model provider")
+            }
+        } content: {
+            ForEach(appState.providers.providers) { provider in
+                let isSelected = state.selection == provider.id && !state.isNew
+                let hasKey = appState.providers.hasStoredAPIKey(providerID: provider.id) || provider.authenticationMode == .none
+                let statusColor: Color? = hasKey ? nil : AppColors.statusWarning
+                let subtitle: String = {
+                    if !hasKey {
+                        return "Needs API Key"
+                    }
+                    let count = provider.models.count
+                    return count == 0 ? "Configured • 0 models" : "\(count) \(count == 1 ? "model" : "models")"
+                }()
 
+                SettingsMasterRow(isSelected: isSelected, onSelect: { state.selection = provider.id }) {
                     ResourceRow(
                         title: provider.name.isEmpty ? "Untitled Provider" : provider.name,
                         subtitle: subtitle,
                         statusColor: statusColor,
                         isSelected: isSelected
                     )
-                    .tag(provider.id)
                 }
+            }
 
-                if state.isNew {
+            if state.isNew {
+                SettingsMasterRow(isSelected: state.selection == state.draft.id, onSelect: { state.selection = state.draft.id }) {
                     ResourceRow(
                         title: state.draft.name.isEmpty ? "New Provider" : state.draft.name,
                         subtitle: "Unsaved Draft",
                         statusColor: nil,
                         isSelected: state.selection == state.draft.id
                     )
-                    .tag(state.draft.id)
-                }
-            } header: {
-                HStack {
-                    Text("Providers")
-                        .font(.headline)
-                        .foregroundStyle(AppColors.textPrimary)
-
-                    Spacer()
-
-                    Button {
-                        state.beginNewProvider()
-                    } label: {
-                        Label("Add Provider", systemImage: "plus")
-                            .font(.caption.weight(.medium))
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .help("Add a new AI model provider")
                 }
             }
         }
-        .listStyle(.sidebar)
     }
 
     // MARK: - Right Detail Content
@@ -187,9 +173,12 @@ public struct ProviderSettingsView: View {
 
                         advancedSection
                     }
-                    .padding(AppSemanticSpacing.settingsPageInset)
-                    .frame(maxWidth: AppSemanticLayout.settingsDetailContentMaxWidth, alignment: .leading)
+                    .frame(maxWidth: AppSemanticLayout.settingsPageMaxWidth, alignment: .leading)
+                    .padding(.horizontal, AppSemanticLayout.settingsPageLeading)
+                    .padding(.vertical, AppSemanticLayout.settingsPageTop)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .settingsScrollEdgeFade()
             }
         }
     }
@@ -205,13 +194,7 @@ public struct ProviderSettingsView: View {
                         .foregroundStyle(AppColors.textPrimary)
 
                     if state.isNew {
-                        Text("Draft")
-                            .font(.caption2.weight(.semibold))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(AppColors.statusInfo.opacity(0.15))
-                            .foregroundStyle(AppColors.statusInfo)
-                            .clipShape(Capsule())
+                        SettingsBadge("Draft")
                     }
                 }
 
@@ -237,14 +220,14 @@ public struct ProviderSettingsView: View {
                     Button("Connect") {
                         state.connect(store: appState.providers)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.charcoalProminent)
                     .disabled(!state.canConnectOrSave)
                     .keyboardShortcut(.defaultAction)
                 } else {
                     Button("Save Changes") {
                         state.saveChanges(store: appState.providers)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.charcoalProminent)
                     .disabled(!state.canConnectOrSave)
                 }
             }
@@ -466,7 +449,7 @@ public struct ProviderSettingsView: View {
                 Button("Disconnect") { state.logout(store: appState.providers) }
             } else {
                 Button(method.actionTitle) { state.authenticate(store: appState.providers) }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.charcoalProminent)
                     .disabled(state.activeOperation.isWorking || state.draft.name.trimmingCharacters(in: .whitespaces).isEmpty)
                 Text("Opens your browser.")
                     .font(.caption)
@@ -513,7 +496,7 @@ public struct ProviderSettingsView: View {
 
             FormField("URL Handling") {
                 Toggle("Append /v1 suffix automatically", isOn: $state.draft.appendV1Suffix)
-                    .toggleStyle(.checkbox)
+                    .toggleStyle(.charcoalCheckbox)
             }
 
             if state.draft.authenticationMode == .azureAPIKey && state.draft.appendV1Suffix {
@@ -543,7 +526,7 @@ public struct ProviderSettingsView: View {
             }
 
             if !state.isNew {
-                Divider()
+                SettingsDivider()
                     .padding(.vertical, AppSpacing.xxSmall)
 
                 HStack {
@@ -641,9 +624,8 @@ private struct ModelListRow: View {
         HStack(spacing: AppSpacing.small) {
             Button(action: onSelect) {
                 HStack(spacing: AppSpacing.small) {
-                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(isSelected ? Color.accentColor : AppColors.textMuted)
-                        .font(.system(size: 13))
+                    SettingsRadioMark(isSelected: isSelected)
+                        .scaleEffect(0.85)
 
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
@@ -669,25 +651,22 @@ private struct ModelListRow: View {
             }
             .buttonStyle(.plain)
 
+            // Secondary until the pointer reaches them.
             Button(action: onQuickTest) {
                 Image(systemName: "bolt.badge.checkmark")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.accentColor)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(GhostIconButtonStyle(size: 22, iconSize: 11))
             .help("Run Quick Test diagnostics on this model")
 
             Button(action: onInspect) {
                 Image(systemName: "info.circle")
-                    .font(.system(size: 11))
-                    .foregroundStyle(AppColors.textSecondary)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(GhostIconButtonStyle(size: 22, iconSize: 11))
             .help("Inspect model capabilities & overrides")
         }
         .padding(.horizontal, AppSpacing.small)
         .padding(.vertical, 6)
-        .background(isSelected ? AppColors.selection : Color.clear)
+        .background(isSelected ? Color.primary.opacity(0.04) : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: AppRadius.row, style: .continuous))
     }
 
@@ -733,7 +712,7 @@ private struct ModelListRow: View {
             if model.supportsReasoning == true {
                 Image(systemName: "brain.head.profile")
                     .font(.system(size: 10))
-                    .foregroundStyle(Color.purple)
+                    .foregroundStyle(AppColors.textSecondary)
                     .help("Supports Reasoning / Thinking")
             }
             if let ctx = model.contextWindow, ctx > 0 {
@@ -986,7 +965,7 @@ public struct ModelInspectorSheet: View {
 
                         FormField("Hide from Pickers") {
                             Toggle("Hide this model from new conversation picker", isOn: $isHidden)
-                                .toggleStyle(.checkbox)
+                                .toggleStyle(.charcoalCheckbox)
                         }
 
                         FormField("Context Window") {
@@ -1114,12 +1093,12 @@ public struct ModelInspectorSheet: View {
         .padding(.vertical, 2)
         .background(
             truth == .supported
-                ? Color.accentColor.opacity(0.12)
+                ? Color.primary.opacity(0.08)
                 : (truth == .unsupported ? AppColors.surfaceSecondary.opacity(0.6) : AppColors.surfaceSecondary)
         )
         .foregroundStyle(
             truth == .supported
-                ? Color.accentColor
+                ? Color.primary.opacity(0.8)
                 : (truth == .unsupported ? AppColors.textMuted : AppColors.textSecondary)
         )
         .clipShape(Capsule())
@@ -1147,8 +1126,8 @@ public struct ModelInspectorSheet: View {
             .font(.system(size: 9, weight: .medium))
             .padding(.horizontal, 4)
             .padding(.vertical, 1)
-            .background(prov == .inferred ? Color.orange.opacity(0.12) : (prov == .userOverride ? Color.blue.opacity(0.12) : AppColors.surfaceSecondary))
-            .foregroundStyle(prov == .inferred ? Color.orange : (prov == .userOverride ? Color.blue : AppColors.textSecondary))
+            .background(prov == .inferred ? Color.orange.opacity(0.12) : (prov == .userOverride ? Color.primary.opacity(0.12) : AppColors.surfaceSecondary))
+            .foregroundStyle(prov == .inferred ? Color.orange : (prov == .userOverride ? Color.primary : AppColors.textSecondary))
             .clipShape(RoundedRectangle(cornerRadius: AppRadius.small))
     }
 

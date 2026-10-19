@@ -20,7 +20,7 @@ public struct ComposerDraftEditor: View {
 
     public init(
         text: Binding<String>,
-        placeholder: String = "Message Limare… (Shift+Return for new line)",
+        placeholder: String = "Ask anything, @ to mention files or tools…",
         onSend: @escaping () -> Void,
         onFocusChange: ((Bool) -> Void)? = nil,
         onContentHeightChange: ((CGFloat) -> Void)? = nil,
@@ -314,6 +314,7 @@ final class NativeAppKitDraftTextView: NSTextView {
     var onSend: (() -> Void)?
     var onFocusChange: ((Bool) -> Void)?
     var onMenuKey: ((ComposerMenuKey) -> Bool)?
+    static let placeholderMaximumPointSize: CGFloat = 14.5
     var placeholder = "" {
         didSet {
             if placeholder != oldValue { needsDisplay = true }
@@ -324,19 +325,24 @@ final class NativeAppKitDraftTextView: NSTextView {
         super.draw(dirtyRect)
         guard string.isEmpty, !hasMarkedText(), !placeholder.isEmpty else { return }
 
-        let placeholderFont = font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        // The hint is lighter than what it stands for: at most 14.5pt, on the typed text's
+        // baseline so the caret and the hint's letters share a line.
+        let textFont = font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        let placeholderFont = NSFont.systemFont(ofSize: min(Self.placeholderMaximumPointSize, textFont.pointSize))
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.lineBreakMode = .byTruncatingTail
         let attributes: [NSAttributedString.Key: Any] = [
             .font: placeholderFont,
-            .foregroundColor: NSColor.secondaryLabelColor.withAlphaComponent(0.6),
+            .foregroundColor: NSColor.secondaryLabelColor.withAlphaComponent(0.55),
             .paragraphStyle: paragraphStyle
         ]
-        let horizontalInset = textContainerInset.width
+        // Where typed text starts: the container inset plus the line fragment padding, so the
+        // caret sits before the placeholder's first letter rather than on it.
+        let horizontalInset = textContainerInset.width + (textContainer?.lineFragmentPadding ?? 0)
         let lineHeight = ceil(placeholderFont.ascender - placeholderFont.descender + placeholderFont.leading) + 2
         let placeholderRect = NSRect(
             x: horizontalInset,
-            y: textContainerInset.height,
+            y: textContainerInset.height + (textFont.ascender - placeholderFont.ascender),
             width: max(0, bounds.width - horizontalInset * 2),
             height: lineHeight
         )

@@ -17,7 +17,7 @@ struct ConversationRow: View {
 
     private var iconForegroundStyle: Color {
         if isSelected {
-            return Color.accentColor
+            return Color.primary.opacity(0.85)
         }
         if conversation.isPinned {
             return Color.accentColor.opacity(0.85)

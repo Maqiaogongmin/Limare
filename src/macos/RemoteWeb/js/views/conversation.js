@@ -1,6 +1,6 @@
 import { h, clear } from '../dom.js';
 import { renderMessage } from './message.js';
-import { groupTranscript, renderEntry, entryIDs, finishedCompactionLine, currentCompactionLine } from './transcript.js';
+import { groupTranscript, currentFold, renderEntry, entryIDs, finishedCompactionLine, currentCompactionLine } from './transcript.js';
 import { loadMarkdown, isMarkdownReady } from '../markdown.js';
 import { runBadge } from './list.js';
 import { Composer } from './composer.js';
@@ -23,6 +23,8 @@ export class ConversationView {
     this.ui = { openTools: new Set(), openReasoning: new Set(), openHistory: new Set() };
     this.loadingEarlier = false;
     this.pendingMessages = new Map(); // upserts waiting for the next frame
+    this.frozen = null; // the last turn's fold while the reader is away from the bottom
+    this.wasActive = null;
 
     this.title = h('h1', {}, '');
     this.project = h('div', { class: 'topbar-project', hidden: true });
@@ -32,7 +34,7 @@ export class ConversationView {
     this.queuebar = h('div', { class: 'runbar queue', hidden: true });
     this.composer = new Composer({ store, connection, conversationID, isActive: () => isActive(this.store.open && this.store.open.runState) });
     this.earlier = h('button', { class: 'earlier', type: 'button', hidden: true, onclick: () => this.loadEarlier() }, '加载更早的消息');
-    this.messages.addEventListener('scroll', () => this.loadEarlierIfNearTop(), { passive: true });
+    this.messages.addEventListener('scroll', () => { this.loadEarlierIfNearTop(); this.updateFreeze(); }, { passive: true });
 
     this.element = h('section', { class: 'conversation' },
       h('header', { class: 'topbar' },
@@ -46,10 +48,37 @@ export class ConversationView {
     }
   }
 
+  /// The transcript in the Mac's entries, folding the turn the run works on.
+  group(messages = this.store.open.messages) {
+    return groupTranscript(messages, { runActive: isActive(this.store.open && this.store.open.runState), frozen: this.frozen });
+  }
+
+  /// While the reader is away from the bottom the last turn's fold stays where it was, so what
+  /// they read does not move into it; back at the bottom it folds as usual again.
+  updateFreeze() {
+    if (!this.store.open) return;
+    const away = !this.nearBottom();
+    if (away && !this.frozen) {
+      this.frozen = currentFold(this.group());
+    } else if (!away && this.frozen) {
+      this.frozen = null;
+      this.redrawLastTurn();
+    }
+  }
+
+  redrawLastTurn() {
+    if (!this.store.open) return;
+    this.keepBottom(() => {
+      const entries = this.group();
+      const last = entries[entries.length - 1];
+      if (last && last.kind === 'turn') this.entryElement(last.key)?.replaceWith(renderEntry(last, this.ui));
+    });
+  }
+
   /// Every entry again, keeping the reader's place (used once markdown-it has loaded).
   redrawAll() {
     const fromBottom = this.messages.scrollHeight - this.messages.scrollTop;
-    for (const entry of groupTranscript(this.store.open.messages)) {
+    for (const entry of this.group()) {
       this.entryElement(entry.key)?.replaceWith(renderEntry(entry, this.ui));
     }
     this.messages.scrollTop = this.messages.scrollHeight - fromBottom;
@@ -78,7 +107,7 @@ export class ConversationView {
   }
 
   entryHolding(messageID) {
-    const entry = groupTranscript(this.store.open.messages).find((e) => entryIDs(e).includes(messageID));
+    const entry = this.group().find((e) => entryIDs(e).includes(messageID));
     return entry ? this.entryElement(entry.key) : null;
   }
 
@@ -103,13 +132,14 @@ export class ConversationView {
     const open = this.store.open;
     this.pendingMessages.clear();
     this.loadingEarlier = false;
+    this.frozen = null;
     clear(this.messages);
     this.earlier.hidden = !open.hasEarlier;
     this.earlier.textContent = '加载更早的消息';
     this.messages.append(this.earlier);
     if (!open.messages.length) this.messages.append(h('div', { class: 'empty' }, '还没有消息'));
     const fragment = document.createDocumentFragment();
-    for (const entry of groupTranscript(open.messages)) fragment.append(renderEntry(entry, this.ui));
+    for (const entry of this.group(open.messages)) fragment.append(renderEntry(entry, this.ui));
     this.messages.append(fragment);
     this.placeCompactions();
     this.messages.scrollTop = this.messages.scrollHeight;
@@ -124,7 +154,7 @@ export class ConversationView {
     this.loadingEarlier = false;
     const fromBottom = this.messages.scrollHeight - this.messages.scrollTop;
     const added = new Set(messages.map((m) => m.id));
-    const entries = groupTranscript(this.store.open.messages).filter((e) => entryIDs(e).some((id) => added.has(id)));
+    const entries = this.group().filter((e) => entryIDs(e).some((id) => added.has(id)));
     const last = entries[entries.length - 1];
     for (const id of last ? entryIDs(last) : []) if (!added.has(id)) this.entryElement(id)?.remove();
     const fragment = document.createDocumentFragment();
@@ -171,7 +201,7 @@ export class ConversationView {
     this.pendingMessages = new Map();
     if (!pending.size || !this.store.open) return;
     this.keepBottom(() => {
-      for (const entry of groupTranscript(this.store.open.messages)) {
+      for (const entry of this.group()) {
         const touched = entry.messages.filter((m) => pending.has(m.id));
         if (!touched.length) continue;
         const existing = this.entryElement(entry.key);
@@ -209,6 +239,9 @@ export class ConversationView {
     const runState = this.store.open && this.store.open.conversation.id === this.conversationID ? this.store.open.runState : null;
     const active = isActive(runState);
     const run = runState && runState.run;
+    // The run starting or ending changes how its turn folds.
+    if (this.wasActive !== null && this.wasActive !== active) this.redrawLastTurn();
+    this.wasActive = active;
 
     clear(this.runbar);
     this.runbar.hidden = !active;

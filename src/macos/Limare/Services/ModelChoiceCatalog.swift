@@ -56,6 +56,24 @@ enum ModelChoiceCatalog {
         }
     }
 
+    /// What a Model Group would use now, read from its usable members (the routing itself stays
+    /// with the group): its first model for Fallback, which a request tries first, or the number
+    /// of models for Load Balance. `short` fits the composer button, `long` its tooltip.
+    static func groupModelSummary(groupID: String, modelGroups: ModelGroupStore?,
+                                  providers: [ProviderConfiguration]) -> (short: String, long: String)? {
+        guard let modelGroups, let group = modelGroups.group(for: groupID) else { return nil }
+        let entries = modelGroups.availableEntries(for: group, providers: providers)
+        guard let first = entries.first else { return nil }
+        switch group.strategy {
+        case .fallback:
+            let name = first.provider.models.first(where: { $0.id == first.modelID })?.displayName ?? first.modelID
+            return (name, "Model group \(group.name): tries \(first.provider.name) / \(name) first (Fallback)")
+        case .loadBalance:
+            let count = entries.count == 1 ? "1 model" : "\(entries.count) models"
+            return (count, "Model group \(group.name): spreads conversations across \(count) (Load Balance)")
+        }
+    }
+
     /// The short name the composer button shows: a direct model without its provider.
     static func shortLabel(for source: ConversationModelSource?, modelGroups: ModelGroupStore?, providers: [ProviderConfiguration]) -> String {
         guard case .direct(let providerID, let modelID) = source else { return label(for: source, modelGroups: modelGroups, providers: providers) }

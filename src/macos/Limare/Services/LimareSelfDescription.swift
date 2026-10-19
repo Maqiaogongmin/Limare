@@ -61,7 +61,9 @@ enum LimareSelfDescription {
         case .runtimeUnavailable:
             return "unavailable in this build."
         case .ready:
-            return facts.computerUseToolAvailable ? "available here as computer_use." : "on, but not available in this conversation."
+            return facts.computerUseToolAvailable
+                ? "available here as computer_use."
+                : "on, but not offered to this request (another conversation may be using it); it is offered again with the user's next message. There is no per-conversation switch."
         }
     }
 }

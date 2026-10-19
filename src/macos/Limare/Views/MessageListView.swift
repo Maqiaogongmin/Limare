@@ -9,7 +9,13 @@ struct MessageListView: View {
     var compactionMarkers: [CompactionMarker] = []
     /// The Compact command in progress or just failed, shown as a line at the end.
     var compaction: ManualCompaction? = nil
+    /// The conversation's run is working or paused: its last turn folds the steps before the
+    /// current one.
+    var isRunActive = false
     @State private var coordinator = ScrollFollowCoordinator()
+    /// The last turn's fold while the reader is away from the bottom, so nothing they are
+    /// reading or selecting moves into the fold under them.
+    @State private var frozenFold: TranscriptTurnGrouping.FrozenFold?
     /// Scroll-driven state lives outside this view's dependencies: only the navigator reads it,
     /// so scrolling never re-evaluates the transcript rows.
     @State private var viewport = TranscriptViewportState()
@@ -21,7 +27,7 @@ struct MessageListView: View {
     var body: some View {
         // Derived once per transcript change; rows receive plain values and skip re-rendering
         // whenever their own row is unchanged.
-        let entries = TranscriptTurnGrouping.project(messages)
+        let entries = TranscriptTurnGrouping.project(messages, isRunActive: isRunActive, frozenFold: frozenFold)
         let navigatorEntries = UserMessageNavigatorModel.entries(from: messages)
         let markersByEntry = CompactionMarkerPlacement.markersByEntry(compactionMarkers, entries: entries)
         let trailingCompaction = compaction.flatMap { $0.isFinished ? nil : $0 }
@@ -63,14 +69,20 @@ struct MessageListView: View {
                 .frame(maxWidth: AppLayout.transcriptMaximumWidth)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, AppSpacing.chatHorizontal)
-                .padding(.vertical, AppSpacing.chatVertical)
             }
+            // Margins, not padding: a scroll to a row (the tail as it grows, a jump to a message)
+            // stops inside them, where padding would be scrolled past. Clear of the top fade, and
+            // of the composer below by more than its fade, so the last message's buttons never
+            // sit against the composer's edge.
+            .contentMargins(.top, AppLayout.transcriptTopClear + AppLayout.transcriptTopFade + AppSpacing.xxSmall, for: .scrollContent)
+            .contentMargins(.bottom, AppSpacing.chatVertical + AppSpacing.large, for: .scrollContent)
             // Opens on the latest message and stays there as the transcript grows, but a short
             // conversation reads from the top like any chat; one `.bottom` anchor for every role
-            // pinned "你好" to the bottom of an empty window.
+            // pinned "你好" to the bottom of an empty window. A reader who left the bottom keeps
+            // their place while the run adds below them.
             .defaultScrollAnchor(.top, for: .alignment)
             .defaultScrollAnchor(.bottom, for: .initialOffset)
-            .defaultScrollAnchor(.bottom, for: .sizeChanges)
+            .defaultScrollAnchor(coordinator.isFollowingTail ? .bottom : .top, for: .sizeChanges)
             .onScrollTargetVisibilityChange(idType: UUID.self, threshold: 0.1) { visibleIDs in
                 if let active = UserMessageNavigatorModel.activeEntryID(visibleIDs: visibleIDs, messages: messages) {
                     viewport.activeUserMessageID = active
@@ -91,7 +103,7 @@ struct MessageListView: View {
                     TranscriptNavigatorOverlay(entries: navigatorEntries, viewport: viewport) { id in
                         jumpToUserMessage(id, proxy: proxy)
                     }
-                    .padding(.leading, AppSpacing.xSmall)
+                    .padding(.leading, AppSpacing.xxxSmall)
                 }
             }
             .onScrollGeometryChange(for: TranscriptViewportState.Geometry.self) { geometry in
@@ -126,13 +138,16 @@ struct MessageListView: View {
                     proxy.scrollTo(target, anchor: .top)
                     DispatchQueue.main.async { proxy.scrollTo(target, anchor: .top) }
                 } else {
-                    scrollToBottom(proxy: proxy)
+                    scrollToBottom(proxy: proxy, entryID: entries.last?.id)
                 }
             }
             .onChange(of: scrollChangeToken) {
                 if coordinator.shouldScrollOnMessageUpdate(messages: messages) {
-                    scrollToBottom(proxy: proxy)
+                    scrollToBottom(proxy: proxy, entryID: entries.last?.id)
                 }
+            }
+            .onChange(of: coordinator.isFollowingTail) { _, isFollowing in
+                frozenFold = isFollowing ? nil : TranscriptTurnGrouping.lastTurnFold(of: entries)
             }
             .onChange(of: trailingCompaction) { _, status in
                 // The line appears at the end: keep it in view when the user is at the bottom.
@@ -187,9 +202,10 @@ struct MessageListView: View {
     private static let compactionStatusID = UUID()
 
     /// Never animated (Enchanted scrolls the same way): an animated scroll that runs while rows are
-    /// added or a turn folds into one row ends on an offset computed for the old layout.
-    private func scrollToBottom(proxy: ScrollViewProxy) {
-        guard let targetID = messages.last?.id else { return }
+    /// added or a turn folds into one row ends on an offset computed for the old layout. The
+    /// target is the last entry: the last message may sit inside a fold without an id of its own.
+    private func scrollToBottom(proxy: ScrollViewProxy, entryID: UUID?) {
+        guard let targetID = entryID else { return }
         proxy.scrollTo(targetID, anchor: .bottom)
         DispatchQueue.main.async {
             proxy.scrollTo(targetID, anchor: .bottom)
@@ -273,17 +289,33 @@ private struct TranscriptEntryView: View, Equatable {
     }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.xSmall) {
+            if entry.startsAssistantTurn {
+                AssistantSpeakerHeader()
+            }
+            turnBody
+        }
+    }
+
+    private var turnBody: some View {
         let message = entry.message
-        VStack(alignment: .leading, spacing: AppSpacing.large) {
+        return VStack(alignment: .leading, spacing: AppSpacing.large) {
             if let history = entry.history {
-                DisclosureGroup("执行过程 · \(history.count) 条记录") {
-                    if let reasoning = message.reasoningContent, !reasoning.isEmpty {
+                DisclosureGroup {
+                    if entry.row.hidesReasoning, let reasoning = message.reasoningContent, !reasoning.isEmpty {
                         ReasoningDisclosureView(reasoning: reasoning, state: message.state, hasVisibleOutput: ReasoningDisclosureView.hasVisibleOutput(content: message.content, toolCalls: message.toolCalls))
                     }
-                    ForEach(history) { item in
-                        MessageRow(row: item)
-                            .equatable()
+                    VStack(alignment: .leading, spacing: AppSpacing.xxSmall) {
+                        ForEach(history) { item in
+                            MessageRow(row: item)
+                                .equatable()
+                        }
                     }
+                } label: {
+                    ExecutionHistoryLabel(count: history.count, unsuccessfulCount: entry.unsuccessfulCount)
+                }
+                if !entry.pinnedToolCalls.isEmpty {
+                    FoldedChangeNotices(toolCalls: entry.pinnedToolCalls)
                 }
             }
             MessageRow(
@@ -294,6 +326,63 @@ private struct TranscriptEntryView: View, Equatable {
                 onCollapse: onCollapse
             )
             .equatable()
+        }
+    }
+}
+
+/// The one speaker line of an assistant turn, above everything the turn shows.
+private struct AssistantSpeakerHeader: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        HStack(spacing: AppSpacing.xSmall) {
+            AssistantAvatarView(
+                image: appState.soul.cachedAvatarImage,
+                size: 20
+            )
+            Text(appState.soul.effectiveDisplayName)
+                .font(AppTypography.interfaceSubheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.bottom, AppSpacing.xxxSmall)
+    }
+}
+
+/// A fold's title; tool calls inside it that did not succeed stay counted outside it.
+private struct ExecutionHistoryLabel: View {
+    let count: Int
+    let unsuccessfulCount: Int
+
+    /// A section label, quieter than the answer below it: secondary colour, one size under the
+    /// interface text, whatever the conversation size is.
+    var body: some View {
+        Group {
+            if unsuccessfulCount > 0 {
+                Text("执行过程 · \(count) 条记录\(Text(" · \(unsuccessfulCount) 个未成功").foregroundColor(AppColors.statusWarning))")
+            } else {
+                Text("执行过程 · \(count) 条记录")
+            }
+        }
+        .font(AppTypography.interfaceSubheadline.weight(.medium))
+        .foregroundStyle(.secondary)
+    }
+}
+
+/// Folded tool calls that failed after changing files keep their card, and its undo, outside
+/// the fold. Reads the undo journal itself, so the equatable entry above never hides a change.
+private struct FoldedChangeNotices: View {
+    let toolCalls: [ToolCallRecord]
+    @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
+
+    var body: some View {
+        let noticed = toolCalls.filter { ToolCallCard.changeNotice(for: $0, appState: appState, window: window) != nil }
+        if !noticed.isEmpty {
+            VStack(alignment: .leading, spacing: AppSpacing.xxSmall) {
+                ForEach(noticed) { toolCall in
+                    ToolCallCard(toolCall: toolCall)
+                }
+            }
         }
     }
 }
@@ -317,17 +406,7 @@ private struct MessageRow: View, Equatable {
         guard showsRetract else { return nil }
         return onRetract
     }
-    @Environment(AppState.self) private var appState
     @State private var isHovered = false
-
-    private var hasReasoning: Bool {
-        guard message.role == .assistant,
-              let reasoning = message.reasoningContent,
-              !reasoning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return false
-        }
-        return true
-    }
 
     var body: some View {
         let presentation = row.presentation
@@ -352,11 +431,11 @@ private struct MessageRow: View, Equatable {
                     }
                 }
             } else {
+                // A reply takes the column's whole width, as in other chat apps; only the user's
+                // own messages keep a gutter, on their leading side. A trailing gutter here left
+                // a narrow chat a dozen characters to a line.
                 messageBubble(presentation: presentation)
-            }
-
-            if message.role == .assistant {
-                Spacer(minLength: AppLayout.messageGutterMinimumWidth)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .onHover { hovering in
@@ -366,23 +445,6 @@ private struct MessageRow: View, Equatable {
 
     private func messageBubble(presentation: AssistantTurnPresentation) -> some View {
         VStack(alignment: .leading, spacing: AppSpacing.xSmall) {
-            if message.role == .assistant && (presentation.showsPrimaryProse || !message.attachments.isEmpty || hasReasoning) {
-                HStack(spacing: AppSpacing.xSmall) {
-                    AssistantAvatarView(
-                        image: appState.soul.cachedAvatarImage,
-                        size: 20
-                    )
-                    Text(appState.soul.effectiveDisplayName)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-
-                    if presentation.showsSpeakerAction, let payload = presentation.authorizedSpeakerPayload, !VoiceTextSanitizer.sanitize(payload).isEmpty {
-                        SpeakerButton(messageID: message.id, spokenPayload: payload)
-                    }
-                }
-                .padding(.bottom, AppSpacing.xxxSmall)
-            }
-
             if !hidesReasoning, message.role == .assistant, let reasoning = message.reasoningContent, !reasoning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 ReasoningDisclosureView(reasoning: reasoning, state: message.state, hasVisibleOutput: ReasoningDisclosureView.hasVisibleOutput(content: message.content, toolCalls: message.toolCalls))
                     .padding(.bottom, presentation.showsPrimaryProse ? AppSpacing.xxSmall : 0)
@@ -391,7 +453,7 @@ private struct MessageRow: View, Equatable {
             messageContent(presentation: presentation)
 
             if !message.toolCalls.isEmpty {
-                VStack(alignment: .leading, spacing: AppSpacing.small) {
+                VStack(alignment: .leading, spacing: AppSpacing.xxSmall) {
                     ForEach(message.toolCalls) { toolCall in
                         if toolCall.name == "delegate_task" {
                             AgentRunGroupView(toolCall: toolCall)
@@ -408,9 +470,19 @@ private struct MessageRow: View, Equatable {
                     .padding(.top, AppSpacing.xxSmall)
             }
 
-            if let payload = row.turnCopyPayload {
-                TurnCopyButton(payload: payload)
-                    .padding(.top, AppSpacing.xxSmall)
+            let speakerPayload = presentation.showsSpeakerAction
+                ? presentation.authorizedSpeakerPayload.flatMap { VoiceTextSanitizer.sanitize($0).isEmpty ? nil : $0 }
+                : nil
+            if row.turnCopyPayload != nil || speakerPayload != nil {
+                HStack(spacing: AppSpacing.small) {
+                    if let payload = row.turnCopyPayload {
+                        TurnCopyButton(payload: payload)
+                    }
+                    if let speakerPayload {
+                        SpeakerButton(messageID: message.id, spokenPayload: speakerPayload)
+                    }
+                }
+                .padding(.top, AppSpacing.xxSmall)
             }
         }
         .padding(.horizontal, message.role == .user ? AppSpacing.medium : 0)
@@ -891,47 +963,119 @@ struct TranscriptRow: Identifiable, Equatable, Sendable {
 }
 
 /// Presentation projection only: canonical message history and copy/read-aloud semantics remain unchanged.
+///
+/// A turn is the assistant messages between two user messages. Its earlier steps fold under one
+/// disclosure once it ends in a finished answer, while it runs (all but the current step), and
+/// before a message the user sent while it worked; otherwise each message shows on its own.
 enum TranscriptTurnGrouping {
     struct Entry: Identifiable, Equatable, Sendable {
+        /// A folding turn's first message, so the entry keeps its identity, and its fold's
+        /// open state, from the first step to the answer.
+        let id: UUID
         let row: TranscriptRow
         let history: [TranscriptRow]?
+        /// The first entry of an assistant turn, which carries the turn's one speaker line.
+        let startsAssistantTurn: Bool
+        /// Folded tool calls that did not succeed, counted on the fold's title.
+        let unsuccessfulCount: Int
+        /// Folded tool calls whose failure may have left file changes, shown outside the fold.
+        let pinnedToolCalls: [ToolCallRecord]
         var message: ChatMessage { row.message }
-        var id: UUID { row.id }
     }
 
-    static func project(_ messages: [ChatMessage]) -> [Entry] {
+    /// Where the last turn's fold stood when the reader left the bottom of the transcript.
+    struct FrozenFold: Equatable, Sendable {
+        let anchorID: UUID
+        let foldedCount: Int
+    }
+
+    static func project(_ messages: [ChatMessage], isRunActive: Bool = false, frozenFold: FrozenFold? = nil) -> [Entry] {
         var result: [Entry] = []
         var turn: [ChatMessage] = []
-        func entry(_ message: ChatMessage, history: [ChatMessage]? = nil) -> Entry {
-            // A folded turn's files show on its answer, not inside the folded history.
-            let delivered = history.map { TurnDeliverables.artifactIDs(in: $0 + [message]) }
-            return Entry(
-                row: TranscriptRow(message: message, in: messages, hidesReasoning: history != nil, deliveredArtifactIDs: delivered),
-                history: history?.map { TranscriptRow(message: $0, in: messages, deliveredArtifactIDs: []) }
+        func plain(_ message: ChatMessage, startsTurn: Bool) -> Entry {
+            Entry(
+                id: message.id,
+                row: TranscriptRow(message: message, in: messages),
+                history: nil,
+                startsAssistantTurn: startsTurn,
+                unsuccessfulCount: 0,
+                pinnedToolCalls: []
             )
         }
-        func flush() {
+        /// The turn's first `rowIndex` messages folded above the message at `rowIndex`, which
+        /// shows the whole turn's files.
+        func folded(rowIndex: Int, hidesReasoning: Bool) -> Entry {
+            let history = Array(turn[..<rowIndex])
+            let calls = history.flatMap(\.toolCalls)
+            return Entry(
+                id: turn[0].id,
+                row: TranscriptRow(
+                    message: turn[rowIndex],
+                    in: messages,
+                    hidesReasoning: hidesReasoning,
+                    deliveredArtifactIDs: TurnDeliverables.artifactIDs(in: turn)
+                ),
+                history: history.map { TranscriptRow(message: $0, in: messages, deliveredArtifactIDs: []) },
+                startsAssistantTurn: true,
+                unsuccessfulCount: calls.filter { isUnsuccessful($0.state) }.count,
+                pinnedToolCalls: calls.filter { mayHaveLeftChanges($0.state) }
+            )
+        }
+        func flush(isLast: Bool, endsAtSteer: Bool) {
             guard let final = turn.last else { return }
-            if final.state == .complete, final.toolCalls.isEmpty,
-               !final.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                let history = Array(turn.dropLast())
-                let hasDetails = !history.isEmpty || !(final.reasoningContent ?? "").isEmpty
-                result.append(entry(final, history: hasDetails ? history : nil))
+            let isFinished = final.state == .complete && final.toolCalls.isEmpty
+                && !final.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            if let frozenFold, frozenFold.anchorID == turn[0].id {
+                let rowIndex = min(frozenFold.foldedCount, turn.count - 1)
+                if rowIndex > 0 {
+                    result.append(folded(rowIndex: rowIndex, hidesReasoning: isFinished && rowIndex == turn.count - 1))
+                    result.append(contentsOf: turn[(rowIndex + 1)...].map { plain($0, startsTurn: false) })
+                } else {
+                    result.append(contentsOf: turn.enumerated().map { plain($1, startsTurn: $0 == 0) })
+                }
+            } else if isFinished {
+                let hasDetails = turn.count > 1 || !(final.reasoningContent ?? "").isEmpty
+                result.append(hasDetails ? folded(rowIndex: turn.count - 1, hidesReasoning: true) : plain(final, startsTurn: true))
+            } else if turn.count > 1, (isLast && isRunActive) || endsAtSteer {
+                result.append(folded(rowIndex: turn.count - 1, hidesReasoning: false))
             } else {
-                result.append(contentsOf: turn.map { entry($0) })
+                result.append(contentsOf: turn.enumerated().map { plain($1, startsTurn: $0 == 0) })
             }
             turn.removeAll(keepingCapacity: true)
         }
         for message in messages {
             if message.role == .user {
-                flush()
-                result.append(entry(message))
+                flush(isLast: false, endsAtSteer: message.sentWhileWorking)
+                result.append(plain(message, startsTurn: false))
             } else {
                 turn.append(message)
             }
         }
-        flush()
+        flush(isLast: true, endsAtSteer: false)
         return result
+    }
+
+    /// The last turn's current fold, to keep while the reader is away from the bottom; `nil` when
+    /// the transcript ends with a user message.
+    static func lastTurnFold(of entries: [Entry]) -> FrozenFold? {
+        guard let last = entries.last, last.message.role == .assistant,
+              let start = entries.last(where: \.startsAssistantTurn) else { return nil }
+        return FrozenFold(anchorID: start.id, foldedCount: start.history?.count ?? 0)
+    }
+
+    static func isUnsuccessful(_ state: ToolExecutionState) -> Bool {
+        switch state {
+        case .failed, .timedOut, .cancelled, .denied, .interrupted: return true
+        case .queued, .awaitingApproval, .running, .completed: return false
+        }
+    }
+
+    /// The end states `ToolCallChangeTruth` checks for file changes.
+    static func mayHaveLeftChanges(_ state: ToolExecutionState) -> Bool {
+        switch state {
+        case .failed, .timedOut, .cancelled, .interrupted: return true
+        case .queued, .awaitingApproval, .running, .completed, .denied: return false
+        }
     }
 }
 

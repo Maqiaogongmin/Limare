@@ -5,13 +5,8 @@ struct ModelGroupsView: View {
     @State private var state = ModelGroupsSettingsState()
 
     var body: some View {
-        HSplitView {
+        HStack(spacing: 0) {
             sidebarPane
-                .frame(
-                    minWidth: AppLayout.settingsListMinimumWidth,
-                    idealWidth: AppLayout.settingsListIdealWidth,
-                    maxWidth: AppLayout.settingsListMaximumWidth
-                )
 
             detailPane
                 .frame(
@@ -66,89 +61,78 @@ struct ModelGroupsView: View {
 
     // MARK: - Left Sidebar
 
+    // The page title already says Model Groups; the list's header holds only its add button.
     private var sidebarPane: some View {
-        List(selection: $state.selection) {
-            // Section 1: Model Settings
-            Section("MODEL SETTINGS") {
+        SettingsMasterList {
+            HStack {
+                Spacer()
+                Button {
+                    state.showCreateGroupSheet = true
+                } label: {
+                    Label("New Group", systemImage: "plus")
+                }
+                .buttonStyle(.settingsOutline)
+                .help("Create a new Model Group")
+            }
+        } content: {
+            masterSectionLabel("Model Settings")
+            SettingsMasterRow(isSelected: state.selection == .modelUse, onSelect: { state.selection = .modelUse }) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Model Use")
-                        .font(.body.weight(.medium))
+                        .font(AppTypography.interface.weight(state.selection == .modelUse ? .semibold : .regular))
                         .foregroundStyle(AppColors.textPrimary)
                     Text("Chat, images, voice & extra help")
-                        .font(.caption2)
+                        .font(AppTypography.interfaceCaption2)
                         .foregroundStyle(AppColors.textSecondary)
                 }
-                .padding(.vertical, 3)
-                .tag(ModelGroupsSelection.modelUse)
+                .padding(.horizontal, AppSemanticSpacing.resourceListRowPaddingHorizontal)
+                .padding(.vertical, AppSemanticSpacing.resourceListRowPaddingVertical)
             }
 
-            // Section 2: Groups
-            Section {
-                if appState.modelGroups.groups.isEmpty {
-                    VStack(spacing: AppSpacing.xSmall) {
-                        Text("No Groups Yet")
-                            .font(.subheadline)
-                            .foregroundStyle(AppColors.textSecondary)
-                        Button("New Group") {
-                            state.showCreateGroupSheet = true
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
+            masterSectionLabel("Groups")
+                .padding(.top, AppSpacing.small)
+            if appState.modelGroups.groups.isEmpty {
+                Text("No Groups Yet")
+                    .font(.subheadline)
+                    .foregroundStyle(AppColors.textSecondary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, AppSpacing.medium)
-                } else {
-                    ForEach(Array(appState.modelGroups.groups.enumerated()), id: \.element.id) { index, group in
-                        GroupSidebarRow(group: group, state: state)
-                            .tag(ModelGroupsSelection.group(group.id))
-                            .contextMenu {
-                                Button("Move Up") {
-                                    moveGroup(from: index, to: index - 1)
-                                }
-                                .disabled(index == 0)
-
-                                Button("Move Down") {
-                                    moveGroup(from: index, to: index + 1)
-                                }
-                                .disabled(index >= appState.modelGroups.groups.count - 1)
-
-                                Divider()
-
-                                Button("Delete Group…", role: .destructive) {
-                                    state.pendingDeleteGroupID = group.id
-                                }
-                            }
+            } else {
+                ForEach(Array(appState.modelGroups.groups.enumerated()), id: \.element.id) { index, group in
+                    let selection = ModelGroupsSelection.group(group.id)
+                    SettingsMasterRow(isSelected: state.selection == selection, onSelect: { state.selection = selection }) {
+                        GroupSidebarRow(group: group, state: state, isSelected: state.selection == selection)
                     }
-
-                    Button {
-                        state.showCreateGroupSheet = true
-                    } label: {
-                        HStack(spacing: AppSpacing.xSmall) {
-                            Image(systemName: "plus")
-                            Text("New Group")
+                    .contextMenu {
+                        Button("Move Up") {
+                            moveGroup(from: index, to: index - 1)
                         }
-                        .font(.caption)
-                        .foregroundStyle(AppColors.textSecondary)
+                        .disabled(index == 0)
+
+                        Button("Move Down") {
+                            moveGroup(from: index, to: index + 1)
+                        }
+                        .disabled(index >= appState.modelGroups.groups.count - 1)
+
+                        Divider()
+
+                        Button("Delete Group…", role: .destructive) {
+                            state.pendingDeleteGroupID = group.id
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .padding(.vertical, 4)
-                }
-            } header: {
-                HStack {
-                    Text("GROUPS")
-                    Spacer()
-                    Button {
-                        state.showCreateGroupSheet = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .buttonStyle(.plain)
-                    .help("Create a new Model Group")
                 }
             }
         }
-        .listStyle(.sidebar)
-        .background(AppColors.surfaceSecondary)
+    }
+
+    /// A small caption over a part of the list, in place of a List section header.
+    private func masterSectionLabel(_ title: String) -> some View {
+        Text(title)
+            .font(AppTypography.interfaceCaption.weight(.semibold))
+            .foregroundStyle(AppColors.textSecondary)
+            .padding(.horizontal, AppSpacing.small)
+            .padding(.top, AppSpacing.xxSmall)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private func moveGroup(from source: Int, to destination: Int) {
@@ -187,34 +171,30 @@ private struct GroupSidebarRow: View {
     @Environment(AppState.self) private var appState
     let group: ModelGroup
     let state: ModelGroupsSettingsState
+    var isSelected = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: AppSpacing.xSmall) {
                 Text(group.name)
-                    .font(.body.weight(.medium))
+                    .font(AppTypography.interface.weight(isSelected ? .semibold : .regular))
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
 
                 Spacer()
 
                 ForEach(state.roleBadges(for: group, store: appState.modelGroups), id: \.self) { badge in
-                    Text(badge)
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Color.accentColor)
-                        .padding(.horizontal, AppSemanticSpacing.badgePaddingHorizontal)
-                        .padding(.vertical, AppSemanticSpacing.badgePaddingVertical)
-                        .background(Color.accentColor.opacity(0.12))
-                        .clipShape(Capsule())
+                    SettingsBadge(badge)
                 }
             }
 
             Text(state.summary(for: group))
-                .font(.caption2)
+                .font(AppTypography.interfaceCaption2)
                 .foregroundStyle(AppColors.textSecondary)
                 .lineLimit(1)
         }
-        .padding(.vertical, AppSemanticSpacing.settingsRowVerticalPadding)
+        .padding(.horizontal, AppSemanticSpacing.resourceListRowPaddingHorizontal)
+        .padding(.vertical, AppSemanticSpacing.resourceListRowPaddingVertical)
     }
 }
 
@@ -242,7 +222,7 @@ private struct ModelUseView: View {
                     )
                 }
 
-                Divider()
+                SettingsDivider()
 
                 // Images Role
                 VStack(alignment: .leading, spacing: AppSpacing.xSmall) {
@@ -268,7 +248,7 @@ private struct ModelUseView: View {
                     }
                 }
 
-                Divider()
+                SettingsDivider()
 
                 // Voice Input Role
                 VStack(alignment: .leading, spacing: AppSpacing.xSmall) {
@@ -294,7 +274,7 @@ private struct ModelUseView: View {
                     }
                 }
 
-                Divider()
+                SettingsDivider()
 
                 // Voice Output Role
                 VStack(alignment: .leading, spacing: AppSpacing.xSmall) {
@@ -340,7 +320,7 @@ private struct ModelUseView: View {
                     )
                 }
 
-                Divider()
+                SettingsDivider()
 
                 // Specialist Models Row
                 SettingsRow(
@@ -370,7 +350,7 @@ private struct ModelUseView: View {
             }
         }
         .pickerStyle(.menu)
-        .frame(width: 220)
+        .frame(width: 220, alignment: .trailing)
         .labelsHidden()
     }
 }
@@ -428,7 +408,7 @@ private struct ModelGroupDetailView: View {
                         Button("Save") {
                             saveName()
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.charcoalProminent)
                         .controlSize(.small)
                     }
 
@@ -439,6 +419,7 @@ private struct ModelGroupDetailView: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .foregroundStyle(AppColors.statusError)
                 }
 
                 HStack(spacing: AppSpacing.small) {
@@ -447,13 +428,7 @@ private struct ModelGroupDetailView: View {
                         .foregroundStyle(AppColors.textSecondary)
 
                     ForEach(state.roleBadges(for: group, store: appState.modelGroups), id: \.self) { badge in
-                        Text(badge)
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(Color.accentColor)
-                            .padding(.horizontal, AppSemanticSpacing.badgePaddingHorizontal)
-                            .padding(.vertical, AppSemanticSpacing.badgePaddingVertical)
-                            .background(Color.accentColor.opacity(0.12))
-                            .clipShape(Capsule())
+                        SettingsBadge(badge)
                     }
                 }
             }
@@ -493,7 +468,7 @@ private struct ModelGroupDetailView: View {
                     } label: {
                         Label("Add Models", systemImage: "plus")
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.charcoalProminent)
                     .controlSize(.small)
                     .padding(.top, AppSpacing.xxSmall)
                 }
@@ -505,7 +480,7 @@ private struct ModelGroupDetailView: View {
                         memberRow(item: item, totalCount: members.count)
                     }
 
-                    Divider()
+                    SettingsDivider()
                         .padding(.vertical, AppSpacing.xxSmall)
 
                     HStack {
@@ -538,21 +513,9 @@ private struct ModelGroupDetailView: View {
                         .lineLimit(1)
 
                     if item.isUnbound {
-                        Text("Unassigned")
-                            .font(.system(size: 10, weight: .semibold))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(AppColors.surfaceSecondary)
-                            .foregroundStyle(AppColors.textSecondary)
-                            .clipShape(Capsule())
+                        SettingsBadge("Unassigned")
                         ForEach(item.knownCapabilities, id: \.self) { cap in
-                            Text(cap)
-                                .font(.system(size: 9, weight: .medium))
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 1)
-                                .background(Color.accentColor.opacity(0.08))
-                                .foregroundStyle(Color.accentColor)
-                                .clipShape(Capsule())
+                            SettingsBadge(cap)
                         }
                     } else if !item.roleStatuses.isEmpty {
                         ForEach(item.roleStatuses.indices, id: \.self) { idx in
@@ -560,21 +523,9 @@ private struct ModelGroupDetailView: View {
                         }
                     } else {
                         if item.isAvailable {
-                            Text("Ready for Chat")
-                                .font(.system(size: 10, weight: .semibold))
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(AppColors.statusSuccess.opacity(0.12))
-                                .foregroundStyle(AppColors.statusSuccess)
-                                .clipShape(Capsule())
+                            SettingsBadge("Ready for Chat", tone: .positive)
                         } else {
-                            Text(item.unavailableReason ?? "Not Ready for Chat")
-                                .font(.system(size: 10, weight: .semibold))
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(AppColors.statusWarning.opacity(0.15))
-                                .foregroundStyle(AppColors.statusWarning)
-                                .clipShape(Capsule())
+                            SettingsBadge(item.unavailableReason ?? "Not Ready for Chat")
                         }
                     }
                 }
@@ -642,54 +593,18 @@ private struct ModelGroupDetailView: View {
     private func roleStatusBadge(_ status: RoleMemberStatusItem) -> some View {
         switch status.readiness {
         case .ready:
-            Text(status.readiness.label)
-                .font(.system(size: 10, weight: .semibold))
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1)
-                .background(AppColors.statusSuccess.opacity(0.12))
-                .foregroundStyle(AppColors.statusSuccess)
-                .clipShape(Capsule())
+            SettingsBadge(status.readiness.label, tone: .positive)
         case .capabilityUnknown:
-            Text(status.readiness.label)
-                .font(.system(size: 10, weight: .semibold))
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1)
-                .background(AppColors.surfaceSecondary)
-                .foregroundStyle(AppColors.textSecondary)
-                .clipShape(Capsule())
+            SettingsBadge(status.readiness.label)
         case .protocolUnsupported(_, let reason):
-            Text("Protocol Unsupported")
-                .font(.system(size: 10, weight: .semibold))
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1)
-                .background(AppColors.statusWarning.opacity(0.15))
-                .foregroundStyle(AppColors.statusWarning)
-                .clipShape(Capsule())
+            SettingsBadge("Protocol Unsupported")
                 .help(reason)
         case .credentialMissing:
-            Text("Credential Missing")
-                .font(.system(size: 10, weight: .semibold))
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1)
-                .background(AppColors.statusWarning.opacity(0.15))
-                .foregroundStyle(AppColors.statusWarning)
-                .clipShape(Capsule())
+            SettingsBadge("Credential Missing")
         case .modelRemoved:
-            Text("Model Removed")
-                .font(.system(size: 10, weight: .semibold))
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1)
-                .background(AppColors.statusError.opacity(0.15))
-                .foregroundStyle(AppColors.statusError)
-                .clipShape(Capsule())
+            SettingsBadge("Model Removed", tone: .danger)
         case .notReady(_, let reason):
-            Text(reason)
-                .font(.system(size: 10, weight: .semibold))
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1)
-                .background(AppColors.statusWarning.opacity(0.15))
-                .foregroundStyle(AppColors.statusWarning)
-                .clipShape(Capsule())
+            SettingsBadge(reason)
         }
     }
 
@@ -719,24 +634,24 @@ private struct ModelGroupDetailView: View {
                     ? "Try models from top to bottom. If one cannot complete the request, Limare can continue with the next model."
                     : "New conversations are distributed across available models. A conversation normally stays with the selected model."
             ) {
-                Picker("", selection: Binding(
-                    get: { group.strategy },
-                    set: { newStrategy in
-                        var updated = group
-                        updated.strategy = newStrategy
-                        appState.modelGroups.updateGroup(updated)
-                    }
-                )) {
-                    Text("Fallback").tag(RoutingStrategy.fallback)
-                    Text("Load Balance").tag(RoutingStrategy.loadBalance)
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 220)
-                .labelsHidden()
+                SettingsSegmentedPicker(
+                    selection: Binding(
+                        get: { group.strategy },
+                        set: { newStrategy in
+                            var updated = group
+                            updated.strategy = newStrategy
+                            appState.modelGroups.updateGroup(updated)
+                        }
+                    ),
+                    options: [(value: RoutingStrategy.fallback, title: "Fallback"),
+                              (value: RoutingStrategy.loadBalance, title: "Load Balance")]
+                )
+                .fixedSize()
+                .accessibilityLabel("Routing Strategy")
             }
 
             if group.strategy == .fallback {
-                Divider()
+                SettingsDivider()
 
                 SettingsRow(
                     "Fallback Behavior",
@@ -744,20 +659,20 @@ private struct ModelGroupDetailView: View {
                         ? "Retry temporary failures before switching models."
                         : "Move to the next model when a provider request fails."
                 ) {
-                    Picker("", selection: Binding(
-                        get: { group.fallbackStrategy },
-                        set: { newFallback in
-                            var updated = group
-                            updated.fallbackStrategy = newFallback
-                            appState.modelGroups.updateGroup(updated)
-                        }
-                    )) {
-                        Text("Standard").tag(FallbackStrategy.limited)
-                        Text("Switch immediately").tag(FallbackStrategy.always)
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 220)
-                    .labelsHidden()
+                    SettingsSegmentedPicker(
+                        selection: Binding(
+                            get: { group.fallbackStrategy },
+                            set: { newFallback in
+                                var updated = group
+                                updated.fallbackStrategy = newFallback
+                                appState.modelGroups.updateGroup(updated)
+                            }
+                        ),
+                        options: [(value: FallbackStrategy.limited, title: "Standard"),
+                                  (value: FallbackStrategy.always, title: "Switch immediately")]
+                    )
+                    .fixedSize()
+                    .accessibilityLabel("Fallback Behavior")
                 }
             }
         }
@@ -883,7 +798,7 @@ private struct NewModelGroupSheet: View {
                     state.selection = .group(newGroup.id)
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.charcoalProminent)
                 .disabled(groupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .keyboardShortcut(.defaultAction)
             }
@@ -917,7 +832,7 @@ private struct SpecialistModelsSheet: View {
                 Button("Done") {
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.charcoalProminent)
                 .controlSize(.small)
             }
             .padding()
@@ -999,21 +914,9 @@ private struct SpecialistModelsSheet: View {
                                                 .lineLimit(1)
 
                                             if readiness.isExecutable {
-                                                Text("Agent Runtime Ready")
-                                                    .font(.system(size: 10, weight: .semibold))
-                                                    .padding(.horizontal, 5)
-                                                    .padding(.vertical, 1)
-                                                    .background(AppColors.statusSuccess.opacity(0.12))
-                                                    .foregroundStyle(AppColors.statusSuccess)
-                                                    .clipShape(Capsule())
+                                                SettingsBadge("Agent Runtime Ready", tone: .positive)
                                             } else {
-                                                Text("Configured · Not executable")
-                                                    .font(.system(size: 10, weight: .semibold))
-                                                    .padding(.horizontal, 5)
-                                                    .padding(.vertical, 1)
-                                                    .background(AppColors.statusWarning.opacity(0.15))
-                                                    .foregroundStyle(AppColors.statusWarning)
-                                                    .clipShape(Capsule())
+                                                SettingsBadge("Configured · Not executable")
                                             }
                                         }
 
@@ -1126,7 +1029,7 @@ private struct AddSpecialistGroupsModal: View {
                     dismiss()
                 }
                 .disabled(selected.isEmpty)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.charcoalProminent)
             }
             .padding()
 
@@ -1149,7 +1052,7 @@ private struct AddSpecialistGroupsModal: View {
                     } label: {
                         HStack {
                             Image(systemName: selected.contains(group.id) ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(selected.contains(group.id) ? Color.accentColor : Color.secondary)
+                                .foregroundStyle(selected.contains(group.id) ? AppColors.sendFill : Color.secondary)
                             Text(group.name)
                                 .font(.body)
                                 .foregroundStyle(AppColors.textPrimary)
@@ -1198,7 +1101,7 @@ private struct AddSpecialistModelsModal: View {
                     dismiss()
                 }
                 .disabled(selected.isEmpty)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.charcoalProminent)
             }
             .padding()
 
@@ -1224,7 +1127,7 @@ private struct AddSpecialistModelsModal: View {
                                 } label: {
                                     HStack {
                                         Image(systemName: selected.contains(entry.id) ? "checkmark.circle.fill" : "circle")
-                                            .foregroundStyle(selected.contains(entry.id) ? Color.accentColor : Color.secondary)
+                                            .foregroundStyle(selected.contains(entry.id) ? AppColors.sendFill : Color.secondary)
                                         Text(entry.model.displayName)
                                             .font(.body)
                                             .foregroundStyle(AppColors.textPrimary)
@@ -1290,7 +1193,7 @@ private struct AddModelsToGroupSheet: View {
                     appState.modelGroups.updateGroup(updated)
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.charcoalProminent)
             }
             .padding()
 
@@ -1347,7 +1250,7 @@ private struct AddModelsToGroupSheet: View {
                                 } label: {
                                     HStack {
                                         Image(systemName: alreadyInGroup ? "checkmark.circle.fill" : (isSelected ? "checkmark.circle.fill" : "circle"))
-                                            .foregroundStyle(alreadyInGroup ? AppColors.textSecondary : (isSelected ? Color.accentColor : AppColors.textSecondary.opacity(0.5)))
+                                            .foregroundStyle(alreadyInGroup ? AppColors.textSecondary : (isSelected ? AppColors.sendFill : AppColors.textSecondary.opacity(0.5)))
 
                                         VStack(alignment: .leading, spacing: 1) {
                                             Text(entry.model.displayName)

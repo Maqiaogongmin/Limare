@@ -87,6 +87,7 @@ struct NativeDelegationTaskView: View {
                 Text(task.title).font(.caption.weight(.medium)).lineLimit(1)
                 TimelineView(.periodic(from: .now, by: 1)) { _ in
                     Text(status(task)).font(.caption).foregroundStyle(.secondary)
+                        .help(usage(task))
                         .accessibilityIdentifier("native.task.status.\(task.id)")
                 }
             }
@@ -109,15 +110,24 @@ struct NativeDelegationTaskView: View {
         switch task.status {
         case .queued: return "排队中"
         case .running:
-            let seconds = task.startedAt.map { Int(Date().timeIntervalSince($0)) } ?? 0
-            return "运行中 · 本轮请求 \(task.spent.modelRequests)/\(task.allowance.modelRequests) · 工具 \(task.spent.toolCalls)/\(task.allowance.toolCalls) · \(seconds)/\(Int(task.allowance.seconds)) 秒 · \(totalUsage(task)) · \(activity(task))"
+            return "运行中 · \(elapsedSeconds(task)) 秒 · \(activity(task))"
         case .completed:
-            let state = task.result?.partial == true ? "部分结果（到达上限或未完成）" : "已完成"
-            return "\(state) · \(totalUsage(task))"
+            return task.result?.partial == true ? "部分结果（到达上限或未完成）" : "已完成"
         case .failed: return "失败：\(task.failure ?? "原因未知")"
         case .cancelled: return "已取消"
         case .interrupted: return task.failure ?? "已中断，可继续"
         }
+    }
+
+    /// The budget and totals behind the short status line, shown on hover.
+    private func usage(_ task: SubagentTask) -> String {
+        guard task.status == .running else { return totalUsage(task) }
+        let round = "本轮请求 \(task.spent.modelRequests)/\(task.allowance.modelRequests) · 工具 \(task.spent.toolCalls)/\(task.allowance.toolCalls) · \(elapsedSeconds(task))/\(Int(task.allowance.seconds)) 秒"
+        return "\(round)\n\(totalUsage(task))"
+    }
+
+    private func elapsedSeconds(_ task: SubagentTask) -> Int {
+        task.startedAt.map { Int(Date().timeIntervalSince($0)) } ?? 0
     }
 
     private func totalUsage(_ task: SubagentTask) -> String {
@@ -129,7 +139,8 @@ struct NativeDelegationTaskView: View {
         guard let runID = task.runID,
               let child = appState.conversations.conversations.first(where: { $0.id == task.childConversationID }),
               let tool = child.messages.flatMap(\.toolCalls).last(where: { $0.owningRunID == runID }) else { return "思考中" }
-        return "\(tool.name) · \(tool.state.rawValue)"
+        guard let state = ToolCallPresentationResolver.statusLabel(for: tool.state) else { return tool.name }
+        return "\(tool.name) · \(state)"
     }
 }
 

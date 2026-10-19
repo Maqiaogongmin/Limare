@@ -2,6 +2,17 @@
 
 All notable behavior and architecture changes to Limare are recorded here. Entries before the 2026-10-09 identity cleanup use the old names (Minis Mac, MinisMac, org.openminis.MinisMac) as they were at the time.
 
+## 0.1.3 — 2026-10-19
+
+- **更安静的对话**：同一轮回复共用标题，执行中的早期步骤可折叠；工具调用以简洁状态行展示，手机远程对话同步优化。
+- **阅读与外观**：统一浅色和深色阅读主题，调整代码块、链接、引用、表格与文本选择颜色；优化长对话边缘渐隐和滚动留白。
+- **输入框与侧栏**：改进窄窗口布局、模型与思考菜单、上下文用量提示、新建对话入口和侧栏操作。
+- **Work Surface 与文件**：改进内嵌面板、标签可见性、文件树和预览行号；file_read 支持按行分页读取。
+- **设置**：统一页面布局与控件，修复日志页导致窗口异常增高的问题。
+- **工具可靠性**：Computer Use 在运行中的对话中保持可用，可重新打开无窗口应用；闲置浏览器标签及时释放。
+
+支持 Apple Silicon（arm64）、macOS 15.0 及以上。首次安装下载签名、公证并装订的 DMG；已安装正式版可通过 **Limare → 检查更新…** 手动更新。无后台更新检查或静默安装。
+
 ## Unreleased
 
 ## 0.1.2 — 2026-10-18

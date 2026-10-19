@@ -11,6 +11,11 @@ final class ConversationStore {
 
     @ObservationIgnored
     var onSelectConversation: ((ConversationRecord) -> Void)?
+    /// True while some window shows the conversation or holds its unsent draft. An untouched
+    /// placeholder is kept only while one does (see `discardUnshownPlaceholders`); without
+    /// this, every one is kept.
+    @ObservationIgnored
+    var isConversationInUse: ((UUID) -> Bool)?
     @ObservationIgnored
     var onWorkspaceChanged: (() -> Void)?
     @ObservationIgnored
@@ -360,6 +365,30 @@ final class ConversationStore {
         guard let conversation = conversations.first(where: { $0.id == id }) else { return }
         activeConversationID = id
         onSelectConversation?(conversation)
+        discardUnshownPlaceholders(keeping: id)
+    }
+
+    /// An untouched "New Conversation" lives only while a window shows it: leaving it, for an
+    /// existing conversation or a new one in another project, removes it, so the sidebar never
+    /// gathers empty placeholders across projects. Its unsent draft was archived when the window
+    /// left it, which makes it no longer disposable, so nothing typed is lost.
+    private func discardUnshownPlaceholders(keeping keptID: UUID) {
+        guard let isConversationInUse else { return }
+        let unshown = conversations.filter { $0.id != keptID && isDisposable($0) && !isConversationInUse($0.id) }
+        guard !unshown.isEmpty else { return }
+        var projectsChanged = false
+        for placeholder in unshown {
+            conversations.removeAll(where: { $0.id == placeholder.id })
+            if let pid = placeholder.projectID, let index = projects.firstIndex(where: { $0.id == pid }) {
+                projects[index].conversationIDs.removeAll(where: { $0 == placeholder.id })
+                projectsChanged = true
+            }
+            try? persistence.deleteConversation(id: placeholder.id)
+        }
+        if projectsChanged {
+            try? persistence.saveProjects(projects)
+        }
+        logs.info("Conversation", "Discarded \(unshown.count) empty placeholder conversation(s) no window shows.")
     }
 
     private func isDisposable(_ record: ConversationRecord) -> Bool {

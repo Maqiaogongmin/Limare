@@ -876,7 +876,7 @@ final class ToolExecutor {
         _ call: ProviderToolCall,
         onUpdate: @escaping UpdateHandler
     ) async throws -> ToolExecutionOutcome {
-        let arguments: PathArguments = try decode(call)
+        let arguments: ReadArguments = try decode(call)
         if arguments.path.hasPrefix("limare://attachments/") {
             return try executeAttachmentFileRead(path: arguments.path, onUpdate: onUpdate)
         }
@@ -893,7 +893,11 @@ final class ToolExecutor {
             return try readImageFile(context.url, approval: approval, startedAt: startedAt, onUpdate: onUpdate)
         }
         let content = try files.read(url: context.url)
-        let boundedContent = bounded(content, maximumBytes: 65_536)
+        let boundedContent: String
+        switch FileReadWindow.apply(content, offset: arguments.offset, limit: arguments.limit, maximumBytes: 65_536) {
+        case .success(let window): boundedContent = window
+        case .failure(let failure): throw ToolExecutorError.invalidArguments(failure.message)
+        }
         onUpdate(.init(state: .completed, approvalState: approval, output: boundedContent))
         logs.info("Tool", "Read file \(context.url.path).")
         return .init(content: boundedContent, isError: false, approvalState: approval, durationMilliseconds: milliseconds(since: startedAt))
@@ -2864,6 +2868,8 @@ final class ToolExecutor {
     }
 
     private struct PathArguments: Decodable { let path: String }
+    /// Numbers decode as `Double`, so a model's `10.0` reads as 10; `FileReadWindow` checks them.
+    private struct ReadArguments: Decodable { let path: String; let offset: Double?; let limit: Double? }
     private struct WriteArguments: Decodable { let path: String; let content: String }
     private struct EditArguments: Decodable {
         let path: String

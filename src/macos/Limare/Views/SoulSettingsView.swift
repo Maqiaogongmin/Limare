@@ -68,7 +68,7 @@ struct SoulSettingsView: View {
                             .font(.caption2.weight(.semibold))
                             .padding(.horizontal, AppSemanticSpacing.badgePaddingHorizontal)
                             .padding(.vertical, AppSemanticSpacing.badgePaddingVertical)
-                            .background(AppColors.surfaceInteractive)
+                            .background(Color.primary.opacity(0.06))
                             .clipShape(Capsule())
                     }
                 }
@@ -80,12 +80,7 @@ struct SoulSettingsView: View {
             Spacer()
         }
         .padding(AppSpacing.standard)
-        .background(AppColors.surfaceElevated)
-        .clipShape(RoundedRectangle(cornerRadius: AppRadius.bubble))
-        .overlay(
-            RoundedRectangle(cornerRadius: AppRadius.bubble)
-                .stroke(AppColors.borderMuted, lineWidth: 1)
-        )
+        .settingsCard()
     }
 
     private var identitySection: some View {
@@ -104,14 +99,13 @@ struct SoulSettingsView: View {
                     Button("Change Avatar...") {
                         selectAvatarImage()
                     }
-                    .controlSize(.small)
+                    .buttonStyle(.settingsOutline)
 
                     if editor.hasCustomAvatar {
                         Button("Remove") {
                             editor.removeAvatar()
                         }
-                        .controlSize(.small)
-                        .foregroundStyle(AppColors.textSecondary)
+                        .buttonStyle(.settingsOutline)
                     }
 
                     Spacer()
@@ -163,26 +157,27 @@ struct SoulSettingsView: View {
                         .foregroundStyle(editor.isOverLimit ? AppColors.statusError : AppColors.textSecondary)
                 }
 
+                // A pale warm well inside the white card, not a grey box in a grey card.
                 ZStack(alignment: .topLeading) {
                     TextEditor(text: $editor.bodyText)
                         .font(.system(.body, design: .monospaced))
                         .scrollContentBackground(.hidden)
-                        .padding(AppSpacing.small)
+                        .padding(AppSpacing.medium)
 
                     if editor.bodyText.isEmpty {
                         Text("Describe how Limare should think, behave, and converse...")
                             .foregroundStyle(.tertiary)
-                            .padding(.horizontal, AppSpacing.medium)
+                            .padding(.horizontal, AppSpacing.medium + 5)
                             .padding(.vertical, AppSpacing.medium)
                             .allowsHitTesting(false)
                     }
                 }
                 .frame(minHeight: 220, maxHeight: 340)
-                .background(AppColors.surfaceElevated)
-                .clipShape(RoundedRectangle(cornerRadius: AppRadius.modal))
+                .background(AppColors.editorWell)
+                .clipShape(RoundedRectangle(cornerRadius: AppRadius.control, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: AppRadius.modal)
-                        .stroke(editor.isOverLimit ? AppColors.statusError : AppColors.borderMuted, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: AppRadius.control, style: .continuous)
+                        .strokeBorder(editor.isOverLimit ? AppColors.statusError : Color.primary.opacity(0.08), lineWidth: 1)
                 )
 
                 if editor.isOverLimit {
@@ -201,6 +196,7 @@ struct SoulSettingsView: View {
             } label: {
                 Label("Restore Default", systemImage: "arrow.uturn.backward")
             }
+            .buttonStyle(.settingsOutline)
 
             Spacer()
 
@@ -213,6 +209,7 @@ struct SoulSettingsView: View {
             Button("Reload") {
                 editor.requestReload(from: appState.soul)
             }
+            .buttonStyle(.settingsOutline)
 
             Button("Save") {
                 do {
@@ -221,7 +218,7 @@ struct SoulSettingsView: View {
                     editor.statusMessage = "Save failed: \(error.localizedDescription)"
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.charcoalProminent)
             .disabled(!editor.isDirty || editor.isOverLimit)
         }
         .padding(.top, AppSpacing.xxSmall)

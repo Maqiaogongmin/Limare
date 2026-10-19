@@ -54,14 +54,33 @@ public struct MarkdownTheme: Equatable, @unchecked Sendable {
             public var title = NSFont.systemFont(ofSize: NSFont.systemFontSize).bold
             public var footnote = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
         #endif
+        /// The language name in a code block's bar; without it the bar uses `code`.
+        public var codeBlockLabel: PlatformFont?
     }
 
     public var fonts: Fonts = .init()
 
+    /// How one level of heading is set.
+    public struct Heading: Equatable, @unchecked Sendable {
+        public var font: PlatformFont
+        /// Added between letters, in points; negative tightens.
+        public var kern: CGFloat
+
+        public init(font: PlatformFont, kern: CGFloat = 0) {
+            self.font = font
+            self.kern = kern
+        }
+    }
+
+    /// Heading styles by level, `#` first. A level past the end takes the last
+    /// style; with none, every heading is set in `fonts.title`.
+    public var headings: [Heading] = []
+
     public struct Colors: Equatable, @unchecked Sendable {
         #if canImport(UIKit)
             public var body = UIColor.label
-            public var highlight =
+            /// The colour of a link's text.
+            public var link =
                 UIColor(named: "AccentColor")
                     ?? UIColor(named: "accentColor")
                     ?? .systemOrange
@@ -70,16 +89,21 @@ public struct MarkdownTheme: Equatable, @unchecked Sendable {
                     ?? UIColor(named: "accentColor")
                     ?? .systemOrange
             public var code = UIColor.label
+            /// Underlines links in this colour; without it a link is marked by its colour alone.
+            public var linkUnderline: UIColor?
             public var codeBackground = CodeBlockDefaults.background
             public var codeBlockBackground = CodeBlockDefaults.background
             public var codeBlockBarBackground = CodeBlockDefaults.barBackground
+            /// Outlines a code block in this colour; without it the block has no edge.
+            public var codeBlockBorder: UIColor?
             public var selectionBackground: UIColor? =
                 (UIColor(named: "AccentColor")
                         ?? UIColor(named: "accentColor")
                         ?? .systemOrange).withAlphaComponent(0.2)
         #elseif canImport(AppKit)
             public var body = NSColor.labelColor
-            public var highlight =
+            /// The colour of a link's text.
+            public var link =
                 NSColor(named: "AccentColor")
                     ?? NSColor(named: "accentColor")
                     ?? .systemOrange
@@ -88,9 +112,13 @@ public struct MarkdownTheme: Equatable, @unchecked Sendable {
                     ?? NSColor(named: "accentColor")
                     ?? .systemOrange
             public var code = NSColor.labelColor
+            /// Underlines links in this colour; without it a link is marked by its colour alone.
+            public var linkUnderline: NSColor?
             public var codeBackground = CodeBlockDefaults.background
             public var codeBlockBackground = CodeBlockDefaults.background
             public var codeBlockBarBackground = CodeBlockDefaults.barBackground
+            /// Outlines a code block in this colour; without it the block has no edge.
+            public var codeBlockBorder: NSColor?
             public var selectionBackground: NSColor? =
                 (NSColor(named: "AccentColor")
                         ?? NSColor(named: "accentColor")
@@ -111,12 +139,16 @@ public struct MarkdownTheme: Equatable, @unchecked Sendable {
         public var paragraph: CGFloat = 16
         /// Extra space above a heading.
         public var headingBefore: CGFloat = 16
+        /// Space between the lines of a paragraph, list item or quote.
+        public var line: CGFloat = 4
     }
 
     public var spacings: Spacings = .init()
 
     public struct Sizes: Equatable, Sendable {
-        public var bullet: CGFloat = 4
+        /// Diameter of a list bullet.
+        public var bullet: CGFloat = 6
+        public var codeBlockCornerRadius: CGFloat = 8
     }
 
     public var sizes: Sizes = .init()

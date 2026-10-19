@@ -61,7 +61,7 @@ final class ListProcessor {
     private func renderListItem(_ item: ListItem, reduceLineSpacing: Bool = false) -> NSAttributedString {
         let paragraphStyle: NSMutableParagraphStyle = .init()
         paragraphStyle.paragraphSpacing = reduceLineSpacing ? theme.spacings.list : theme.spacings.paragraph
-        paragraphStyle.lineSpacing = 4
+        paragraphStyle.lineSpacing = theme.spacings.line
         let indent = CGFloat(item.depth + 1) * ListMarkerLayout.indent
         paragraphStyle.firstLineHeadIndent = indent
         paragraphStyle.headIndent = indent

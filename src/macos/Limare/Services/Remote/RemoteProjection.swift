@@ -24,6 +24,7 @@ enum RemoteProjection {
             content: message.content,
             reasoning: message.reasoningContent.flatMap { $0.isEmpty ? nil : $0 },
             isSystemNotice: message.isSystemNotice,
+            sentWhileWorking: message.sentWhileWorking,
             model: message.resolvedModelID,
             attachments: message.attachments.map {
                 file(.attachment, id: $0.id, filename: $0.filename, byteCount: $0.byteCount, in: files.conversationID)
@@ -49,6 +50,7 @@ enum RemoteProjection {
             outputTruncated: output.truncated,
             errorMessage: record.errorMessage,
             durationMs: record.durationMilliseconds,
+            summary: ToolCallPresentationResolver.resolveSummary(name: record.name, input: record.input),
             file: files.toolCallTarget(record).map {
                 let size = (try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize)
                 return file(.toolCall, id: record.id, filename: $0.lastPathComponent, byteCount: size, in: files.conversationID)

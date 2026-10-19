@@ -423,8 +423,12 @@ final class ComputerUseActivationStore {
 
     /// Conversation boundary (switch / reset / end / delete) destroys the execution session
     /// (Doc 68 §10.1). The global preference is unchanged; the next Run binds a fresh session.
+    /// A run in progress keeps its session: runs continue in the background when a window shows
+    /// another conversation, and taking a tool away mid-run makes the model tell the user it is
+    /// off. Stop and cancellation end the session through `suspendForRunCancellation`.
     func resetForConversationBoundary(leaving conversationID: UUID) {
-        guard (activeConversationID ?? desiredConversationID) == conversationID else { return }
+        guard (activeConversationID ?? desiredConversationID) == conversationID,
+              conversationIsRunning?(conversationID) != true else { return }
         if let activeID = activeConversationID ?? desiredConversationID {
             advanceGeneration(conversationID: activeID)
         }

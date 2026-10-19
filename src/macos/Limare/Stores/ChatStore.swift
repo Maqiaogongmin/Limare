@@ -33,6 +33,11 @@ final class ChatStore {
     /// was left. It stays in memory, keeps its attachments referenced, and goes back into the
     /// composer when that conversation is selected again.
     @ObservationIgnored private var unarchivedComposers: [UUID: (draft: ArchivedDraft, restoredDraftID: UUID?)] = [:]
+
+    /// True while this composer holds an unsent draft of the conversation that could not be archived.
+    func holdsUnarchivedComposer(for conversationID: UUID) -> Bool {
+        unarchivedComposers[conversationID] != nil
+    }
     private var standaloneConversationID = UUID()
     /// Set for the store behind a window: it shows the conversation it last loaded, whatever the
     /// app-wide selection says, so each window keeps its own conversation. Otherwise (tests,

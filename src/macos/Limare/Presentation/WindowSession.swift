@@ -35,7 +35,8 @@ final class WindowSession: Identifiable {
 
     /// Shows a conversation. Leaving another one stops what belonged to it in this window:
     /// dictation into this composer, reading one of its messages aloud, and the Computer Use
-    /// session if that conversation holds it. Other windows are not touched.
+    /// session if that conversation holds it and has no run in progress. Other windows are not
+    /// touched.
     func show(_ record: ConversationRecord) {
         guard let app else {
             chat.loadConversation(record)

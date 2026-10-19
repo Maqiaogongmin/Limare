@@ -11,44 +11,89 @@ public struct WorkSurfaceTabStrip: View {
 
     public var body: some View {
         HStack(spacing: AppSpacing.small) {
-            // Scrollable / Horizontal Tab List
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: AppSpacing.xxSmall) {
-                    ForEach(window.workSurface.tabs) { tab in
-                        WorkSurfaceTabItemView(
-                            title: window.workSurfaceTitle(for: tab),
-                            systemImage: window.workSurfaceSystemImage(for: tab),
-                            isActive: tab.id == window.workSurface.activeTabID,
-                            onSelect: {
-                                window.workSurface.focus(id: tab.id)
-                            },
-                            onClose: {
-                                window.closeWorkSurfaceTab(id: tab.id)
-                            }
-                        )
+            // Scrollable / Horizontal Tab List. The active tab is scrolled into view whenever it
+            // changes, so a new or focused tab never sits past the edge with its close button.
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: AppSpacing.xxSmall) {
+                        ForEach(window.workSurface.tabs) { tab in
+                            WorkSurfaceTabItemView(
+                                title: window.workSurfaceTitle(for: tab),
+                                systemImage: window.workSurfaceSystemImage(for: tab),
+                                isActive: tab.id == window.workSurface.activeTabID,
+                                onSelect: {
+                                    window.workSurface.focus(id: tab.id)
+                                },
+                                onClose: {
+                                    window.closeWorkSurfaceTab(id: tab.id)
+                                }
+                            )
+                            .id(tab.id)
+                        }
+
+                        // A new tab, right after the last.
+                        addSurfaceMenu
                     }
                 }
+                .onAppear { reveal(window.workSurface.activeTabID, with: proxy) }
+                .onChange(of: window.workSurface.activeTabID) { _, active in reveal(active, with: proxy) }
+                .onChange(of: window.workSurface.tabs.count) { _, _ in reveal(window.workSurface.activeTabID, with: proxy) }
             }
 
             Spacer(minLength: 0)
 
             let isExpanded = window.workSurface.isExpanded
-            Button {
-                window.workSurface.toggleExpanded()
-            } label: {
-                Image(systemName: isExpanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppColors.textSecondary)
-                    .frame(width: 24, height: 24)
-                    .contentShape(Rectangle())
+            if !window.workSurface.tabs.isEmpty {
+                Button {
+                    window.workSurface.toggleExpanded()
+                } label: {
+                    Image(systemName: isExpanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                }
+                .buttonStyle(GhostIconButtonStyle(size: 24, iconSize: 12))
+                .accessibilityIdentifier("workSurface.expand")
+                .accessibilityLabel(isExpanded ? "Show Chat" : "Expand Work Surface")
+                .help(isExpanded ? "Show the chat and sidebar again" : "Expand to fill the window")
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("workSurface.expand")
-            .accessibilityLabel(isExpanded ? "Show Chat" : "Expand Work Surface")
-            .help(isExpanded ? "Show the chat and sidebar again" : "Expand to fill the window")
+
+            // The panel's own hide button, in its corner; the window toolbar shows the Work
+            // Surface button only while the panel is hidden.
+            Button {
+                window.workSurface.togglePresented()
+            } label: {
+                Image(systemName: "sidebar.right")
+            }
+            .buttonStyle(GhostIconButtonStyle(size: 24, iconSize: 13))
+            .accessibilityIdentifier("workSurface.hide")
+            .accessibilityLabel("Work Surface")
+            .help("Hide Work Surface")
         }
-        .padding(.horizontal, AppSpacing.standard)
+        .padding(.leading, AppSpacing.medium)
+        .padding(.trailing, AppSpacing.small)
         .frame(height: AppLayout.workspaceHeaderHeight)
+    }
+
+    private var addSurfaceMenu: some View {
+        Menu {
+            ForEach(WorkSurfaceRegistry.builtInDefinitions) { def in
+                Button {
+                    window.addSurface(def.kind)
+                } label: {
+                    Label(def.title, systemImage: def.systemImage)
+                }
+            }
+        } label: {
+            Label("Add Surface", systemImage: "plus")
+                .labelStyle(.iconOnly)
+        }
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .buttonStyle(GhostIconButtonStyle(size: 24, iconSize: 12))
+        .help("Add Surface (Browser, Files)")
+    }
+
+    private func reveal(_ tabID: WorkSurfaceTab.ID?, with proxy: ScrollViewProxy) {
+        guard let tabID else { return }
+        withAnimation(AppMotion.resolved(AppMotion.quick)) { proxy.scrollTo(tabID) }
     }
 }
 
@@ -65,7 +110,7 @@ private struct WorkSurfaceTabItemView: View {
         HStack(spacing: AppSpacing.xSmall) {
             Image(systemName: systemImage)
                 .font(.system(size: 11, weight: isActive ? .semibold : .regular))
-                .foregroundStyle(isActive ? Color.accentColor : AppColors.textSecondary)
+                .foregroundStyle(isActive ? Color.primary.opacity(0.85) : AppColors.textSecondary)
 
             Text(title)
                 .font(AppTypography.interface.weight(isActive ? .medium : .regular))
@@ -91,11 +136,7 @@ private struct WorkSurfaceTabItemView: View {
         .padding(.vertical, 5)
         .background(
             RoundedRectangle(cornerRadius: AppRadius.row, style: .continuous)
-                .fill(isActive ? AppColors.surfaceSecondary : (isHovered ? AppColors.surfaceInteractive : Color.clear))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppRadius.row, style: .continuous)
-                .stroke(isActive ? AppColors.borderMuted : Color.clear, lineWidth: 1)
+                .fill(isActive ? Color.primary.opacity(0.06) : (isHovered ? AppColors.surfaceInteractive : Color.clear))
         )
         .contentShape(Rectangle())
         .onTapGesture {

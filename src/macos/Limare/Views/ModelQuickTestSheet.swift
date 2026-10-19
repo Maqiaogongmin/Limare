@@ -87,9 +87,9 @@ public struct ModelQuickTestSheet: View {
         HStack(spacing: AppSpacing.medium) {
             Image(systemName: "bolt.badge.checkmark")
                 .font(.system(size: 24))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(AppColors.sendFill)
                 .frame(width: 44, height: 44)
-                .background(Color.accentColor.opacity(0.12))
+                .background(Color.primary.opacity(0.12))
                 .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
 
             VStack(alignment: .leading, spacing: 3) {
@@ -274,7 +274,7 @@ private struct QuickTestCard: View {
         VStack(alignment: .leading, spacing: AppSpacing.xSmall) {
             HStack(spacing: AppSpacing.small) {
                 Image(systemName: kind.icon)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(AppColors.sendFill)
                 Text(cardTitle)
                     .font(.subheadline.weight(.semibold))
                 if effectiveProbe {
@@ -370,12 +370,12 @@ private struct QuickTestCard: View {
                     if kind == .vision {
                         HStack(spacing: AppSpacing.small) {
                             RoundedRectangle(cornerRadius: AppRadius.small)
-                                .fill(Color.accentColor.opacity(0.2))
+                                .fill(Color.primary.opacity(0.2))
                                 .frame(width: 32, height: 32)
                                 .overlay(
                                     Image(systemName: "photo")
                                         .font(.system(size: 14))
-                                        .foregroundStyle(Color.accentColor)
+                                        .foregroundStyle(AppColors.sendFill)
                                 )
                             Text("1x1 PNG sample image attached")
                                 .font(.caption2)

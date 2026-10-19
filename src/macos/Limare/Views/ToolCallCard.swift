@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct ToolCallCard: View {
     let toolCall: ToolCallRecord
@@ -39,6 +40,11 @@ struct ToolCallCard: View {
     }
 
     private var changeNotice: ToolCallChangeNotice? {
+        Self.changeNotice(for: toolCall, appState: appState, window: window)
+    }
+
+    /// The files a call changed although it did not succeed, from its conversation's undo journal.
+    static func changeNotice(for toolCall: ToolCallRecord, appState: AppState, window: WindowSession) -> ToolCallChangeNotice? {
         guard let conversationID = toolCall.owningRunID.flatMap({
             appState.conversationRuns.conversationID(forRunID: $0)
         }) ?? window.conversationID else { return nil }
@@ -49,6 +55,14 @@ struct ToolCallCard: View {
         )
     }
 
+    private static let chevronWidth: CGFloat = 10
+    private static let statusWidth: CGFloat = 14
+    /// Where the row's text starts, so its notices and details line up under the tool name.
+    private static let contentIndent = chevronWidth + AppSpacing.small + statusWidth + AppSpacing.small
+
+    /// A call that went well needs no mark; one that is running, waiting or did not succeed shows it.
+    private var showsStatus: Bool { presentation.tone != .success }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
@@ -58,50 +72,69 @@ struct ToolCallCard: View {
             } label: {
                 HStack(spacing: AppSpacing.small) {
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(.secondary)
-                        .frame(width: 12)
+                        .frame(width: Self.chevronWidth)
 
                     Image(systemName: presentation.symbolName)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(statusColor)
+                        .opacity(showsStatus ? 1 : 0)
+                        .frame(width: Self.statusWidth)
+                        .accessibilityHidden(!showsStatus)
 
-                    Text(presentation.displayToolName)
-                        .font(.system(.subheadline, design: .monospaced, weight: .medium))
-                        .foregroundStyle(Color.primary)
-
-                    if let label = presentation.namespaceLabel {
-                        Text(label)
-                            .font(.system(size: 10, weight: .medium))
-                            .padding(.horizontal, AppSpacing.xxSmall + 1)
-                            .padding(.vertical, 1)
-                            .background(Color.purple.opacity(0.15))
-                            .foregroundStyle(Color.purple)
-                            .clipShape(RoundedRectangle(cornerRadius: AppRadius.small))
-                    }
-
+                    // What the call does, in words, leads; the tool's own name follows, quieter.
+                    // The summary is the one part that gives way when the row is narrow: every
+                    // other label keeps its natural size, or it would wrap a letter per line.
                     if let summary = presentation.summary {
                         Text(summary)
-                            .font(.caption)
+                            .font(AppTypography.interfaceSubheadline)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .truncationMode(.middle)
+                            .help(presentation.summaryHelp ?? "")
+
+                        Text(presentation.displayToolName)
+                            .font(AppTypography.interfaceCaption)
+                            .foregroundStyle(.tertiary)
+                            .fixedSize()
+                    } else {
+                        Text(presentation.displayToolName)
+                            .font(AppTypography.interfaceSubheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    if let label = presentation.namespaceLabel {
+                        Text(label)
+                            .font(AppTypography.interfaceCaption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .padding(.horizontal, AppSemanticSpacing.badgePaddingHorizontal)
+                            .padding(.vertical, AppSemanticSpacing.badgePaddingVertical)
+                            .background(AppColors.surfaceInteractive)
+                            .clipShape(RoundedRectangle(cornerRadius: AppRadius.small))
+                            .fixedSize()
                     }
 
                     Spacer()
 
-                    if let duration = toolCall.durationMilliseconds {
-                        Text("\(duration) ms")
-                            .font(.caption2.monospaced())
+                    if let duration = ToolCallDurationFormat.compact(milliseconds: toolCall.durationMilliseconds) {
+                        Text(duration)
+                            .font(AppTypography.interfaceCaption.monospacedDigit())
                             .foregroundStyle(.tertiary)
+                            .fixedSize()
                     }
 
-                    Text(toolCall.state.rawValue)
-                        .font(.caption2.monospaced())
-                        .foregroundStyle(statusColor)
+                    if toolCall.state != .completed,
+                       let status = ToolCallPresentationResolver.statusLabel(for: toolCall.state) {
+                        Text(status)
+                            .font(AppTypography.interfaceCaption.weight(.medium))
+                            .foregroundStyle(statusColor)
+                            .fixedSize()
+                    }
                 }
-                .padding(.horizontal, AppSpacing.medium)
-                .padding(.vertical, AppSpacing.small)
+                .padding(.vertical, AppSpacing.xxSmall)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -123,31 +156,23 @@ struct ToolCallCard: View {
                     }
                     Spacer()
                 }
-                .padding(.horizontal, AppSpacing.medium)
-                .padding(.bottom, AppSpacing.small)
+                .padding(.leading, Self.contentIndent)
+                .padding(.bottom, AppSpacing.xxSmall)
                 .help(notice.paths.joined(separator: "\n"))
             }
 
             if let targetURL = resolvedFileTargetURL {
                 FileArtifactCard(fileURL: targetURL)
-                    .padding(.horizontal, AppSpacing.medium)
-                    .padding(.bottom, AppSpacing.small)
+                    .padding(.leading, Self.contentIndent)
+                    .padding(.bottom, AppSpacing.xxSmall)
             }
 
             if isExpanded {
-                Divider()
-                    .padding(.horizontal, AppSpacing.small)
-
                 ToolCallDetails(toolCall: toolCall)
-                    .padding(AppSpacing.medium)
+                    .padding(.leading, Self.contentIndent)
+                    .padding(.vertical, AppSpacing.xSmall)
             }
         }
-        .background(AppColors.surfaceElevated)
-        .clipShape(RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous)
-                .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
-        )
         .sheet(item: $pendingUndo) { request in
             UndoMessageSheet(messageID: request.messageID)
                 .environment(appState)
@@ -185,16 +210,28 @@ private struct ToolCallDetails: View {
 
             if !toolCall.input.isEmpty {
                 VStack(alignment: .leading, spacing: AppSpacing.xxSmall) {
-                    Text("Input")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                    HStack {
+                        Text("Input")
+                            .font(AppTypography.interfaceCaption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        // The recorded arguments exactly as the model sent them.
+                        Button("Copy Raw") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(toolCall.input, forType: .string)
+                        }
+                        .buttonStyle(.link)
+                        .font(AppTypography.interfaceCaption)
+                        .help("Copy the arguments exactly as recorded")
+                    }
                     ScrollView(.vertical) {
-                        Text(toolCall.input)
-                            .font(.system(.caption, design: .monospaced))
+                        Text(ToolCallInputPresentation.formatted(toolCall.input))
+                            .font(AppTypography.codeMeta)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .frame(maxHeight: AppLayout.toolInputMaximumHeight)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(AppSpacing.small)
                     .background(AppColors.surfaceInteractive)
                     .clipShape(RoundedRectangle(cornerRadius: AppRadius.small))
@@ -204,15 +241,16 @@ private struct ToolCallDetails: View {
             if !toolCall.output.isEmpty {
                 VStack(alignment: .leading, spacing: AppSpacing.xxSmall) {
                     Text("Output")
-                        .font(.caption2.weight(.semibold))
+                        .font(AppTypography.interfaceCaption.weight(.semibold))
                         .foregroundStyle(.secondary)
                     ScrollView(.vertical) {
                         Text(toolCall.output)
-                            .font(.system(.caption, design: .monospaced))
+                            .font(AppTypography.codeMeta)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .frame(maxHeight: AppLayout.toolOutputMaximumHeight)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(AppSpacing.small)
                     .background(AppColors.surfaceInteractive)
                     .clipShape(RoundedRectangle(cornerRadius: AppRadius.small))
@@ -220,17 +258,22 @@ private struct ToolCallDetails: View {
             }
 
             HStack(spacing: AppSpacing.medium) {
-                Label(toolCall.approvalState.rawValue, systemImage: "hand.raised")
-                if let duration = toolCall.durationMilliseconds {
-                    Label("\(duration) ms", systemImage: "clock")
+                if let approval = ToolCallPresentationResolver.approvalLabel(for: toolCall.approvalState) {
+                    Label(approval, systemImage: "hand.raised")
+                }
+                if let milliseconds = toolCall.durationMilliseconds {
+                    Label(ToolCallDurationFormat.detail(milliseconds: milliseconds), systemImage: "clock")
+                        .help("\(milliseconds.formatted()) ms")
                 }
                 if let error = toolCall.errorMessage, !error.isEmpty {
                     Text(error)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(AppColors.statusError)
                         .lineLimit(2)
+                        .textSelection(.enabled)
+                        .help(error)
                 }
             }
-            .font(.caption)
+            .font(AppTypography.interfaceCaption)
             .foregroundStyle(.secondary)
         }
     }

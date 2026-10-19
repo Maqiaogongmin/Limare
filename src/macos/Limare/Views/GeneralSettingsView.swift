@@ -14,11 +14,13 @@ struct GeneralSettingsView: View {
                 SettingsRow("Version", caption: "Apple Silicon · macOS 15.0+") {
                     Text(LimareBuild.current.displayVersion)
                 }
-                HStack(spacing: 16) {
+                // Three of a kind: two pages on the web and the licenses panel.
+                HStack(spacing: AppSpacing.small) {
                     Link("Privacy", destination: URL(string: "https://limare.app/privacy/")!)
                     Link("Support", destination: URL(string: "https://limare.app/support/")!)
                     Button("Licenses") { NSApp.orderFrontStandardAboutPanel(nil) }
                 }
+                .buttonStyle(.settingsOutline)
             }
 
             // Appearance Section
@@ -27,20 +29,18 @@ struct GeneralSettingsView: View {
                     "Theme",
                     caption: "Controls how Limare looks."
                 ) {
-                    Picker("", selection: $appearance) {
-                        ForEach(AppearancePreference.allCases) { pref in
-                            Text(pref.displayName).tag(pref)
-                        }
-                    }
-                    .pickerStyle(.segmented)
+                    SettingsSegmentedPicker(
+                        selection: $appearance,
+                        options: AppearancePreference.allCases.map { (value: $0, title: $0.displayName) }
+                    )
                     .frame(width: 220)
-                    .labelsHidden()
+                    .accessibilityLabel("Theme")
                     .onChange(of: appearance) { _, newPref in
                         newPref.apply()
                     }
                 }
 
-                Divider()
+                SettingsDivider()
 
                 SettingsRow(
                     "Interface",
@@ -98,7 +98,8 @@ struct GeneralSettingsView: View {
                 }
             }
 
-            SettingsSection(title: "Notifications") {
+            // Background alerts and Computer Use share one card, a rule between them.
+            SettingsSection(title: "Notifications & Capabilities") {
                 SettingsRow(
                     "Background Alerts",
                     caption: "While Limare is in the background, notify when a task of 20 seconds or more ends, or when a tool needs your approval. Notifications never name the tool, command or path."
@@ -134,16 +135,16 @@ struct GeneralSettingsView: View {
                         onAction: { PrivacySettingsOpener.openNotificationSettings() }
                     )
                 }
+
+                SettingsDivider()
+
+                // A global app capability. Conversation policies (Subagent) live in the
+                // Composer, not here.
+                ComputerUseCapabilitySettingsRow()
             }
             .task {
                 notificationsDenied = await appState.backgroundNotifier.isDenied()
                 if notificationsDenied { backgroundAlerts = false }
-            }
-
-            // Capabilities Section: global app capabilities. Conversation policies (Subagent)
-            // live in the Composer, not here.
-            SettingsSection(title: "Capabilities") {
-                ComputerUseCapabilitySettingsRow()
             }
 
             // Default Workspace Section
@@ -161,16 +162,15 @@ struct GeneralSettingsView: View {
                             Button("Change…") {
                                 appState.workspace.chooseWorkspace()
                             }
-                            .controlSize(.small)
 
                             Button("Clear") {
                                 appState.workspace.clearWorkspace()
                             }
-                            .controlSize(.small)
                         }
+                        .buttonStyle(.settingsOutline)
                     }
 
-                    Divider()
+                    SettingsDivider()
 
                     HStack(spacing: AppSpacing.small) {
                         Image(systemName: "folder")
@@ -193,7 +193,7 @@ struct GeneralSettingsView: View {
                         Button("Choose…") {
                             appState.workspace.chooseWorkspace()
                         }
-                        .controlSize(.small)
+                        .buttonStyle(.settingsOutline)
                     }
                 }
             }

@@ -93,10 +93,12 @@ struct ConversationSection: View {
                 .buttonStyle(.plain)
                 .focused($isAddFocused)
                 .onHover { isAddHovered = $0 }
-                .help("New Conversation")
-                .accessibilityLabel("New Conversation")
+                // The card above follows the current project; this one is always outside one.
+                .help("New Conversation outside projects")
+                .accessibilityLabel("New Conversation outside projects")
                 .accessibilityIdentifier("chat.sidebar.newConversationPlus")
             }
+            .padding(.top, AppSpacing.sidebarSectionGap - AppSpacing.small)
         }
     }
 }

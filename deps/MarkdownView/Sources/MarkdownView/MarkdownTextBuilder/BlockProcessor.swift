@@ -40,8 +40,11 @@ final class BlockProcessor {
         self.inlineTextDecoration = inlineTextDecoration
     }
 
-    func processHeading(level _: Int, contents: [MarkdownInlineNode]) -> NSAttributedString {
-        let font: PlatformFont = theme.fonts.title
+    func processHeading(level: Int, contents: [MarkdownInlineNode]) -> NSAttributedString {
+        let style = theme.headings.isEmpty
+            ? MarkdownTheme.Heading(font: theme.fonts.title)
+            : theme.headings[min(max(level, 1), theme.headings.count) - 1]
+        let font = style.font
 
         return buildWithParagraphSync { paragraph in
             paragraph.paragraphSpacing = theme.spacings.paragraph
@@ -53,6 +56,9 @@ final class BlockProcessor {
                 // Inline code keeps its monospaced face inside a heading.
                 guard (value as? PlatformFont) != theme.fonts.codeInline else { return }
                 string.addAttribute(.font, value: font, range: range)
+                if style.kern != 0 {
+                    string.addAttribute(.kern, value: style.kern, range: range)
+                }
             }
             // Replacing the font discarded the fallback the body text resolved
             // for its language, so resolve it again for the title font.
@@ -64,7 +70,7 @@ final class BlockProcessor {
     func processParagraph(contents: [MarkdownInlineNode]) -> NSAttributedString {
         buildWithParagraphSync { paragraph in
             paragraph.paragraphSpacing = theme.spacings.paragraph
-            paragraph.lineSpacing = 4
+            paragraph.lineSpacing = theme.spacings.line
         } content: {
             let rendered = contents.render(theme: theme, context: context, decoration: inlineTextDecoration)
             if rendered.length == 0 {
@@ -134,7 +140,7 @@ final class BlockProcessor {
         // the text layout gives up measuring from the laid-out frame and
         // typesets every document holding a quote twice per update.
         baseParagraphStyle.paragraphSpacing = 8
-        baseParagraphStyle.lineSpacing = 4
+        baseParagraphStyle.lineSpacing = theme.spacings.line
 
         for child in children {
             guard case let .paragraph(content) = child else {
@@ -234,7 +240,7 @@ extension BlockProcessor {
     ) -> NSMutableAttributedString {
         var paragraphStyle: NSMutableParagraphStyle = .init()
         paragraphStyle.paragraphSpacing = theme.spacings.paragraph
-        paragraphStyle.lineSpacing = 4
+        paragraphStyle.lineSpacing = theme.spacings.line
         modifier(&paragraphStyle)
 
         let string = content()

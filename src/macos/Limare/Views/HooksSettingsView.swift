@@ -32,7 +32,7 @@ struct HooksSettingsView: View {
                         } label: {
                             Label("Reload", systemImage: "arrow.clockwise")
                         }
-                        .controlSize(.small)
+                        .buttonStyle(.settingsOutline)
                         .help("Reload all installed hook packages")
                     }
 
@@ -41,8 +41,7 @@ struct HooksSettingsView: View {
                     } label: {
                         Label("Import…", systemImage: "plus")
                     }
-                    .controlSize(.small)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.settingsOutline)
                     .help("Import Hook Package from folder")
                 }
             }
@@ -69,7 +68,7 @@ struct HooksSettingsView: View {
                     Text("Hooks run at specific moments during tasks. Import a package folder or hooks.json configuration to get started.")
                 } actions: {
                     Button("Import Hook Package…") { importHookPackage() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.charcoalProminent)
                 }
                 .padding(.vertical, AppSpacing.xLarge)
                 .frame(maxWidth: .infinity)
@@ -88,7 +87,7 @@ struct HooksSettingsView: View {
                 ) {
                     ForEach(Array(filteredSources.enumerated()), id: \.element.id) { index, source in
                         if index > 0 {
-                            Divider()
+                            SettingsDivider()
                         }
                         HookPackageRowView(source: source, state: state)
                     }
@@ -164,7 +163,7 @@ private struct HookPackageRowView: View {
                 ) {
                     EmptyView()
                 }
-                .toggleStyle(.checkbox)
+                .toggleStyle(.charcoalCheckbox)
                 .labelsHidden()
                 .accessibilityLabel("Enable hook package \(source.name)")
             } else if !isTrusted && source.loadError == nil {
@@ -172,8 +171,7 @@ private struct HookPackageRowView: View {
                     state.managementRoute = .review
                     state.presentedSourceID = source.id
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(.settingsOutline)
             } else {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 13, weight: .semibold))
@@ -197,21 +195,9 @@ private struct HookPackageRowView: View {
                                 .foregroundStyle(isTrusted && source.isEnabled ? AppColors.textPrimary : AppColors.textSecondary)
                                 .lineLimit(1)
 
-                            Text(source.sourceKind.displayName)
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(AppColors.textSecondary)
-                                .padding(.horizontal, AppSemanticSpacing.badgePaddingHorizontal)
-                                .padding(.vertical, AppSemanticSpacing.badgePaddingVertical)
-                                .background(AppColors.textSecondary.opacity(0.12))
-                                .clipShape(Capsule())
+                            SettingsBadge(source.sourceKind.displayName)
 
-                            Text(statusText)
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(statusKind.color)
-                                .padding(.horizontal, AppSemanticSpacing.badgePaddingHorizontal)
-                                .padding(.vertical, AppSemanticSpacing.badgePaddingVertical)
-                                .background(statusKind.color.opacity(0.12))
-                                .clipShape(Capsule())
+                            SettingsBadge(statusText, status: statusKind)
                         }
 
                         Text(state.automationSummaryText(for: source))
@@ -284,24 +270,12 @@ private struct HookDetailSheet: View {
                         } else {
                             HStack(spacing: AppSpacing.xSmall) {
                                 Text(source.name)
-                                    .font(.headline)
+                                    .font(AppTypography.interfaceTitle2)
                                     .foregroundStyle(AppColors.textPrimary)
 
-                                Text(source.sourceKind.displayName)
-                                    .font(.system(size: 9, weight: .bold))
-                                    .foregroundStyle(AppColors.textSecondary)
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 1)
-                                    .background(AppColors.textSecondary.opacity(0.12))
-                                    .clipShape(Capsule())
+                                SettingsBadge(source.sourceKind.displayName)
 
-                                Text(statusText)
-                                    .font(.system(size: 9, weight: .bold))
-                                    .foregroundStyle(statusKind.color)
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 1)
-                                    .background(statusKind.color.opacity(0.12))
-                                    .clipShape(Capsule())
+                                SettingsBadge(statusText, status: statusKind)
                             }
                         }
 
@@ -329,7 +303,7 @@ private struct HookDetailSheet: View {
                                 Button("Review…") {
                                     state.managementRoute = .review
                                 }
-                                .buttonStyle(.borderedProminent)
+                                .buttonStyle(.charcoalProminent)
                                 .controlSize(.small)
                             }
 
@@ -402,7 +376,7 @@ private struct HookDetailSheet: View {
                         ForEach(bullets, id: \.self) { bullet in
                             HStack(alignment: .firstTextBaseline, spacing: AppSpacing.xSmall) {
                                 Text("•")
-                                    .foregroundStyle(Color.accentColor)
+                                    .foregroundStyle(AppColors.sendFill)
                                 Text(bullet)
                                     .font(.subheadline)
                                     .foregroundStyle(AppColors.textPrimary)
@@ -450,7 +424,7 @@ private struct HookDetailSheet: View {
                         Text(state.isAdvancedExpanded ? "Hide Technical Details" : "Show Technical Details")
                             .font(.caption.weight(.medium))
                     }
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(AppColors.sendFill)
                 }
                 .buttonStyle(.plain)
 
@@ -494,6 +468,7 @@ private struct HookDetailSheet: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .foregroundStyle(AppColors.statusError)
                 }
             }
         }
@@ -548,12 +523,12 @@ private struct HookDetailSheet: View {
                             set: { _ in appState.hooks.toggleHandler(sourceID: source.id, handlerID: hook.id) }
                         )
                     )
-                    .toggleStyle(.checkbox)
+                    .toggleStyle(.charcoalCheckbox)
                     .labelsHidden()
                     .accessibilityLabel("Enable this automation")
                 } else {
                     Toggle("Enable this automation", isOn: .constant(false))
-                        .toggleStyle(.checkbox)
+                        .toggleStyle(.charcoalCheckbox)
                         .labelsHidden()
                         .disabled(true)
                         .accessibilityLabel("Enable this automation")

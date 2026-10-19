@@ -89,7 +89,7 @@ public actor ComputerUseTargetStore {
                                  conversationID: String, runID: String) throws -> WindowTarget {
         let valid = Self.usableWindows(windows, pid: pid)
         guard !valid.isEmpty else {
-            throw ComputerUseDriverError.targetNotFound(detail: "targetNotFound: \(bundleID) is running but has no window of its own on screen (an Open/Save panel belongs to another process). Get a window of the app open first (for a document app, `osascript -e 'tell application id \"\(bundleID)\" to make new document'` through shell_execute, or ask the user), then capture again.")
+            throw ComputerUseDriverError.targetNotFound(detail: "targetNotFound: \(bundleID) is running but has no window of its own on screen (an Open/Save panel belongs to another process). launch_app(target_app) asks a running app to open its window; if it still has none, ask the user to open one.")
         }
         guard valid.count == 1 else {
             throw ComputerUseDriverError.targetAmbiguous(detail: "targetAmbiguous: \(valid.map(\.windowID))")

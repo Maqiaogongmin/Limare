@@ -595,9 +595,10 @@ enum HarnessToolDefinitions {
     static let workspaceTools: [ChatToolDefinition] = [
         definition(
             name: "shell_execute",
-            description: "Run a shell command on this Mac. Relative paths resolve from the working directory / Project folder. Outside Full access it runs in a sandbox: it reads files, uses the network and can serve on local ports, but writes only to the working directory and temp, and cannot open apps or URLs (`open`) or use AppleScript. A command that needs more (fails with \"Operation not permitted\", or opens something for the user) sets sandbox_permissions to \"require_escalated\" with a justification, which asks for approval and then runs it outside the sandbox. A long-running server must run in the background with its output redirected to a file (`cmd > /tmp/log 2>&1 &`).",
+            description: "Run a shell command on this Mac. Relative paths resolve from the working directory / Project folder. It starts in that folder: do not `cd` into it — use relative or absolute paths, or `cwd` for another folder. Read, list and search files with file_read, file_list and file_search, not cat, head, tail, sed, ls, find or grep. Outside Full access it runs in a sandbox: it reads files, uses the network and can serve on local ports, but writes only to the working directory and temp, and cannot open apps or URLs (`open`) or use AppleScript. A command that needs more (fails with \"Operation not permitted\", or opens something for the user) sets sandbox_permissions to \"require_escalated\" with a justification, which asks for approval and then runs it outside the sandbox. A long-running server must run in the background with its output redirected to a file (`cmd > /tmp/log 2>&1 &`).",
             properties: [
                 "command": .init(type: "string", description: "The exact zsh command to run."),
+                "description": .init(type: "string", description: "Optional. What this command does in 5–10 words, in the language the user writes in (e.g. \"查看工作区状态\", \"Run the unit tests\"). The transcript shows it in place of the command; approvals always show the command itself."),
                 "cwd": .init(type: "string", description: "Optional absolute or relative working directory."),
                 "environment": .init(
                     type: "object",
@@ -698,8 +699,12 @@ enum HarnessToolDefinitions {
 
     static let fileReadDefinition = definition(
         name: "file_read",
-        description: "Read bounded UTF-8 text from a local file or limare:// attachment. A local image file (PNG, JPEG, HEIC…) is returned as the image itself; other binary attachments return metadata only.",
-        properties: ["path": .init(type: "string", description: "Absolute path, relative path, or limare://attachments/<filename>.")],
+        description: "Read bounded UTF-8 text from a local file or limare:// attachment. A local image file (PNG, JPEG, HEIC…) is returned as the image itself; other binary attachments return metadata only. Large files: read them in parts with offset and limit; a cut-off result says where to continue.",
+        properties: [
+            "path": .init(type: "string", description: "Absolute path, relative path, or limare://attachments/<filename>."),
+            "offset": .init(type: "number", description: "Optional. 1-based line to start reading at."),
+            "limit": .init(type: "number", description: "Optional. Maximum number of lines to read."),
+        ],
         required: ["path"]
     )
 

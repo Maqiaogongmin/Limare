@@ -12,6 +12,8 @@ struct ToolCallPresentationModel: Sendable, Equatable {
     let displayToolName: String
     let namespaceLabel: String?
     let summary: String?
+    /// The command behind a shell call's description, shown on hover.
+    let summaryHelp: String?
     let tone: ToolCallTone
     let symbolName: String
 
@@ -19,12 +21,14 @@ struct ToolCallPresentationModel: Sendable, Equatable {
         displayToolName: String,
         namespaceLabel: String? = nil,
         summary: String? = nil,
+        summaryHelp: String? = nil,
         tone: ToolCallTone,
         symbolName: String
     ) {
         self.displayToolName = displayToolName
         self.namespaceLabel = namespaceLabel
         self.summary = summary
+        self.summaryHelp = summaryHelp
         self.tone = tone
         self.symbolName = symbolName
     }
@@ -92,6 +96,7 @@ enum ToolCallPresentationResolver {
             displayToolName: displayToolName,
             namespaceLabel: namespaceLabel,
             summary: summary,
+            summaryHelp: resolveSummaryHelp(name: toolCall.name, input: toolCall.input),
             tone: tone,
             symbolName: symbolName
         )
@@ -112,6 +117,9 @@ enum ToolCallPresentationResolver {
         }
 
         if name == "shell_execute" || name.hasSuffix("shell_execute") {
+            if let description = shellDescription(json) {
+                return description
+            }
             if let command = json["command"] as? String {
                 return "$ \(command)"
             }
@@ -150,6 +158,48 @@ enum ToolCallPresentationResolver {
         }
 
         return nil
+    }
+
+    /// A shell call that carries a description shows it; the command stays one hover away.
+    static func resolveSummaryHelp(name: String, input: String) -> String? {
+        guard name == "shell_execute" || name.hasSuffix("shell_execute"),
+              let data = input.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              shellDescription(json) != nil,
+              let command = json["command"] as? String else { return nil }
+        return "$ \(command)"
+    }
+
+    /// The model's own words for a shell command, when it gave any.
+    private static func shellDescription(_ json: [String: Any]) -> String? {
+        guard let description = (json["description"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !description.isEmpty else { return nil }
+        return description
+    }
+
+    /// The words a row shows for its state. A completed call shows none: success needs no mark.
+    static func statusLabel(for state: ToolExecutionState) -> String? {
+        switch state {
+        case .queued: "Queued"
+        case .awaitingApproval: "Waiting for approval"
+        case .running: "Running"
+        case .completed: nil
+        case .failed: "Failed"
+        case .timedOut: "Timed out"
+        case .cancelled: "Cancelled"
+        case .denied: "Denied"
+        case .interrupted: "Interrupted"
+        }
+    }
+
+    /// The approval a call went through, in words; nothing when none was needed.
+    static func approvalLabel(for state: ToolApprovalState) -> String? {
+        switch state {
+        case .notRequired: nil
+        case .awaitingApproval: "Waiting for approval"
+        case .approved: "Approved"
+        case .denied: "Denied"
+        }
     }
 
     static func resolveToneAndSymbol(

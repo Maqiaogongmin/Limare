@@ -12,6 +12,17 @@ enum AppSpacing {
     static let xLarge: CGFloat = 24
     static let chatHorizontal: CGFloat = 24
     static let chatVertical: CGFloat = 20
+    /// The air between sidebar sections, which replaces the rules that used to divide them.
+    static let sidebarSectionGap: CGFloat = 18
+    /// Between the composer and the window's bottom edge.
+    static let composerBottom: CGFloat = 14
+    /// Between the composer's draft and its button row; with the editor's own 6pt inset, 22pt
+    /// between the text and the buttons.
+    static let composerDraftToolbarGap: CGFloat = 16
+    /// The Work Surface sheet's inset from the window's edges and the chat beside it.
+    static let workSurfaceInset: CGFloat = 8
+    /// The sheet's top in the title bar, level with the sidebar's.
+    static let workSurfaceTopInset: CGFloat = 10
 }
 
 enum AppRadius {
@@ -21,7 +32,15 @@ enum AppRadius {
     static let modal: CGFloat = 10
     static let bubble: CGFloat = 12
     static let composer: CGFloat = 14
+    /// The composer card itself (its menus keep `composer`).
+    static let composerCard: CGFloat = 18
+    /// Ghost icon buttons' hover fill, the composer's pills and the sidebar's card button.
+    static let control: CGFloat = 8
     static let badge: CGFloat = 10
+    /// The inset Work Surface sheet.
+    static let workSurfaceSheet: CGFloat = 14
+    /// Settings cards and the log table.
+    static let settingsCard: CGFloat = 12
     static let full: CGFloat = 9999
 }
 
@@ -34,6 +53,8 @@ enum AppControlHeight {
     static let row: CGFloat = 30
     static let button: CGFloat = 32
     static let composerButton: CGFloat = 28
+    /// The composer's thinking and model pills.
+    static let pill: CGFloat = 26
 }
 
 enum AppLayout {
@@ -56,6 +77,20 @@ enum AppLayout {
     static let toolInputMaximumHeight: CGFloat = 180
     /// The `/` and `@` menus scroll past this height instead of running off the window.
     static let composerMenuMaximumHeight: CGFloat = 240
+    /// The composer's model button text, beyond which it truncates in the middle; room for a
+    /// group name with the model it uses.
+    static let composerModelLabelMaximumWidth: CGFloat = 240
+    /// A new conversation gathers its greeting, the composer and the starters in a column this
+    /// wide, centred at `emptyStateCenterFraction` of the chat's height.
+    static let emptyStateMaximumWidth: CGFloat = 680
+    static let emptyStateCenterFraction: CGFloat = 0.45
+    /// Below this chat width the greeting steps down from its full size.
+    static let emptyStateCompactWidth: CGFloat = 540
+    /// The fade at a scrolling transcript's or document's edges, where lines leave the view.
+    static let scrollEdgeFade: CGFloat = 18
+    /// The transcript's top edge, under the title bar: fully clear, then a fade to full ink.
+    static let transcriptTopClear: CGFloat = 12
+    static let transcriptTopFade: CGFloat = 20
     static let workSurfaceMinimumWidth: CGFloat = 320
     static let workSurfaceIdealWidth: CGFloat = 460
     static let workSurfaceMaximumWidth: CGFloat = 700
@@ -98,6 +133,8 @@ enum AppMotion {
     static let confirmHold = Animation.easeOut(duration: 0.4)
     /// The message navigator's pointer spring. Slower curves stay here, not inline.
     static let pointer = Animation.spring(response: 0.22, dampingFraction: 0.85)
+    /// The composer settling from the empty state's centre to the bottom on the first message.
+    static let composerSettle = Animation.spring(response: 0.36, dampingFraction: 0.84)
 
     /// Reduce Motion reads the system setting at call time: animations are then skipped
     /// entirely (`nil`), which is what the setting asks for.
@@ -126,6 +163,13 @@ enum AppSemanticLayout {
     static let resourceSidebarIdealWidth: CGFloat = 250
     static let resourceSidebarMaximumWidth: CGFloat = 300
     static let settingsDetailContentMaxWidth: CGFloat = 720
+    /// Every settings page's column: this wide at most, this far from the sidebar, this far
+    /// below the title bar, so switching pages never moves its left edge.
+    static let settingsPageMaxWidth: CGFloat = 680
+    static let settingsPageLeading: CGFloat = 36
+    static let settingsPageTop: CGFloat = 28
+    /// The master list of a two-column settings page (Providers, Model Groups).
+    static let settingsMasterListWidth: CGFloat = 230
 }
 
 enum AppColors {
@@ -146,6 +190,108 @@ enum AppColors {
     static var selection: Color { Color.accentColor.opacity(0.14) }
     static var separator: Color { Color.secondary.opacity(0.15) }
     static var borderMuted: Color { Color.secondary.opacity(0.18) }
+
+    // The appearance-dependent colours are made once: each `NSColor(name:dynamicProvider:)` is
+    // equal only to itself, so one made per read never matches the last and every view that
+    // compares it (a Markdown theme, a SwiftUI style) takes it for a change.
+    /// The chat canvas: warm paper in light mode rather than pure white, so the white composer
+    /// card reads as raised above it.
+    static let canvas: Color = dynamic(light: 0xF8F7F4, dark: 0x0D0E11)
+    /// The composer card and the sidebar's New Conversation card, one step above the canvas.
+    static let raisedSurface: Color = dynamic(light: 0xFFFFFF, dark: 0x17181E)
+    static let raisedStroke = Color(nsColor: NSColor(name: nil) { appearance in
+        isDark(appearance) ? NSColor.white.withAlphaComponent(0.09) : NSColor.black.withAlphaComponent(0.08)
+    })
+    /// The composer's thinking and model pills: a tint, no edge, and text quieter than the draft.
+    static var pillFill: Color { Color.primary.opacity(0.035) }
+    static var pillText: Color { Color.primary.opacity(0.65) }
+    /// A white piece lying on the canvas (a starter chip, the greeting's badge): its hairline edge.
+    static let hairline = Color(nsColor: NSColor(name: nil) { appearance in
+        isDark(appearance) ? NSColor.white.withAlphaComponent(0.08) : NSColor.black.withAlphaComponent(0.07)
+    })
+    /// Starter chips: translucent porcelain over the canvas.
+    static let chipFill = Color(nsColor: NSColor(name: nil) { appearance in
+        NSColor.white.withAlphaComponent(isDark(appearance) ? 0.05 : 0.80)
+    })
+    /// The Work Surface sheet, inset on the canvas, and what its surfaces paint.
+    static let workSurface: Color = Color(nsColor: workSurfaceNSColor)
+    static let workSurfaceNSColor: NSColor = dynamicNSColor(light: 0xFFFFFF, dark: 0x17181E)
+    /// Ghost icon buttons: no fill at rest, this one under the pointer.
+    static var ghostIdle: Color { Color.secondary.opacity(0.75) }
+    static var ghostHover: Color { Color.primary.opacity(0.06) }
+    /// The send button once there is something to send: near-black in light mode, near-white in dark.
+    static let sendFill: Color = dynamic(light: 0x18181B, dark: 0xF4F4F5)
+    static let sendGlyph: Color = dynamic(light: 0xFFFFFF, dark: 0x18181B)
+    /// A switch that is on: charcoal in light mode; forest green in dark, where a near-white
+    /// track would lose the white knob.
+    /// Restrained status text: forest green for a healthy state, dark red for danger.
+    static let positiveText: Color = dynamic(light: 0x15803D, dark: 0x4ADE80)
+    static let dangerText: Color = dynamic(light: 0xB91C1C, dark: 0xF87171)
+    /// A text editor set into a white card: a shade warmer than the card.
+    static let editorWell: Color = dynamic(light: 0xFAF9F7, dark: 0x121317)
+    static let controlOn: Color = dynamic(light: 0x18181B, dark: 0x16A34A)
+
+    private static func isDark(_ appearance: NSAppearance) -> Bool {
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    }
+
+    private static func dynamic(light: UInt32, dark: UInt32) -> Color {
+        Color(nsColor: dynamicNSColor(light: light, dark: dark))
+    }
+
+    static func dynamicNSColor(light: UInt32, dark: UInt32) -> NSColor {
+        func color(_ hex: UInt32) -> NSColor {
+            NSColor(srgbRed: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
+                    blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
+        }
+        return NSColor(name: nil) { isDark($0) ? color(dark) : color(light) }
+    }
+}
+
+/// A borderless icon button: no fill at rest, a soft rounded fill and full-strength colour
+/// under the pointer. The composer's tools and the window's toolbar buttons use it.
+struct GhostIconButtonStyle: ButtonStyle {
+    var size: CGFloat = AppControlHeight.composerButton
+    var iconSize: CGFloat = 14
+
+    func makeBody(configuration: Configuration) -> some View {
+        GhostIconBody(configuration: configuration, size: size, iconSize: iconSize)
+    }
+
+    private struct GhostIconBody: View {
+        let configuration: ButtonStyleConfiguration
+        let size: CGFloat
+        let iconSize: CGFloat
+        @Environment(\.isEnabled) private var isEnabled
+        @State private var isHovering = false
+
+        var body: some View {
+            configuration.label
+                .font(.system(size: iconSize))
+                .foregroundStyle(isHovering && isEnabled ? AppColors.textPrimary : AppColors.ghostIdle)
+                .frame(width: size, height: size)
+                .background(
+                    RoundedRectangle(cornerRadius: AppRadius.control, style: .continuous)
+                        .fill(isHovering && isEnabled || configuration.isPressed ? AppColors.ghostHover : .clear)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: AppRadius.control, style: .continuous))
+                .opacity(isEnabled ? 1 : 0.45)
+                .onHover { isHovering = $0 }
+                .animation(AppMotion.resolved(AppMotion.quick), value: isHovering)
+        }
+    }
+}
+
+extension View {
+    /// The composer's thinking and model menus: quiet text on a faint rounded tint.
+    func composerPill() -> some View {
+        self
+            .foregroundStyle(AppColors.pillText)
+            .padding(.horizontal, AppSpacing.small)
+            .padding(.vertical, AppSpacing.xxSmall)
+            .background(RoundedRectangle(cornerRadius: AppRadius.row, style: .continuous).fill(AppColors.pillFill))
+            .contentShape(RoundedRectangle(cornerRadius: AppRadius.row, style: .continuous))
+    }
 }
 
 // MARK: - Semantic Typography Tokens

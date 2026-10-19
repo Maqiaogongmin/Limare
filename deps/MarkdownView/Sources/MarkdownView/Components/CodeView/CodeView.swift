@@ -13,7 +13,9 @@ final class CodeView: PlatformView {
 
     var theme: MarkdownTheme = .default {
         didSet {
-            languageLabel.font = theme.fonts.code
+            languageLabel.font = CodeViewConfiguration.barFont(theme: theme)
+            languageLabel.textColor = theme.colors.body.withAlphaComponent(0.5)
+            applyCornerRadius()
             applyBackgroundColors()
             textView.selectionBackgroundColor = theme.colors.selectionBackground
             updateLineNumberView()
@@ -28,7 +30,7 @@ final class CodeView: PlatformView {
 
     var language: String = "" {
         didSet {
-            languageLabel.text = language.isEmpty ? "</>" : language
+            languageLabel.text = language.isEmpty ? "</>" : language.lowercased()
             // The label is sized in layout.
             if oldValue != language {
                 resetCopyFeedback()

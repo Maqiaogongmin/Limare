@@ -63,7 +63,7 @@ struct MCPSettingsView: View {
                         } label: {
                             Label("Refresh All", systemImage: "arrow.clockwise")
                         }
-                        .controlSize(.small)
+                        .buttonStyle(.settingsOutline)
                         .help("Reconnect and refresh tools for all enabled servers")
                     }
 
@@ -72,8 +72,7 @@ struct MCPSettingsView: View {
                     } label: {
                         Label("Add MCP", systemImage: "plus")
                     }
-                    .controlSize(.small)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.settingsOutline)
                     .disabled(appState.mcp.authorityState != .ready)
                 }
             }
@@ -86,7 +85,7 @@ struct MCPSettingsView: View {
                     Text("Connect external tools and resources via Model Context Protocol servers. Add a local command or remote endpoint to get started.")
                 } actions: {
                     Button("Add MCP") { state.showAddSheet = true }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.charcoalProminent)
                 }
                 .padding(.vertical, AppSpacing.xLarge)
                 .frame(maxWidth: .infinity)
@@ -108,7 +107,7 @@ struct MCPSettingsView: View {
                 ) {
                     ForEach(Array(filteredServers.enumerated()), id: \.element.id) { index, server in
                         if index > 0 {
-                            Divider()
+                            SettingsDivider()
                         }
                         MCPRowView(server: server, state: state)
                     }
@@ -154,7 +153,7 @@ private struct MCPRowView: View {
     private var statusColor: Color {
         guard server.enabled else { return AppColors.textSecondary }
         switch status {
-        case .connected: return AppColors.statusSuccess
+        case .connected: return AppColors.positiveText
         case .connecting: return AppColors.statusWarning
         case .credentialRequired: return AppColors.statusWarning
         case .signInRequired, .signingIn: return AppColors.statusWarning
@@ -174,7 +173,7 @@ private struct MCPRowView: View {
             ) {
                 EmptyView()
             }
-            .toggleStyle(.checkbox)
+            .toggleStyle(.charcoalCheckbox)
             .labelsHidden()
             .accessibilityLabel("Enable MCP connection \(server.id)")
 
@@ -194,16 +193,7 @@ private struct MCPRowView: View {
                                 .foregroundStyle(server.enabled ? AppColors.textPrimary : AppColors.textSecondary)
                                 .lineLimit(1)
 
-                            Text(state.connectionTypeDisplayName(for: server))
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(server.isHTTP ? Color.accentColor : AppColors.textSecondary)
-                                .padding(.horizontal, AppSemanticSpacing.badgePaddingHorizontal)
-                                .padding(.vertical, AppSemanticSpacing.badgePaddingVertical)
-                                .background(
-                                    (server.isHTTP ? Color.accentColor : AppColors.textSecondary)
-                                        .opacity(0.12)
-                                )
-                                .clipShape(Capsule())
+                            SettingsBadge(state.connectionTypeDisplayName(for: server))
                         }
 
                         if let note = server.note, !note.isEmpty {
@@ -216,9 +206,14 @@ private struct MCPRowView: View {
 
                     Spacer(minLength: AppSpacing.small)
 
-                    Text(state.statusDisplayText(for: status, isEnabled: server.enabled))
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(statusColor)
+                    // A healthy connection is a green badge; other states stay quiet text.
+                    if server.enabled, case .connected = status {
+                        SettingsBadge(state.statusDisplayText(for: status, isEnabled: server.enabled), tone: .positive)
+                    } else {
+                        Text(state.statusDisplayText(for: status, isEnabled: server.enabled))
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(statusColor)
+                    }
 
                     Image(systemName: "chevron.right")
                         .font(.caption2.weight(.semibold))
@@ -351,19 +346,10 @@ private struct MCPManagementSheet: View {
             HStack(alignment: .center) {
                 HStack(spacing: AppSpacing.xSmall) {
                     Text(server.id)
-                        .font(.headline)
+                        .font(AppTypography.interfaceTitle2)
                         .foregroundStyle(AppColors.textPrimary)
 
-                    Text(state.connectionTypeDisplayName(for: server))
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(server.isHTTP ? Color.accentColor : AppColors.textSecondary)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(
-                            (server.isHTTP ? Color.accentColor : AppColors.textSecondary)
-                                .opacity(0.12)
-                        )
-                        .clipShape(Capsule())
+                    SettingsBadge(state.connectionTypeDisplayName(for: server))
                 }
 
                 Spacer()
@@ -382,7 +368,7 @@ private struct MCPManagementSheet: View {
                     Button("Done") {
                         dismiss()
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.charcoalProminent)
                     .controlSize(.small)
                 }
             }
@@ -497,6 +483,7 @@ private struct MCPManagementSheet: View {
                     state.pendingDeleteServerID = server.id
                 }
                 .controlSize(.small)
+                .foregroundStyle(AppColors.statusError)
             }
             .padding(.horizontal, AppSpacing.medium)
             .padding(.vertical, AppSpacing.small)

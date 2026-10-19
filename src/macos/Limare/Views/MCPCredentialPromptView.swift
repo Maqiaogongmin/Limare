@@ -12,7 +12,7 @@ struct MCPCredentialPromptView: View {
             HStack(alignment: .firstTextBaseline, spacing: AppSpacing.small) {
                 Image(systemName: "key.fill")
                     .font(.title2)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(AppColors.sendFill)
                 Text("Credential Required")
                     .font(.title2.weight(.semibold))
             }
@@ -54,7 +54,7 @@ struct MCPCredentialPromptView: View {
                     isSubmitting = true
                     appState.mcp.resolveCredentialRequest(id: request.id, credential: trimmed)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.charcoalProminent)
                 .keyboardShortcut(.defaultAction)
                 .disabled(token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting)
             }

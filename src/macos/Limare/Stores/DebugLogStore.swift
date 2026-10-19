@@ -79,6 +79,11 @@ final class DebugLogStore {
         )
     }
 
+    /// Empties the list on screen; the log file on disk keeps every record.
+    func clearDisplayed() {
+        entries.removeAll()
+    }
+
     private func record(level: DebugLogEntry.Level, category: String, message: String) {
         let entry = DebugLogEntry(
             id: UUID(),

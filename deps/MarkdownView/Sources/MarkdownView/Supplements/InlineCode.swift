@@ -24,12 +24,12 @@ extension NSAttributedString.Key {
 @MainActor
 enum InlineCode {
     /// Space between the pill's edge and the text, on each side.
-    static let horizontalInset: CGFloat = 4
+    static let horizontalInset: CGFloat = 5
     /// Space past the text where a wrapped span breaks, and so has no spacer
     /// on that side of the line.
     static let wrappedEndInset: CGFloat = 2
     /// How far the pill reaches above and below the code font's glyph box.
-    static let verticalInset: CGFloat = 1
+    static let verticalInset: CGFloat = 1.5
     static let cornerRadius: CGFloat = 5
 
     /// `<br>`, `<br/>` or `<br />`, which a table cell uses for a line break

@@ -157,7 +157,7 @@ private struct WindowCommands: Commands {
         CommandGroup(replacing: .newItem) {
             Button("New Conversation") {
                 appState.focusedWindow.screen = .chat
-                appState.conversations.newConversation()
+                appState.newConversation(in: appState.focusedWindow)
             }
             .keyboardShortcut("n", modifiers: .command)
             Button("New Window") {

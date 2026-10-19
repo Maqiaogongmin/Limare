@@ -10,13 +10,8 @@ public struct WorkSurfaceView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            // At the bottom of the title row, continuing the line under the chat's title.
-            Divider()
-
-            if !window.workSurface.tabs.isEmpty {
-                WorkSurfaceTabStrip()
-                Divider()
-            }
+            // Always there, empty or not: it holds the add and hide buttons.
+            WorkSurfaceTabStrip()
 
             if window.workSurface.tabs.isEmpty {
                 WorkSurfaceLauncherView()
@@ -34,15 +29,18 @@ public struct WorkSurfaceView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // One column from the top of the window down, in the content's own background, so it
-        // reads as part of the window rather than something hung off the chat. A hairline
-        // separates it from the chat.
-        .background {
-            AppColors.surfacePrimary
-                .overlay(alignment: .leading) {
-                    Rectangle().fill(AppColors.separator).frame(width: 1)
-                }
-                .ignoresSafeArea(edges: .top)
-        }
+        // A white sheet lying on the canvas, its edge a hairline and a soft shadow, rather than
+        // a column ruled off from the chat. Its content is clipped to the rounded corners.
+        .background(AppColors.workSurface)
+        .clipShape(RoundedRectangle(cornerRadius: AppRadius.workSurfaceSheet, style: .continuous))
+        .background(
+            RoundedRectangle(cornerRadius: AppRadius.workSurfaceSheet, style: .continuous)
+                .fill(AppColors.workSurface)
+                .shadow(color: .black.opacity(0.04), radius: 12, x: 0, y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppRadius.workSurfaceSheet, style: .continuous)
+                .strokeBorder(AppColors.raisedStroke, lineWidth: 1)
+        )
     }
 }

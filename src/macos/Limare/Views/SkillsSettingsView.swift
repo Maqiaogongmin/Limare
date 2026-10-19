@@ -28,14 +28,12 @@ struct SkillsSettingsView: View {
                     SettingsSearchField(text: $state.searchText, placeholder: "Search skills…")
                         .frame(minWidth: 120, idealWidth: 200, maxWidth: 260)
 
-                    Picker("Scope", selection: $state.filterScope) {
-                        ForEach(SkillFilterScope.allCases) { scope in
-                            Text(scope.rawValue).tag(scope)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
+                    SettingsSegmentedPicker(
+                        selection: $state.filterScope,
+                        options: SkillFilterScope.allCases.map { (value: $0, title: $0.rawValue) }
+                    )
                     .fixedSize()
+                    .accessibilityLabel("Scope")
 
                     Spacer()
 
@@ -44,7 +42,7 @@ struct SkillsSettingsView: View {
                     } label: {
                         Label("Rescan", systemImage: "arrow.clockwise")
                     }
-                    .controlSize(.small)
+                    .buttonStyle(.settingsOutline)
                     .help("Rescan Project and Global Skills")
                 }
             }
@@ -89,7 +87,7 @@ struct SkillsSettingsView: View {
                 ) {
                     ForEach(Array(filteredSkills.enumerated()), id: \.element.id) { index, skill in
                         if index > 0 {
-                            Divider()
+                            SettingsDivider()
                         }
                         SkillRowView(skill: skill, state: state)
                     }
@@ -127,7 +125,7 @@ private struct SkillRowView: View {
             ) {
                 EmptyView()
             }
-            .toggleStyle(.checkbox)
+            .toggleStyle(.charcoalCheckbox)
             .labelsHidden()
             .accessibilityLabel("Enable \(skill.name)")
 
@@ -138,16 +136,7 @@ private struct SkillRowView: View {
                         .foregroundStyle(skill.isEnabled ? AppColors.textPrimary : AppColors.textSecondary)
                         .lineLimit(1)
 
-                    Text(skill.location.displayName)
-                        .font(AppTypography.interfaceCaption2.weight(.bold))
-                        .foregroundStyle(skill.location.isWorkspace ? Color.accentColor : AppColors.textSecondary)
-                        .padding(.horizontal, AppSemanticSpacing.badgePaddingHorizontal)
-                        .padding(.vertical, AppSemanticSpacing.badgePaddingVertical)
-                        .background(
-                            (skill.location.isWorkspace ? Color.accentColor : AppColors.textSecondary)
-                                .opacity(0.12)
-                        )
-                        .clipShape(Capsule())
+                    SettingsBadge(skill.location.displayName)
                 }
 
                 if !skill.description.isEmpty {
@@ -198,19 +187,10 @@ private struct SkillDetailSheet: View {
             HStack(alignment: .center) {
                 HStack(spacing: AppSpacing.xSmall) {
                     Text(skill.name)
-                        .font(.headline)
+                        .font(AppTypography.interfaceTitle2)
                         .foregroundStyle(AppColors.textPrimary)
 
-                    Text(skill.location.displayName)
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(skill.location.isWorkspace ? Color.accentColor : AppColors.textSecondary)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(
-                            (skill.location.isWorkspace ? Color.accentColor : AppColors.textSecondary)
-                                .opacity(0.12)
-                        )
-                        .clipShape(Capsule())
+                    SettingsBadge(skill.location.displayName)
                 }
 
                 Spacer()
@@ -229,7 +209,7 @@ private struct SkillDetailSheet: View {
                     Button("Done") {
                         dismiss()
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.charcoalProminent)
                     .controlSize(.small)
                 }
             }
@@ -263,7 +243,8 @@ private struct SkillDetailSheet: View {
                                     }
                                     .buttonStyle(.plain)
                                     .font(.caption.weight(.medium))
-                                    .foregroundStyle(Color.accentColor)
+                                    .foregroundStyle(Color.primary.opacity(0.75))
+                                    .underline()
                                     .padding(.top, 1)
                                 }
                             }

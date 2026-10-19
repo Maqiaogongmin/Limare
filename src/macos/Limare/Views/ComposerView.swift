@@ -18,6 +18,10 @@ struct ComposerView: View {
     @State private var focusToken = 0
     /// The highlighted row of the @ mention menu.
     @State private var mentionSelection = 0
+    /// A new conversation centres the composer in a narrower column, without the disclaimer.
+    var isEmptyState = false
+    /// A narrow chat: the composer gives the page's side margin back to its controls.
+    var isCompact = false
     /// The draft the user closed the mention menu on (Escape); kept apart from the command menu's.
     @State private var mentionMenuDismissedDraft: String?
 
@@ -134,8 +138,6 @@ struct ComposerView: View {
                         focusToken: focusToken
                     )
                     .frame(height: visibleDraftHeight)
-                    .padding(.horizontal, AppSpacing.xxSmall)
-                    .padding(.top, AppSpacing.xxxSmall)
 
                     if measuredContentHeight > AppLayout.composerDraftMinimumHeight * 1.5 || isComposerExpanded {
                         Button {
@@ -152,26 +154,21 @@ struct ComposerView: View {
                         }
                         .buttonStyle(.plain)
                         .help(isComposerExpanded ? "Collapse Composer" : "Expand Composer")
-                        .padding(.top, AppSpacing.xxxSmall)
-                        .padding(.trailing, AppSpacing.xxSmall)
                         .transition(.opacity)
                     }
                 }
 
-                // Lower level: Input tools (Left) + Model & Run controls (Right)
-                HStack(alignment: .center, spacing: AppSpacing.small) {
+                // Lower level: Input tools (Left) + Model & Run controls (Right). The ghost
+                // buttons carry their own air, so they sit close.
+                HStack(alignment: .center, spacing: AppSpacing.xxxSmall) {
                     Button {
                         pickFiles()
                     } label: {
                         Image(systemName: "paperclip")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                            .frame(width: AppControlHeight.composerButton, height: AppControlHeight.composerButton)
-                            .background(AppColors.surfaceInteractive)
-                            .clipShape(Circle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(GhostIconButtonStyle())
                     .help("Attach files")
+                    .accessibilityLabel("Attachments")
                     .disabled(isDictatingHere)
 
                     ComposerDraftHistoryButton()
@@ -179,7 +176,7 @@ struct ComposerView: View {
                     if isDictatingHere && appState.voiceInput.state.isRecording {
                         HStack(spacing: 6) {
                             Circle()
-                                .fill(Color.red)
+                                .fill(AppColors.statusError)
                                 .frame(width: 8, height: 8)
                             Text("Recording \(formatRecordingDuration(appState.voiceInput.elapsedSeconds))")
                                 .font(.caption)
@@ -214,7 +211,7 @@ struct ComposerView: View {
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(Color.red.opacity(0.08))
+                        .background(AppColors.statusError.opacity(0.08))
                         .clipShape(Capsule())
                     } else if isDictatingHere && appState.voiceInput.state.isTranscribing {
                         HStack(spacing: 6) {
@@ -234,14 +231,10 @@ struct ComposerView: View {
                             appState.voiceInput.start()
                         } label: {
                             Image(systemName: "mic")
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
-                            .frame(width: AppControlHeight.composerButton, height: AppControlHeight.composerButton)
-                            .background(AppColors.surfaceInteractive)
-                            .clipShape(Circle())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(GhostIconButtonStyle())
                         .help("Voice input (dictation)")
+                        .accessibilityLabel("Microphone")
                     }
 
                     if appState.voiceInput.isTarget(window.chat), let errorMsg = appState.voiceInput.errorMessage, !appState.voiceInput.state.isActive {
@@ -274,31 +267,40 @@ struct ComposerView: View {
                         }
                         .padding(.horizontal, 6)
                         .padding(.vertical, 3)
-                        .background(Color.orange.opacity(0.1))
+                        .background(AppColors.statusWarning.opacity(0.1))
                         .clipShape(Capsule())
                     }
 
                     ComposerSubagentControl()
 
-                    Spacer(minLength: AppSpacing.small)
+                    // No minimum: the buttons and pills on either side carry their own air.
+                    Spacer(minLength: 0)
 
-                    ComposerThinkingControl()
+                    ComposerThinkingControl(isCompact: isCompact)
 
                     ContextUsageIndicator(conversationID: window.conversationID)
 
                     ComposerModelSelector()
+                        .layoutPriority(1)
 
                     ComposerRunControls(canSend: canSend, onSend: handleSend)
                 }
-                .padding(.horizontal, AppSpacing.xxSmall)
-                .padding(.bottom, AppSpacing.xxxSmall)
+                .padding(.top, AppSpacing.composerDraftToolbarGap - AppSpacing.xSmall)
             }
-            .padding(AppSpacing.small)
-            .background(AppColors.surfaceElevated)
-            .clipShape(RoundedRectangle(cornerRadius: AppRadius.composer, style: .continuous))
+            .padding(.top, AppSpacing.standard)
+            .padding(.bottom, AppSpacing.medium)
+            .padding(.horizontal, AppSpacing.standard)
+            // A white card raised over the warm canvas: a hairline edge, a wide soft shadow
+            // for distance and a tight one where it meets the page.
+            .background(
+                RoundedRectangle(cornerRadius: AppRadius.composerCard, style: .continuous)
+                    .fill(AppColors.raisedSurface)
+                    .shadow(color: .black.opacity(0.05), radius: 18, x: 0, y: 8)
+                    .shadow(color: .black.opacity(0.03), radius: 3, x: 0, y: 1)
+            )
             .overlay(
-                RoundedRectangle(cornerRadius: AppRadius.composer, style: .continuous)
-                    .stroke(isFileTargeted ? Color.accentColor : Color.secondary.opacity(0.16), lineWidth: isFileTargeted ? 2 : 1)
+                RoundedRectangle(cornerRadius: AppRadius.composerCard, style: .continuous)
+                    .strokeBorder(isFileTargeted ? Color.accentColor : AppColors.raisedStroke, lineWidth: isFileTargeted ? 2 : 1)
             )
             .dropDestination(for: URL.self) { urls, _ in
                 importFiles(urls.map { HostFileSelection.droppedByUser(url: $0) })
@@ -333,17 +335,17 @@ struct ComposerView: View {
                 .alignmentGuide(.top) { $0[.bottom] + AppSpacing.xSmall }
             }
 
-            Text("Limare can make mistakes. Review tool calls before relying on changes.")
-                .font(AppTypography.interfaceCaption2)
-                .foregroundStyle(.tertiary)
         }
-        .frame(maxWidth: AppLayout.transcriptMaximumWidth)
+        .frame(maxWidth: isEmptyState ? AppLayout.emptyStateMaximumWidth : AppLayout.transcriptMaximumWidth)
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, AppSpacing.chatHorizontal)
+        .padding(.horizontal, isCompact ? AppSpacing.standard : AppSpacing.chatHorizontal)
         .padding(.top, AppSpacing.small)
-        .padding(.bottom, AppSpacing.small)
+        .padding(.bottom, isEmptyState ? 0 : AppSpacing.composerBottom)
         .background(Color.clear)
-        .onAppear { serveFocusRequest() }
+        // A window that opens, or a conversation that is switched to, starts in the composer,
+        // not in the first field AppKit finds (the sidebar's search).
+        .onAppear { focusEditor() }
+        .onChange(of: window.conversationID) { _, _ in focusEditor() }
         .onChange(of: window.composerFocusRequest) { _, _ in
             serveFocusRequest()
         }
@@ -375,6 +377,10 @@ struct ComposerView: View {
 
     private func serveFocusRequest() {
         guard window.composerFocusServed != window.composerFocusRequest else { return }
+        focusEditor()
+    }
+
+    private func focusEditor() {
         window.composerFocusServed = window.composerFocusRequest
         focusToken += 1
     }
@@ -451,7 +457,7 @@ struct ComposerView: View {
         if !hasValidModelSource {
             return "Choose an available chat model below…"
         }
-        return "Message Limare… (Shift+Return for new line)"
+        return "Ask anything, @ to mention files or tools…"
     }
 
     private var canSend: Bool {
@@ -551,13 +557,8 @@ private struct ComposerDraftHistoryButton: View {
                 isPresented.toggle()
             } label: {
                 Image(systemName: "clock.arrow.circlepath")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .frame(width: AppControlHeight.composerButton, height: AppControlHeight.composerButton)
-                    .background(AppColors.surfaceInteractive)
-                    .clipShape(Circle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(GhostIconButtonStyle())
             .help("找回草稿")
             .accessibilityLabel("找回草稿")
             .accessibilityIdentifier("composer.draftHistory")
@@ -661,7 +662,7 @@ private struct ComposerQueueStatusBanner: View {
         if let convID = activeConversationID, queuedCount > 0 {
             HStack(spacing: AppSpacing.small) {
                 Image(systemName: isHeld ? "pause.circle.fill" : "clock.arrow.circlepath")
-                    .foregroundStyle(isHeld ? Color.orange : Color.secondary)
+                    .foregroundStyle(isHeld ? AppColors.statusWarning : Color.secondary)
                     .font(.system(size: 12))
 
                 Text(isHeld
@@ -705,7 +706,7 @@ private struct ComposerQueueStatusBanner: View {
             }
             .padding(.horizontal, AppSpacing.small)
             .padding(.vertical, 6)
-            .background(isHeld ? Color.orange.opacity(0.1) : AppColors.surfaceInteractive)
+            .background(isHeld ? AppColors.statusWarning.opacity(0.1) : AppColors.surfaceInteractive)
             .clipShape(RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous))
         }
     }
@@ -794,21 +795,23 @@ private struct ComposerRunControls: View {
                         ProgressView()
                             .controlSize(.mini)
                             .frame(width: 22, height: 22)
-                            .background(Color.orange.opacity(0.2))
+                            .background(AppColors.statusWarning.opacity(0.2))
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
                     .help("Pausing at next boundary (click to cancel)")
                     .accessibilityLabel("Pausing at next boundary")
                 } else {
+                    // Pause and stop are neutral: colour stays for states, and stop, filled,
+                    // is still the strongest control in the row.
                     Button {
                         window.chat.pause()
                     } label: {
                         Image(systemName: "pause.fill")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(Color.white)
-                            .frame(width: 22, height: 22)
-                            .background(Color.orange.opacity(0.85))
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(AppColors.textPrimary)
+                            .frame(width: AppControlHeight.composerButton, height: AppControlHeight.composerButton)
+                            .background(AppColors.surfaceInteractive)
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
@@ -816,15 +819,14 @@ private struct ComposerRunControls: View {
                     .accessibilityLabel("Pause run")
                 }
 
-                // Stop control (Red)
                 Button {
                     window.chat.stop()
                 } label: {
                     Image(systemName: "stop.fill")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(Color.white)
-                        .frame(width: 22, height: 22)
-                        .background(Color.red)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(AppColors.surfacePrimary)
+                        .frame(width: AppControlHeight.composerButton, height: AppControlHeight.composerButton)
+                        .background(AppColors.textPrimary)
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -873,12 +875,14 @@ private struct ComposerRunControls: View {
         Button {
             onSend?()
         } label: {
+            // Quiet until there is something to send, then the strongest mark in the composer.
             Image(systemName: "arrow.up")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(canSend ? Color.white : Color.secondary)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(canSend ? AppColors.sendGlyph : Color.secondary.opacity(0.6))
                 .frame(width: AppControlHeight.composerButton, height: AppControlHeight.composerButton)
-                .background(canSend ? Color.accentColor : Color.secondary.opacity(0.15))
-                .clipShape(Circle())
+                .background(Circle().fill(canSend ? AppColors.sendFill : Color.primary.opacity(0.06)))
+                .contentShape(Circle())
+                .animation(AppMotion.resolved(AppMotion.quick), value: canSend)
         }
         .buttonStyle(.plain)
         .keyboardShortcut(.return, modifiers: .command)
@@ -1026,12 +1030,18 @@ struct ComposerModelSelector: View {
     var body: some View {
         // Its full title when the composer has room, else as wide as the room: a fixed width
         // made a long model name push the composer past a narrow chat column.
+        // A group shows the model it would use now ("chat · DeepSeek V4.1 Flash"). Short of room
+        // the group's name goes first, then the icon and the chevron: the model is what the
+        // user needs to read, and it truncates only when nothing else is left to give up.
         ViewThatFits(in: .horizontal) {
-            menu.fixedSize(horizontal: true, vertical: false)
-            menu
+            menu(label: compactModelLabel).fixedSize(horizontal: true, vertical: false)
+            menu(label: modelName).fixedSize(horizontal: true, vertical: false)
+            menu(label: modelName, showsIcon: false).fixedSize(horizontal: true, vertical: false)
+            menu(label: modelName, showsIcon: false, showsChevron: false).fixedSize(horizontal: true, vertical: false)
+            menu(label: modelName, showsIcon: false, showsChevron: false, truncates: true)
         }
         .disabled(window.chat.isStreaming)
-        .help(activeModelLabel)
+        .help(modelHelp)
         .accessibilityLabel(activeModelLabel)
         .sheet(isPresented: $isShowingModelBrowser) {
             ComposerModelBrowser(
@@ -1044,29 +1054,19 @@ struct ComposerModelSelector: View {
         }
     }
 
-    private var menu: some View {
+    private func menu(label: String, showsIcon: Bool = true, showsChevron: Bool = true, truncates: Bool = false) -> some View {
         Menu {
             if !selectableGroups.isEmpty {
                 Section("Model Groups") {
                     ForEach(selectableGroups) { group in
-                        Button {
-                            selectGroup(group.id)
-                        } label: {
-                            let groupLabel = modelGroupLabel(group)
-                            let isSelected: Bool = {
-                                if case .group(let gID) = currentModelSource {
-                                    return gID == group.id
-                                }
+                        // A Toggle draws the menu's own checkmark on the current choice.
+                        Toggle(modelGroupLabel(group), isOn: Binding(
+                            get: {
+                                if case .group(let gID) = currentModelSource { return gID == group.id }
                                 return false
-                            }()
-                            if isSelected {
-                                Label(groupLabel, systemImage: "checkmark")
-                            } else if appState.modelGroups.defaultPrimaryGroupId == group.id {
-                                Label(groupLabel, systemImage: "star.fill")
-                            } else {
-                                Text(groupLabel)
-                            }
-                        }
+                            },
+                            set: { _ in selectGroup(group.id) }
+                        ))
                     }
                 }
             }
@@ -1074,11 +1074,10 @@ struct ComposerModelSelector: View {
             if !recentEntries.isEmpty {
                 Section("Recent Models") {
                     ForEach(recentEntries) { entry in
-                        Button {
-                            selectDirectModel(providerID: entry.providerID, modelID: entry.model.id)
-                        } label: {
-                            Text("\(entry.providerName) / \(entry.model.displayName)")
-                        }
+                        Toggle("\(entry.providerName) / \(entry.model.displayName)", isOn: Binding(
+                            get: { isCurrentDirect(providerID: entry.providerID, modelID: entry.model.id) },
+                            set: { _ in selectDirectModel(providerID: entry.providerID, modelID: entry.model.id) }
+                        ))
                     }
                 }
             }
@@ -1107,21 +1106,10 @@ struct ComposerModelSelector: View {
                         if !visibleModels.isEmpty {
                             Menu(provider.name) {
                                 ForEach(visibleModels) { model in
-                                    Button {
-                                        selectDirectModel(providerID: provider.id, modelID: model.id)
-                                    } label: {
-                                        let isSelected: Bool = {
-                                            if case .direct(let pID, let mID) = currentModelSource {
-                                                return pID == provider.id && mID == model.id
-                                            }
-                                            return false
-                                        }()
-                                        if isSelected {
-                                            Label(model.displayName, systemImage: "checkmark")
-                                        } else {
-                                            Text(model.displayName)
-                                        }
-                                    }
+                                    Toggle(model.displayName, isOn: Binding(
+                                        get: { isCurrentDirect(providerID: provider.id, modelID: model.id) },
+                                        set: { _ in selectDirectModel(providerID: provider.id, modelID: model.id) }
+                                    ))
                                 }
                             }
                         }
@@ -1136,27 +1124,29 @@ struct ComposerModelSelector: View {
             }
         } label: {
             HStack(spacing: AppSpacing.xxSmall) {
-                Image(systemName: iconName)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                if showsIcon {
+                    Image(systemName: iconName)
+                        .font(.system(size: 11))
+                }
 
-                Text(compactModelLabel)
-                    .font(AppTypography.interfaceCaption.weight(.medium))
+                // The last resort fills whatever width it is given; the others keep to the cap.
+                Text(label)
+                    .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .frame(maxWidth: 180, alignment: .leading)
+                    .frame(maxWidth: truncates ? nil : AppLayout.composerModelLabelMaximumWidth, alignment: .leading)
 
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                if showsChevron {
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .opacity(0.7)
+                }
             }
-            .padding(.horizontal, AppSpacing.small)
-            .padding(.vertical, AppSpacing.xxSmall)
-            .background(AppColors.surfaceInteractive)
-            .clipShape(RoundedRectangle(cornerRadius: AppRadius.row))
-            .contentShape(Rectangle())
+            .composerPill()
         }
-        .menuStyle(.borderlessButton)
+        // A plain button style keeps the label's own quiet colour (see the thinking pill).
+        .menuStyle(.button)
+        .buttonStyle(.plain)
         .menuIndicator(.hidden)
     }
 
@@ -1171,8 +1161,34 @@ struct ComposerModelSelector: View {
         ModelChoiceCatalog.label(for: currentModelSource, modelGroups: appState.modelGroups, providers: appState.providers.providers)
     }
 
-    private var compactModelLabel: String {
+    /// The group or model name alone.
+    private var sourceName: String {
         ModelChoiceCatalog.shortLabel(for: currentModelSource, modelGroups: appState.modelGroups, providers: appState.providers.providers)
+    }
+
+    private var groupSummary: (short: String, long: String)? {
+        guard case .group(let groupID) = currentModelSource else { return nil }
+        return ModelChoiceCatalog.groupModelSummary(groupID: groupID, modelGroups: appState.modelGroups,
+                                                    providers: appState.providers.providers)
+    }
+
+    /// The model itself: a group's current model, or the direct model's name.
+    private var modelName: String {
+        groupSummary?.short ?? sourceName
+    }
+
+    private var compactModelLabel: String {
+        guard let summary = groupSummary else { return sourceName }
+        return "\(sourceName) · \(summary.short)"
+    }
+
+    private var modelHelp: String {
+        groupSummary?.long ?? activeModelLabel
+    }
+
+    private func isCurrentDirect(providerID: UUID, modelID: String) -> Bool {
+        if case .direct(let pID, let mID) = currentModelSource { return pID == providerID && mID == modelID }
+        return false
     }
 
     private func selectGroup(_ groupID: String) {

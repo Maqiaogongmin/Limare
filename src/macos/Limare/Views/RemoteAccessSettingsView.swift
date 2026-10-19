@@ -11,57 +11,114 @@ struct RemoteAccessSettingsView: View {
     private var remote: RemoteAccessCoordinator { appState.remoteAccess }
 
     var body: some View {
-        Form {
-            Section {
-                Toggle("Enable Remote Access", isOn: $draft.isEnabled)
-                LabeledContent("Server") { Text(serverText).foregroundStyle(.secondary) }
-                LabeledContent("Tunnel") { Text(tunnelText).foregroundStyle(.secondary) }
-            } header: {
-                Text("Remote Access")
-            } footer: {
-                Text("Use this Limare from your phone's browser while Limare runs on this Mac. Limare listens only on 127.0.0.1; Cloudflare Tunnel is the only way in, and Cloudflare Access signs in the one person allowed.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                TextField("Public hostname", text: $draft.publicHostname, prompt: Text("limare.example.com"))
-                TextField("Local port", text: $portText, prompt: Text("\(RemoteAccessConfiguration.defaultPort)"))
-                SecretField(hasStoredSecret: remote.hasTunnelToken, replacementSecret: $replacementToken, placeholder: "Paste the tunnel token", secretName: "Tunnel token")
-            } header: {
-                Text("Cloudflare Tunnel")
-            } footer: {
-                Text("In Cloudflare Zero Trust, create a tunnel, add a public hostname with service http://127.0.0.1:\(portText.isEmpty ? String(RemoteAccessConfiguration.defaultPort) : portText), and turn on Protect with Access for that route. The token is kept in Limare's private secret store and passed to cloudflared only through its environment.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                TextField("Team domain", text: $draft.teamDomain, prompt: Text("myteam.cloudflareaccess.com"))
-                TextField("Application AUD tag", text: $draft.audienceTag)
-                TextField("Owner email", text: $draft.ownerEmail, prompt: Text("you@example.com"))
-            } header: {
-                Text("Cloudflare Access")
-            } footer: {
-                Text("Every request must carry an Access token signed for this application and this email; anything else gets 403, including programs on this Mac.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                HStack {
-                    if let applyError {
-                        Text(applyError).foregroundStyle(.red).font(.caption)
+        SettingsPage {
+            // The page title already names it; the first card starts with the switch.
+            SettingsSection {
+                SettingsRow("Enable Remote Access") {
+                    Toggle("Enable Remote Access", isOn: $draft.isEnabled)
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .labelsHidden()
+                }
+                SettingsDivider()
+                SettingsRow("Server") {
+                    Text(serverText)
+                        .font(Self.mono)
+                        .foregroundStyle(.secondary)
+                }
+                SettingsDivider()
+                SettingsRow("Tunnel") {
+                    if case .connected = remote.tunnel.status {
+                        SettingsBadge("Connected", tone: .positive)
+                    } else {
+                        Text(tunnelText)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
                     }
-                    Spacer()
-                    Button(isApplying ? "Applying…" : "Save and Restart Remote Access") { apply() }
-                        .disabled(isApplying || !isDirty)
-                        .keyboardShortcut(.defaultAction)
                 }
             }
+            footnote("Use this Limare from your phone's browser while Limare runs on this Mac. Limare listens only on 127.0.0.1; Cloudflare Tunnel is the only way in, and Cloudflare Access signs in the one person allowed.")
+
+            SettingsSection(title: "Cloudflare Tunnel") {
+                field("Public hostname") {
+                    TextField("Public hostname", text: $draft.publicHostname, prompt: Text("limare.example.com"))
+                        .font(Self.mono)
+                        .settingsFieldWell()
+                }
+                SettingsDivider()
+                field("Local port") {
+                    TextField("Local port", text: $portText, prompt: Text("\(RemoteAccessConfiguration.defaultPort)"))
+                        .font(Self.mono)
+                        .settingsFieldWell()
+                }
+                SettingsDivider()
+                field("Tunnel token") {
+                    SecretField(hasStoredSecret: remote.hasTunnelToken, replacementSecret: $replacementToken, placeholder: "Paste the tunnel token", secretName: "Tunnel token")
+                }
+            }
+            footnote("In Cloudflare Zero Trust, create a tunnel, add a public hostname with service http://127.0.0.1:\(portText.isEmpty ? String(RemoteAccessConfiguration.defaultPort) : portText), and turn on Protect with Access for that route. The token is kept in Limare's private secret store and passed to cloudflared only through its environment.")
+
+            SettingsSection(title: "Cloudflare Access") {
+                field("Team domain") {
+                    TextField("Team domain", text: $draft.teamDomain, prompt: Text("myteam.cloudflareaccess.com"))
+                        .font(Self.mono)
+                        .settingsFieldWell()
+                }
+                SettingsDivider()
+                field("Application AUD tag") {
+                    // A long hash: one line, cut in the middle, so the label beside it keeps its room.
+                    TextField("Application AUD tag", text: $draft.audienceTag)
+                        .font(Self.mono)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .settingsFieldWell()
+                }
+                SettingsDivider()
+                field("Owner email") {
+                    TextField("Owner email", text: $draft.ownerEmail, prompt: Text("you@example.com"))
+                        .settingsFieldWell()
+                }
+            }
+            footnote("Every request must carry an Access token signed for this application and this email; anything else gets 403, including programs on this Mac.")
+
+            // Under the last card, at its right edge: charcoal while there is something to save.
+            HStack(spacing: AppSpacing.small) {
+                if let applyError {
+                    Text(applyError)
+                        .foregroundStyle(AppColors.dangerText)
+                        .font(AppTypography.interfaceCaption)
+                }
+                Spacer()
+                Button(isApplying ? "Applying…" : "Save and Restart Remote Access") { apply() }
+                    .buttonStyle(.charcoalProminent)
+                    .disabled(isApplying || !isDirty)
+                    .keyboardShortcut(.defaultAction)
+            }
         }
-        .formStyle(.grouped)
         .onAppear(perform: load)
+    }
+
+    private static let mono = Font.system(size: 12.5, design: .monospaced)
+
+    /// A labelled field: the label at a fixed width, the field filling the rest of the row.
+    private func field<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
+        HStack(spacing: AppSpacing.medium) {
+            Text(label)
+                .font(AppTypography.interfaceMedium)
+                .foregroundStyle(AppColors.textPrimary)
+                .frame(width: 150, alignment: .leading)
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, AppSemanticSpacing.settingsRowVerticalPadding)
+    }
+
+    private func footnote(_ text: String) -> some View {
+        Text(text)
+            .font(AppTypography.interfaceCaption)
+            .foregroundStyle(AppColors.textSecondary)
+            .padding(.horizontal, AppSpacing.xxSmall)
+            .padding(.top, -AppSpacing.small)
     }
 
     private var isDirty: Bool {

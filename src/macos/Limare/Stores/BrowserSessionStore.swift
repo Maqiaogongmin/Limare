@@ -184,14 +184,7 @@ final class BrowserSessionStore {
         }
 
         if tabs.count >= maxLiveTabs {
-            let candidateTabs = tabs.values.filter { tab in
-                let hasRun = self.hasActiveRun?(tab.conversationID) == true
-                let isUserControl = tab.owner == .user
-                let isDisplayed = self.displayedConversationIDs.contains(tab.conversationID)
-                return !hasRun && !isUserControl && !isDisplayed
-            }
-
-            guard let victim = candidateTabs.min(by: { $0.lastUsedAt < $1.lastUsedAt }) else {
+            guard let victim = evictionCandidate() else {
                 throw BrowserSessionStoreError.capacityExceeded
             }
 
@@ -231,18 +224,26 @@ final class BrowserSessionStore {
             return nil
         }
 
-        if tabs.count >= maxLiveTabs {
-            let canEvict = tabs.values.contains { tab in
-                let hasRun = self.hasActiveRun?(tab.conversationID) == true
-                let isUserControl = tab.owner == .user
-                let isDisplayed = self.displayedConversationIDs.contains(tab.conversationID)
-                return !hasRun && !isUserControl && !isDisplayed
-            }
-            if !canEvict {
-                return .capacityExceeded()
-            }
+        if tabs.count >= maxLiveTabs, evictionCandidate() == nil {
+            return .capacityExceeded()
         }
         return nil
+    }
+
+    /// The tab to close for a new one: a tab whose conversation no window shows and has no run in
+    /// progress. A page the user navigated is kept while its conversation is on screen; once it is
+    /// not, it goes after the agent's own pages, least recently used first. Protecting it for good
+    /// let six such pages lock every conversation out of the browser.
+    private func evictionCandidate() -> BrowserTab? {
+        tabs.values
+            .filter { tab in
+                self.hasActiveRun?(tab.conversationID) != true
+                    && !self.displayedConversationIDs.contains(tab.conversationID)
+            }
+            .min { lhs, rhs in
+                let lhsUser = lhs.owner == .user, rhsUser = rhs.owner == .user
+                return lhsUser != rhsUser ? !lhsUser : lhs.lastUsedAt < rhs.lastUsedAt
+            }
     }
 
     func evidence(_ result: BrowserActionResult, conversationID: UUID) -> BrowserActionResult {

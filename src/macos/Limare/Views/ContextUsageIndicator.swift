@@ -16,8 +16,9 @@ struct ContextUsageIndicator: View {
 
     var body: some View {
         if let presentation {
+            // Narrower than a button: the ring is small, and the composer row is short of room.
             ContextUsageRing(fraction: presentation.percent.map { Double($0) / 100 })
-                .frame(width: AppControlHeight.composerButton, height: AppControlHeight.composerButton)
+                .frame(width: AppControlHeight.composerButton - 8, height: AppControlHeight.composerButton)
                 .contentShape(Rectangle())
                 .onHover { isHovering = $0 }
                 .popover(isPresented: $isHovering, arrowEdge: .top) {
@@ -43,6 +44,8 @@ struct ContextUsageRing: View {
         NSColor.systemGreen.blended(withFraction: min(1, max(0, fraction)), of: .systemYellow) ?? .systemGreen
     }
 
+    // Flat ends: a small share reads as a short filled arc on the full track, not as the
+    // rounded tail of a spinner.
     var body: some View {
         ZStack {
             Circle()
@@ -50,7 +53,7 @@ struct ContextUsageRing: View {
             if let fraction {
                 Circle()
                     .trim(from: 0, to: min(1, max(0, fraction)))
-                    .stroke(Color(nsColor: Self.nsColor(for: fraction)), style: StrokeStyle(lineWidth: Self.lineWidth, lineCap: .round))
+                    .stroke(Color(nsColor: Self.nsColor(for: fraction)), style: StrokeStyle(lineWidth: Self.lineWidth, lineCap: .butt))
                     .rotationEffect(.degrees(-90))
             }
         }

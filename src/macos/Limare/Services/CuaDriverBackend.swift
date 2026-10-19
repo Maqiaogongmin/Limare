@@ -622,7 +622,44 @@ public actor CuaDriverBackend: ComputerUseDriver {
     }
 
     /// Launches an application by bundle identifier in background mode.
+    ///
+    /// cua-driver hands back an app that is already running as it is, even when it has no window
+    /// of its own (its last window was closed and it stayed running, as terminals and editors do).
+    /// Such an app gets the reopen request a Dock click sends, through LaunchServices without
+    /// activating it, so it opens its default window the way `open -a` would.
     public func launchApplication(bundleID: String, background: Bool = true) async throws -> ApplicationLaunchResult {
+        let wasRunning = Self.isRunning(bundleID: bundleID)
+        let launched = try await launchThroughDriver(bundleID: bundleID, background: background)
+        guard wasRunning,
+              ComputerUseTargetStore.usableWindows(launched.windows, pid: launched.pid).isEmpty,
+              await Self.reopenWithoutActivating(bundleID: bundleID) else { return launched }
+        // Window creation can trail the reopen; the result then says launchedAwaitingWindow and
+        // the next capture(target_app) finds the window.
+        let windows = (try? await listWindows(pid: launched.pid)) ?? launched.windows
+        return ApplicationLaunchResult(bundleID: bundleID, pid: launched.pid, windows: windows)
+    }
+
+    private static func isRunning(bundleID: String) -> Bool {
+        #if canImport(AppKit)
+        return !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
+        #else
+        return false
+        #endif
+    }
+
+    private static func reopenWithoutActivating(bundleID: String) async -> Bool {
+        #if canImport(AppKit)
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return false }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = false
+        configuration.addsToRecentItems = false
+        return (try? await NSWorkspace.shared.openApplication(at: url, configuration: configuration)) != nil
+        #else
+        return false
+        #endif
+    }
+
+    private func launchThroughDriver(bundleID: String, background: Bool) async throws -> ApplicationLaunchResult {
         let resp = try await callTool(name: "launch_app", arguments: ["bundle_id": bundleID, "background": background])
         guard let sc = resp["structuredContent"] as? [String: Any],
               let pid = sc["pid"] as? Int else {

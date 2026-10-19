@@ -83,6 +83,13 @@ public struct FilesSurfaceView: View {
         stored <= 20.0 ? 0.0 : min(maxWidth, max(120.0, stored))
     }
 
+    /// The one rule in the preview's head: a hairline under its toolbar.
+    private var previewToolbarRule: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.06))
+            .frame(height: 1)
+    }
+
     @ViewBuilder
     private func previewContentView(onBack: (() -> Void)?) -> some View {
         VStack(spacing: 0) {
@@ -106,7 +113,7 @@ public struct FilesSurfaceView: View {
                     showsSource: previewData.content.hasSource ? $showsSource : nil,
                     onOpenInBrowser: htmlURL.map { url in { openInBrowser(url) } }
                 )
-                Divider()
+                previewToolbarRule
 
                 switch previewData.content {
                 case .markdown(let src):
@@ -125,17 +132,17 @@ public struct FilesSurfaceView: View {
 
             case .emptyFile(let metadata):
                 FilePreviewToolbar(metadata: metadata, onBack: onBack, onRefresh: files.refresh)
-                Divider()
+                previewToolbarRule
                 EmptyFilePreviewView(metadata: metadata)
 
             case .tooLarge(let metadata):
                 FilePreviewToolbar(metadata: metadata, onBack: onBack, onRefresh: files.refresh)
-                Divider()
+                previewToolbarRule
                 TooLargeFilePreviewView(metadata: metadata)
 
             case .unsupported(let metadata):
                 FilePreviewToolbar(metadata: metadata, onBack: onBack, onRefresh: files.refresh)
-                Divider()
+                previewToolbarRule
                 UnsupportedFilePreviewView(metadata: metadata)
 
             case .error(let message):

@@ -12,7 +12,7 @@ import UniformTypeIdentifiers
 // target) are `RemoteFile`s, read at `GET /files/<conversation>/<source>/<id>`.
 
 enum RemoteWire {
-    static let protocolVersion = 5
+    static let protocolVersion = 6
     /// The longest input text a client may submit.
     static let maxInputCharacters = 64 * 1024
     static let maxRequestIDLength = 64
@@ -239,6 +239,8 @@ struct RemoteToolCall: Codable, Equatable, Sendable {
     let outputTruncated: Bool
     let errorMessage: String?
     let durationMs: Int?
+    /// What the Mac's row shows beside the tool's name (`ToolCallPresentationResolver`).
+    let summary: String?
     /// The workspace file a file tool reads or writes, shown as a card under the call.
     let file: RemoteFile?
 }
@@ -250,6 +252,8 @@ struct RemoteMessage: Codable, Equatable, Sendable {
     let content: String
     let reasoning: String?
     let isSystemNotice: Bool
+    /// A message the user sent while a run was working (a steer); the turn before it folds.
+    let sentWhileWorking: Bool
     let model: String?
     let attachments: [RemoteFile]
     let toolCalls: [RemoteToolCall]

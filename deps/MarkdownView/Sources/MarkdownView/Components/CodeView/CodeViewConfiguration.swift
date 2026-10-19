@@ -27,17 +27,24 @@ enum CodeViewConfiguration {
         return intrinsicHeight(lineCount: numberOfRows, theme: theme)
     }
 
+    /// The font of the language name in the bar, which sets the bar's height.
+    static func barFont(theme: MarkdownTheme) -> PlatformFont {
+        theme.fonts.codeBlockLabel ?? theme.fonts.code
+    }
+
     static func intrinsicHeight(
         lineCount: Int,
         theme: MarkdownTheme = .default,
     ) -> CGFloat {
-        let font = theme.fonts.code
-        #if canImport(UIKit)
-            let lineHeight = font.lineHeight
-        #elseif canImport(AppKit)
-            let lineHeight = font.ascender + abs(font.descender) + font.leading
-        #endif
-        let barHeight = lineHeight + barPadding * 2
+        func height(of font: PlatformFont) -> CGFloat {
+            #if canImport(UIKit)
+                font.lineHeight
+            #elseif canImport(AppKit)
+                font.ascender + abs(font.descender) + font.leading
+            #endif
+        }
+        let lineHeight = height(of: theme.fonts.code)
+        let barHeight = height(of: barFont(theme: theme)) + barPadding * 2
         let codeHeight = lineHeight * CGFloat(lineCount)
             + codePadding * 2
             + codeLineSpacing * CGFloat(max(lineCount - 1, 0))
@@ -143,7 +150,7 @@ extension CodeView {
 #if canImport(UIKit)
     private extension CodeView {
         func setupViewAppearance() {
-            layer.cornerRadius = 8
+            layer.cornerRadius = theme.sizes.codeBlockCornerRadius
             layer.cornerCurve = .continuous
             // Not clipped, so a selection's handles can reach past the code;
             // the bar rounds its own corners instead.
@@ -215,7 +222,10 @@ extension CodeView {
     private extension CodeView {
         func setupViewAppearance() {
             wantsLayer = true
-            layer?.cornerRadius = 8
+            layer?.cornerRadius = theme.sizes.codeBlockCornerRadius
+            layer?.cornerCurve = .continuous
+            // Clipped, so the bar's tint keeps to the rounded top corners.
+            layer?.masksToBounds = true
         }
 
         func setupBarView() {
@@ -225,14 +235,12 @@ extension CodeView {
         }
 
         func setupPreviewButton() {
-            if let previewImage = NSImage(systemSymbolName: "eye", accessibilityDescription: nil) {
-                previewButton.image = previewImage
-            }
+            previewButton.image = CodeView.barSymbol("eye", accessibilityDescription: nil)
             previewButton.target = self
             previewButton.action = #selector(handlePreview(_:))
             previewButton.bezelStyle = .inline
             previewButton.isBordered = false
-            previewButton.contentTintColor = .labelColor
+            previewButton.contentTintColor = CodeView.barButtonTint
             barView.addSubview(previewButton)
         }
 
@@ -241,12 +249,12 @@ extension CodeView {
         }
 
         func setupBarButton(_ button: NSButton, symbol: String, title: String, action: Selector) {
-            button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
+            button.image = CodeView.barSymbol(symbol, accessibilityDescription: title)
             button.target = self
             button.action = action
             button.bezelStyle = .inline
             button.isBordered = false
-            button.contentTintColor = .labelColor
+            button.contentTintColor = CodeView.barButtonTint
             button.toolTip = title
             barView.addSubview(button)
         }
@@ -284,16 +292,30 @@ extension CodeView {
 #endif
 
 extension CodeView {
-    /// Paints the body and the bar in the theme's code block colours.
+    func applyCornerRadius() {
+        #if canImport(UIKit)
+            layer.cornerRadius = theme.sizes.codeBlockCornerRadius
+            barView.layer.cornerRadius = layer.cornerRadius
+        #elseif canImport(AppKit)
+            layer?.cornerRadius = theme.sizes.codeBlockCornerRadius
+        #endif
+    }
+
+    /// Paints the body, the bar and the edge in the theme's code block colours.
     func applyBackgroundColors() {
+        let border = theme.colors.codeBlockBorder
         #if canImport(UIKit)
             backgroundColor = theme.colors.codeBlockBackground
             barView.backgroundColor = theme.colors.codeBlockBarBackground
+            layer.borderWidth = border == nil ? 0 : 1
+            layer.borderColor = border?.cgColor
         #elseif canImport(AppKit)
             // A layer takes a fixed colour, so resolve it for this appearance.
             effectiveAppearance.performAsCurrentDrawingAppearance {
                 layer?.backgroundColor = theme.colors.codeBlockBackground.cgColor
                 barView.layer?.backgroundColor = theme.colors.codeBlockBarBackground.cgColor
+                layer?.borderWidth = border == nil ? 0 : 1
+                layer?.borderColor = border?.cgColor
             }
         #endif
     }

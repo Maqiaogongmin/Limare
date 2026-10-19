@@ -84,7 +84,7 @@ struct MCPServerEditFormView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(Color.primary.opacity(0.8))
 
                 Divider()
                     .frame(height: 14)
@@ -92,7 +92,7 @@ struct MCPServerEditFormView: View {
 
             VStack(alignment: .leading, spacing: AppSpacing.xxxSmall) {
                 Text(isEditing ? "Edit MCP Connection" : "Add MCP Connection")
-                    .font(.headline)
+                    .font(AppTypography.interfaceTitle2)
                     .foregroundStyle(AppColors.textPrimary)
                 Text(isEditing ? "Configure connection settings for “\(existingConfig?.id ?? "")”" : "Connect external tools and resources to Limare")
                     .font(.caption)
@@ -104,13 +104,11 @@ struct MCPServerEditFormView: View {
     }
 
     private var modePicker: some View {
-        Picker("Connection Type", selection: $mode) {
-            ForEach(MCPEditMode.allCases) { m in
-                Text(m.rawValue).tag(m)
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
+        SettingsSegmentedPicker(
+            selection: $mode,
+            options: MCPEditMode.allCases.map { (value: $0, title: $0.rawValue) }
+        )
+        .accessibilityLabel("Connection Type")
     }
 
     private var addForm: some View {
@@ -269,14 +267,14 @@ struct MCPServerEditFormView: View {
                 Button("Import") {
                     performImport()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.charcoalProminent)
                 .disabled(isCommitting || jsonImportText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             } else {
                 Button(isCommitting ? "Saving…" : "Save") {
                     save()
                 }
                 .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.charcoalProminent)
                 .disabled(isCommitting || draft.serverID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }

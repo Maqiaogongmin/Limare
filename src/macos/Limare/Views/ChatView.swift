@@ -31,7 +31,18 @@ struct ChatView: View {
                     let maxWS = max(minWS, Double(geometry.size.width) - Double(AppLayout.chatMinimumWidth))
                     let clampedWSWidth = min(maxWS, max(minWS, workSurfaceWidth))
 
+                    // Up into the title bar, level with the sidebar's top, unless it covers a
+                    // window whose sidebar is hidden: its tabs would run under the traffic lights.
+                    let risesIntoTitleBar = !coversChat || geometry.frame(in: .global).minX > 1
+
                     WorkSurfaceView()
+                        // A sheet inset on the canvas: clear of the window's edges, and of the
+                        // chat's edge when it covers the chat.
+                        .padding(.top, risesIntoTitleBar ? AppSpacing.workSurfaceTopInset : AppSpacing.workSurfaceInset)
+                        .padding(.bottom, AppSpacing.workSurfaceInset)
+                        .padding(.trailing, AppSpacing.workSurfaceInset)
+                        .padding(.leading, coversChat ? AppSpacing.workSurfaceInset : 0)
+                        .ignoresSafeArea(.container, edges: risesIntoTitleBar ? .top : [])
                         .frame(width: coversChat ? nil : CGFloat(clampedWSWidth))
                         .frame(maxWidth: coversChat ? .infinity : nil, maxHeight: .infinity)
                         .overlay(alignment: .leading) {
@@ -43,6 +54,8 @@ struct ChatView: View {
                         }
                 }
             }
+            // One canvas under the chat and around the Work Surface sheet, up under the title bar.
+            .background(AppColors.canvas.ignoresSafeArea())
         }
         // Links clicked in messages open in the Work Surface browser; ⌘-click opens them in the
         // default browser.
@@ -51,33 +64,14 @@ struct ChatView: View {
             appState.openMessageLink(url, inDefaultBrowser: commandHeld)
             return .handled
         })
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                if window.workSurface.isPresented {
-                    Menu {
-                        ForEach(WorkSurfaceRegistry.builtInDefinitions) { def in
-                            Button {
-                                window.addSurface(def.kind)
-                            } label: {
-                                Label(def.title, systemImage: def.systemImage)
-                            }
-                        }
-                    } label: {
-                        Label("Add Surface", systemImage: "plus")
-                    }
-                    .help("Add Surface (Browser, Files)")
-                }
-
-                Button {
-                    window.workSurface.togglePresented()
-                } label: {
-                    Label("Work Surface", systemImage: "sidebar.right")
-                }
-                .accessibilityIdentifier("chat.toolbar.workSurface")
-                .accessibilityLabel("Work Surface")
-                .help(window.workSurface.isPresented ? "Hide Work Surface" : "Show Work Surface")
-            }
-        }
+        .toolbar { chatToolbar }
+        // No band or rule under the title bar; the canvas and the sidebar run up under it.
+        // The transcript is clipped below it instead (`conversationContent`).
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        // The window's own title stays for the Window menu and accessibility; the title bar
+        // shows `breadcrumb` in its place, and nothing for a new conversation, which the
+        // sidebar already names.
+        .toolbar(removing: .title)
         .navigationTitle(activeTitle)
         .sheet(item: $pendingUndo) { request in
             UndoMessageSheet(messageID: request.messageID)
@@ -85,35 +79,109 @@ struct ChatView: View {
         }
     }
 
-    private var chatColumn: some View {
-        VStack(spacing: 0) {
-            if let conversationID = window.conversationID {
-                ChatRunStatusView(conversationID: conversationID)
-                NativeDelegationTaskView(conversationID: conversationID)
-            }
-
-            if appState.providers.selectedProvider == nil {
-                ChatStatusCallout()
-            }
-
-            conversationContent
-
-            if let errorMessage = window.chat.errorMessage {
-                ChatErrorBanner(message: errorMessage)
-            }
-
-            RecoveryBannerView()
-
-            UndoPlanBanner()
-
-            ConversationApprovalArea()
-
-            if let child = window.conversation, child.isNativeDelegationChild {
-                NativeChildInteractionView(conversationID: child.id)
-            } else {
-                ComposerView()
-            }
+    /// Toolbar buttons are bare icons, without the system's round backing.
+    @ToolbarContentBuilder
+    private var chatToolbar: some ToolbarContent {
+        if #available(macOS 26.0, *) {
+            ToolbarItem(placement: .navigation) { breadcrumb }
+                .sharedBackgroundVisibility(.hidden)
+            // Keeps the buttons at the trailing edge when the title is removed.
+            ToolbarSpacer(.flexible)
+            ToolbarItemGroup(placement: .primaryAction) { toolbarButtons }
+                .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .navigation) { breadcrumb }
+            ToolbarItemGroup(placement: .primaryAction) { toolbarButtons }
         }
+    }
+
+    /// The conversation's title, after its project's name in a quieter weight and colour.
+    @ViewBuilder
+    private var breadcrumb: some View {
+        if let conversation = window.conversation, !window.chat.messages.isEmpty {
+            let prefix = appState.conversations.project(for: conversation).map {
+                Text(verbatim: "\($0.name) / ").font(.system(size: 13)).foregroundStyle(Color.secondary)
+            } ?? Text(verbatim: "")
+            let title = Text(verbatim: conversation.title)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Color.primary)
+            Text("\(prefix)\(title)")
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .accessibilityAddTraits(.isHeader)
+        }
+    }
+
+    /// The Work Surface button, while the panel is hidden; an open panel carries its own add
+    /// and hide buttons in its tab strip.
+    @ViewBuilder
+    private var toolbarButtons: some View {
+        if !window.workSurface.isPresented {
+            Button {
+                window.workSurface.togglePresented()
+            } label: {
+                Label("Work Surface", systemImage: "sidebar.right")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(GhostIconButtonStyle(size: AppControlHeight.composerButton, iconSize: 15))
+            .accessibilityIdentifier("chat.toolbar.workSurface")
+            .accessibilityLabel("Work Surface")
+            .help("Show Work Surface")
+        }
+    }
+
+    /// A new conversation gathers its greeting, the composer and the starters around
+    /// `emptyStateCenterFraction` of the height; the first message settles the composer at
+    /// the bottom under the transcript. The composer is the same view in both, so it moves.
+    private var chatColumn: some View {
+        let isEmpty = window.chat.messages.isEmpty
+        return GeometryReader { proxy in
+            let isCompact = proxy.size.width < AppLayout.emptyStateCompactWidth
+            VStack(spacing: 0) {
+                if let conversationID = window.conversationID {
+                    ChatRunStatusView(conversationID: conversationID)
+                    NativeDelegationTaskView(conversationID: conversationID)
+                }
+
+                if appState.providers.selectedProvider == nil {
+                    ChatStatusCallout()
+                }
+
+                if isEmpty {
+                    Spacer(minLength: AppSpacing.large)
+                    EmptyConversationView(isCompact: isCompact)
+                } else {
+                    conversationContent
+                }
+
+                if let errorMessage = window.chat.errorMessage {
+                    ChatErrorBanner(message: errorMessage)
+                }
+
+                RecoveryBannerView()
+
+                UndoPlanBanner()
+
+                ConversationApprovalArea()
+
+                if let child = window.conversation, child.isNativeDelegationChild {
+                    NativeChildInteractionView(conversationID: child.id)
+                } else {
+                    ComposerView(isEmptyState: isEmpty, isCompact: isCompact)
+                }
+
+                if isEmpty {
+                    ConversationStarters(isCompact: isCompact)
+                    Spacer(minLength: AppSpacing.large)
+                    // Equal spacers would centre the group; this puts its centre higher.
+                    Color.clear
+                        .frame(height: max(0, proxy.size.height * (1 - 2 * AppLayout.emptyStateCenterFraction)))
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+        .background(AppColors.canvas.ignoresSafeArea())
+        .animation(AppMotion.resolved(AppMotion.composerSettle), value: isEmpty)
     }
 
     private var activeTitle: String {
@@ -126,21 +194,48 @@ struct ChatView: View {
         return "Conversation"
     }
 
-    @ViewBuilder
     private var conversationContent: some View {
-        if window.chat.messages.isEmpty {
-            EmptyConversationView()
-        } else {
-            let conversationID = window.conversationID
-            MessageListView(
-                messages: window.chat.messages,
-                retractableMessageID: window.chat.retractableUserMessageID,
-                onRetract: { pendingUndo = UndoRequest(messageID: $0) },
-                compactionMarkers: window.conversation?.compactionMarkers ?? [],
-                compaction: conversationID.flatMap { appState.conversationRuns.compactions[$0] }
-            )
-            .id(window.conversationID)
-        }
+        let conversationID = window.conversationID
+        return MessageListView(
+            messages: window.chat.messages,
+            retractableMessageID: window.chat.retractableUserMessageID,
+            onRetract: { pendingUndo = UndoRequest(messageID: $0) },
+            compactionMarkers: window.conversation?.compactionMarkers ?? [],
+            compaction: conversationID.flatMap { appState.conversationRuns.compactions[$0] },
+            isRunActive: conversationID.map {
+                appState.conversationRuns.isRunning(conversationID: $0) || appState.conversationRuns.isPaused(conversationID: $0)
+            } ?? false
+        )
+        .id(window.conversationID)
+        // Ends under the title bar, which has no backing of its own, and above the composer:
+        // lines fade out at both edges instead of being cut through. At the top a clear band
+        // comes first, so a line scrolled to the edge is gone, not left as half a ghost. The
+        // transcript's own vertical padding is wider than the fades, so its first and last
+        // lines rest clear.
+        .clipped()
+        .mask(
+            VStack(spacing: 0) {
+                Color.clear
+                    .frame(height: AppLayout.transcriptTopClear)
+                // Eased in (opacity ≈ t²): a line half inside the fade stays near invisible
+                // until it is almost clear of it, instead of showing its lower half.
+                LinearGradient(
+                    stops: [
+                        .init(color: .black.opacity(0), location: 0),
+                        .init(color: .black.opacity(0.06), location: 0.25),
+                        .init(color: .black.opacity(0.25), location: 0.5),
+                        .init(color: .black.opacity(0.56), location: 0.75),
+                        .init(color: .black, location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: AppLayout.transcriptTopFade)
+                Color.black
+                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                    .frame(height: AppLayout.scrollEdgeFade)
+            }
+        )
     }
 }
 
@@ -168,44 +263,158 @@ private struct ChatStatusCallout: View {
         }
         .padding(.horizontal, AppSpacing.standard)
         .padding(.vertical, AppSpacing.small)
-        .background(Color.orange.opacity(0.10))
+        .background(AppColors.statusWarning.opacity(0.10))
         .overlay(
             Rectangle()
                 .frame(height: 1)
-                .foregroundStyle(Color.orange.opacity(0.20)),
+                .foregroundStyle(AppColors.statusWarning.opacity(0.20)),
             alignment: .bottom
         )
     }
 }
 
+/// The greeting above a new conversation's composer: the mark, bare and large, and one line in
+/// a serif, a size smaller in a narrow chat.
 private struct EmptyConversationView: View {
-    @Environment(AppState.self) private var appState
-    @Environment(WindowSession.self) private var window
+    let isCompact: Bool
 
     var body: some View {
-        ContentUnavailableView {
-            Label {
-                Text("Start a conversation")
-            } icon: {
-                LimareGlyph(size: 64)
-            }
-            .font(.title3.weight(.medium))
-        } description: {
-            if let activeConv = window.conversation,
-               let project = appState.conversations.project(for: activeConv) {
-                if let folder = activeConv.workspace ?? project.workspace {
-                    Text("Harness tools are active in \(folder.name). Every file edit and terminal command stays visible here.")
-                        .font(.subheadline)
-                } else {
-                    Text("Project tools are active. Every file edit and terminal command stays visible here.")
-                        .font(.subheadline)
+        VStack(spacing: AppSpacing.small) {
+            // The glyph fills a little under half its square's height; the negative padding
+            // trims the empty band above and below it.
+            LimareGlyph(size: 72)
+                .foregroundStyle(Color.primary.opacity(0.75))
+                .padding(.vertical, -10)
+            Text("What shall we build today?")
+                .font(.system(size: isCompact ? 23 : 28, weight: .regular, design: .serif))
+                .tracking(-0.4)
+                .foregroundStyle(Color.primary.opacity(0.88))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .padding(.horizontal, isCompact ? AppSpacing.standard : AppSpacing.chatHorizontal)
+        .padding(.bottom, AppSpacing.large)
+        .frame(maxWidth: .infinity)
+        .transition(.opacity)
+    }
+}
+
+/// Starting points under a new conversation's composer. Each fills the draft with the start of
+/// a request and leaves the rest, and the sending, to the user.
+private struct ConversationStarters: View {
+    @Environment(WindowSession.self) private var window
+    /// A narrow chat: the chips may reach a little past the composer's edges, so two share a row.
+    let isCompact: Bool
+
+    private struct Starter: Identifiable {
+        let title: String
+        let systemImage: String
+        let draft: String
+        var id: String { title }
+    }
+
+    private let starters = [
+        Starter(title: "Refactor the codebase", systemImage: "hammer", draft: "Refactor "),
+        Starter(title: "Run a terminal script", systemImage: "terminal", draft: "Run this in the terminal: "),
+        Starter(title: "Analyze local documents", systemImage: "doc.text.magnifyingglass", draft: "Analyze the documents in "),
+    ]
+
+    var body: some View {
+        // As many to a row as fit: two over one in a narrow chat rather than a column of three.
+        CenteredFlowLayout(spacing: AppSpacing.small, lineSpacing: AppSpacing.small) {
+            ForEach(starters) { starter in
+                Button {
+                    window.chat.draft = starter.draft
+                    window.composerFocusRequest += 1
+                } label: {
+                    StarterChipLabel(title: starter.title, systemImage: starter.systemImage)
                 }
-            } else {
-                Text("Desktop harness tools are active. Type a message below to begin.")
-                    .font(.subheadline)
+                .buttonStyle(.plain)
+                .help("Start the request in the composer")
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, isCompact ? AppSpacing.small : AppSpacing.chatHorizontal)
+        .padding(.top, AppSpacing.medium)
+        .frame(maxWidth: .infinity)
+        .transition(.opacity)
+    }
+}
+
+/// A starter: porcelain over the canvas, with a hairline edge and a faint shadow below.
+private struct StarterChipLabel: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: AppSpacing.xSmall) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.primary.opacity(0.55))
+            Text(title)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(Color.primary.opacity(0.75))
+        }
+        .padding(.horizontal, AppSpacing.medium - 2)
+        .frame(height: 30)
+        .background(
+            Capsule()
+                .fill(AppColors.chipFill)
+                .shadow(color: .black.opacity(0.02), radius: 4, x: 0, y: 1)
+        )
+        .overlay(Capsule().strokeBorder(AppColors.hairline, lineWidth: 1))
+        .contentShape(Capsule())
+        .fixedSize()
+    }
+}
+
+/// Lays its subviews out in rows, as many to a row as fit, each row centred.
+private struct CenteredFlowLayout: Layout {
+    var spacing: CGFloat
+    var lineSpacing: CGFloat
+
+    private struct Row {
+        var indices: [Int] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = rows(fitting: proposal.width ?? .infinity, subviews: subviews)
+        let height = rows.map(\.height).reduce(0, +) + lineSpacing * CGFloat(max(0, rows.count - 1))
+        return CGSize(width: rows.map(\.width).max() ?? 0, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in rows(fitting: bounds.width, subviews: subviews) {
+            var x = bounds.minX + (bounds.width - row.width) / 2
+            for index in row.indices {
+                let size = subviews[index].sizeThatFits(.unspecified)
+                subviews[index].place(at: CGPoint(x: x, y: y + (row.height - size.height) / 2),
+                                      proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            y += row.height + lineSpacing
+        }
+    }
+
+    private func rows(fitting width: CGFloat, subviews: Subviews) -> [Row] {
+        var rows: [Row] = []
+        var row = Row()
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            let widened = row.indices.isEmpty ? size.width : row.width + spacing + size.width
+            if !row.indices.isEmpty && widened > width {
+                rows.append(row)
+                row = Row(indices: [index], width: size.width, height: size.height)
+            } else {
+                row.indices.append(index)
+                row.width = widened
+                row.height = max(row.height, size.height)
+            }
+        }
+        if !row.indices.isEmpty { rows.append(row) }
+        return rows
     }
 }
 

@@ -25,6 +25,16 @@ extension CodeView {
     static let copiedSymbol = TableSymbol.copied
     static let expandSymbol = TableSymbol.expand
 
+    #if canImport(AppKit)
+        /// The bar's buttons are bare glyphs a step quieter than the code.
+        static let barButtonTint = NSColor.secondaryLabelColor
+
+        static func barSymbol(_ name: String, accessibilityDescription: String?) -> NSImage? {
+            NSImage(systemSymbolName: name, accessibilityDescription: accessibilityDescription)?
+                .withSymbolConfiguration(.init(pointSize: 11, weight: .regular))
+        }
+    #endif
+
     /// The bar's buttons from the trailing edge: Expand, Copy, Preview, then
     /// the host's actions — Copy, Expand reading left to right. Download is
     /// in the sheet Expand opens.
@@ -92,15 +102,15 @@ extension CodeView {
 
     #elseif canImport(AppKit)
         private func setCopySymbol(_ name: String) {
-            copyButton.image = NSImage(systemSymbolName: name, accessibilityDescription: nil)
+            copyButton.image = Self.barSymbol(name, accessibilityDescription: nil)
         }
 
         private func makeActionButton(for action: CodeBlockAction, tag: Int) -> NSButton {
             let button = NSButton(title: "", target: self, action: #selector(handleAction(_:)))
-            button.image = NSImage(systemSymbolName: action.systemImage, accessibilityDescription: action.title)
+            button.image = Self.barSymbol(action.systemImage, accessibilityDescription: action.title)
             button.bezelStyle = .inline
             button.isBordered = false
-            button.contentTintColor = .labelColor
+            button.contentTintColor = Self.barButtonTint
             button.toolTip = action.title
             button.tag = tag
             return button

@@ -5,49 +5,44 @@ struct PermissionSettingsView: View {
     @State private var showFullAccessWarning = false
 
     var body: some View {
-        Form {
-            Section {
-                VStack(alignment: .leading, spacing: 16) {
-                    modeRow(
-                        mode: .requestApproval,
-                        title: "Ask for approval",
-                        badge: "Recommended",
-                        description: PermissionMode.requestApproval.detail,
-                        reviewer: "You"
-                    )
+        SettingsPage {
+            SettingsSection(title: "Permission Modes") {
+                modeRow(
+                    mode: .requestApproval,
+                    title: "Ask for approval",
+                    badge: "Recommended",
+                    description: PermissionMode.requestApproval.detail,
+                    reviewer: "You"
+                )
 
-                    Divider()
+                SettingsDivider()
 
-                    modeRow(
-                        mode: .helpMeApprove,
-                        title: "Approve for me",
-                        badge: nil,
-                        description: PermissionMode.helpMeApprove.detail + " An isolated AI reviewer decides.",
-                        reviewer: "Automatic review",
-                        note: "Automatic review can make mistakes. Unclear or failed reviews fall back to you."
-                    )
+                modeRow(
+                    mode: .helpMeApprove,
+                    title: "Approve for me",
+                    badge: nil,
+                    description: PermissionMode.helpMeApprove.detail + " An isolated AI reviewer decides.",
+                    reviewer: "Automatic review",
+                    note: "Automatic review can make mistakes. Unclear or failed reviews fall back to you."
+                )
 
-                    Divider()
+                SettingsDivider()
 
-                    modeRow(
-                        mode: .fullAccess,
-                        title: "Full access",
-                        badge: "Danger",
-                        description: PermissionMode.fullAccess.detail,
-                        reviewer: "None",
-                        note: "Higher risk of data loss, leaks, or unintended system modifications."
-                    )
-                }
-                .padding(.vertical, 4)
-            } header: {
-                Text("Permission Modes")
-            } footer: {
-                Text("Shell commands run in a macOS sandbox, as in Codex; Full access and approved requests run outside it.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                modeRow(
+                    mode: .fullAccess,
+                    title: "Full access",
+                    badge: "Danger",
+                    description: PermissionMode.fullAccess.detail,
+                    reviewer: "None",
+                    note: "Higher risk of data loss, leaks, or unintended system modifications."
+                )
             }
+
+            Text("Shell commands run in a macOS sandbox, as in Codex; Full access and approved requests run outside it.")
+                .font(AppTypography.interfaceCaption)
+                .foregroundStyle(AppColors.textSecondary)
+                .padding(.horizontal, AppSpacing.xxSmall)
         }
-        .formStyle(.grouped)
         .alert("Enable Full Access?", isPresented: $showFullAccessWarning) {
             Button("Cancel", role: .cancel) {}
             Button("Enable Full Access", role: .destructive) {
@@ -70,25 +65,17 @@ struct PermissionSettingsView: View {
             Button {
                 selectMode(mode)
             } label: {
-                Image(systemName: appState.permissions.mode == mode ? "largecircle.fill.circle" : "circle")
-                    .foregroundStyle(appState.permissions.mode == mode ? Color.accentColor : Color.secondary)
-                    .font(.system(size: 16))
+                SettingsRadioMark(isSelected: appState.permissions.mode == mode)
             }
             .buttonStyle(.plain)
-            .padding(.top, 2)
+            .padding(.top, 3)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text(title)
                         .font(.headline)
                     if let badge {
-                        Text(badge)
-                            .font(.caption2.weight(.semibold))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(badge == "Danger" ? Color.red.opacity(0.15) : Color.accentColor.opacity(0.15))
-                            .foregroundStyle(badge == "Danger" ? Color.red : Color.accentColor)
-                            .clipShape(Capsule())
+                        SettingsBadge(badge, tone: badge == "Danger" ? .danger : .neutral)
                     }
                 }
 
@@ -109,12 +96,13 @@ struct PermissionSettingsView: View {
                 if let note {
                     Text(note)
                         .font(.caption)
-                        .foregroundStyle(mode == .fullAccess ? Color.red : Color.secondary)
+                        .foregroundStyle(mode == .fullAccess ? AppColors.dangerText : Color.secondary)
                         .padding(.top, 1)
                 }
             }
             Spacer()
         }
+        .padding(.vertical, AppSpacing.xxSmall)
         .contentShape(Rectangle())
         .onTapGesture {
             selectMode(mode)

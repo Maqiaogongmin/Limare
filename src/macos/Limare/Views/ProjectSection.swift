@@ -103,6 +103,7 @@ struct ProjectSection: View {
                 .help("New Project")
                 .accessibilityLabel("New Project")
             }
+            .padding(.top, AppSpacing.sidebarSectionGap - AppSpacing.small)
         }
     }
 }

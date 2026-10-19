@@ -236,7 +236,7 @@ struct SecretField: View {
         } else if hasStoredSecret && isReplacing {
             Label("Editing replacement key — save settings to store it.", systemImage: "pencil.circle")
                 .font(.caption)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(AppColors.sendFill)
         } else if !inputBuffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             Label("New \(secretName) entered — save settings to store it.", systemImage: "pencil.circle")
                 .font(.caption)

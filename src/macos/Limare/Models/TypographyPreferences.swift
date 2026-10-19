@@ -8,7 +8,7 @@ public final class TypographyPreferences: @unchecked Sendable {
 
     // MARK: - Default Constants
     public static let defaultInterfaceSize: Double = 14.0
-    public static let defaultConversationSize: Double = 15.0
+    public static let defaultConversationSize: Double = 14.0
     public static let defaultCodeSize: Double = 13.0
 
     // MARK: - Allowed Options

@@ -12,7 +12,12 @@ struct WindowRootView: View {
             RootView()
                 .environment(session)
                 .background(WindowLifecycleObserver(
-                    onAttach: { session.hostWindow = $0 },
+                    onAttach: { window in
+                        session.hostWindow = window
+                        // No rule under the title bar; the toolbar's own scroll edge still
+                        // keeps scrolled text off the title.
+                        window.titlebarSeparatorStyle = .none
+                    },
                     onBecameKey: { appState.windowBecameKey(session) },
                     onClose: { appState.windowClosed(session) }
                 ))
@@ -88,16 +93,23 @@ struct RootView: View {
                 ideal: AppLayout.sidebarIdealWidth,
                 max: AppLayout.sidebarMaximumWidth
             )
+            // The one toggle: it stays in the title bar when the sidebar is collapsed, so the
+            // detail column adds none of its own (a second one appeared beside it).
+            .toolbar { sidebarToggle(placement: .automatic) }
+            // The system toggle sits on a round backing; this one is a bare icon like the others.
+            .toolbar(removing: .sidebarToggle)
         } detail: {
-            switch window.screen {
-            case .chat:
-                ChatView()
-            default:
-                SettingsDetailView(screen: window.screen)
-                    .safeAreaInset(edge: .bottom) {
-                        ApprovalElsewhereNotice(excluding: nil)
-                            .padding(AppSpacing.small)
-                    }
+            Group {
+                switch window.screen {
+                case .chat:
+                    ChatView()
+                default:
+                    SettingsDetailView(screen: window.screen)
+                        .safeAreaInset(edge: .bottom) {
+                            ApprovalElsewhereNotice(excluding: nil)
+                                .padding(AppSpacing.small)
+                        }
+                }
             }
         }
         .sheet(item: activeSheet) { item in
@@ -118,6 +130,30 @@ struct RootView: View {
                 withAnimation(AppMotion.resolved(AppMotion.panel)) { columnVisibility = previous }
             }
         }
+    }
+
+    @ToolbarContentBuilder
+    private func sidebarToggle(placement: ToolbarItemPlacement) -> some ToolbarContent {
+        if #available(macOS 26.0, *) {
+            ToolbarItem(placement: placement) { sidebarToggleButton }
+                .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: placement) { sidebarToggleButton }
+        }
+    }
+
+    private var sidebarToggleButton: some View {
+        let isHidden = columnVisibility == .detailOnly
+        return Button {
+            withAnimation(AppMotion.resolved(AppMotion.panel)) {
+                columnVisibility = isHidden ? .all : .detailOnly
+            }
+        } label: {
+            Label(isHidden ? "Show Sidebar" : "Hide Sidebar", systemImage: "sidebar.left")
+                .labelStyle(.iconOnly)
+        }
+        .buttonStyle(GhostIconButtonStyle(size: AppControlHeight.composerButton, iconSize: 15))
+        .help(isHidden ? "Show Sidebar" : "Hide Sidebar")
     }
 
     private var workSurfaceFillsWindow: Bool {

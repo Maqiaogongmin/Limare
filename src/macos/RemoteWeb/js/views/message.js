@@ -29,19 +29,24 @@ export function disclosure(props, summary, openSet, key, buildBody) {
   return details;
 }
 
-/// As the Mac's tool card shows it: milliseconds under a second, so quick tools do not read "0.0s".
+/// As the Mac's tool row shows it: nothing under a second, where the time says nothing to the
+/// reader (`ToolCallDurationFormat`).
 function duration(ms) {
-  return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)}s`;
+  if (ms == null || ms < 1000) return null;
+  if (ms < 60000) return `${(Math.floor(ms / 100) / 10).toFixed(1)}s`;
+  const seconds = Math.floor(ms / 1000);
+  return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, '0')}s`;
 }
 
-/// A tool call, and under it, as on the Mac, the workspace file a file tool reads or writes.
+/// A tool call, and under it, as on the Mac, the workspace file a file tool reads or writes. A
+/// call that completed shows no state, as on the Mac; its summary is the Mac's.
 function toolCall(tool, openTools) {
+  const state = [tool.state === 'completed' ? null : TOOL_STATE[tool.state] || tool.state, duration(tool.durationMs)].filter(Boolean).join(' · ');
   const details = disclosure({ class: 'tool', dataset: { toolId: tool.id } },
     h('summary', {},
       h('span', { class: 'tool-name' }, tool.name),
-      h('span', { class: `tool-state ${tool.state}` },
-        TOOL_STATE[tool.state] || tool.state,
-        tool.durationMs != null ? ` · ${duration(tool.durationMs)}` : '')),
+      tool.summary ? h('span', { class: 'tool-summary' }, tool.summary) : null,
+      state ? h('span', { class: `tool-state ${tool.state}` }, state) : null),
     openTools, tool.id,
     () => h('div', { class: 'tool-body' },
       tool.input ? [h('h4', {}, '输入'), h('pre', {}, tool.input), tool.inputTruncated ? h('div', { class: 'truncated' }, '已截断，完整内容在 Mac 上查看') : null] : null,

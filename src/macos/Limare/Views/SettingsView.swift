@@ -31,5 +31,10 @@ struct SettingsDetailView: View {
         .accessibilityIdentifier("settings.surface")
         .navigationTitle(screen.title)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The same warm canvas as the chat, up under the title bar with no rule beneath it;
+        // switches, links and other tinted controls in charcoal rather than the system blue.
+        .background(AppColors.canvas.ignoresSafeArea())
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .tint(AppColors.controlOn)
     }
 }

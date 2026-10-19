@@ -205,12 +205,27 @@ struct SidebarSearchField: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
 
-            TextField("Search (⌘K)", text: $text)
+            // No bezel or focus ring of its own: the field's rounded edge shows focus.
+            TextField("Search", text: $text)
                 .textFieldStyle(.plain)
+                .focusEffectDisabled()
                 .font(AppTypography.interfaceSubheadline)
                 .focused($isFocused)
 
-            if !text.isEmpty {
+            if text.isEmpty {
+                // The shortcut as a key cap, apart from the prompt.
+                Text("⌘K")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color.secondary)
+                    .padding(.horizontal, AppSpacing.xxSmall)
+                    .padding(.vertical, 1)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppRadius.small, style: .continuous)
+                            .strokeBorder(AppColors.borderMuted, lineWidth: 1)
+                    )
+                    .fixedSize()
+                    .accessibilityHidden(true)
+            } else {
                 Button {
                     text = ""
                 } label: {
@@ -229,7 +244,7 @@ struct SidebarSearchField: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppRadius.row)
-                .stroke(isFocused ? Color.accentColor.opacity(0.5) : Color.clear, lineWidth: 1)
+                .strokeBorder(Color.primary.opacity(isFocused ? 0.18 : 0.06), lineWidth: 1)
         )
         .keyboardShortcut("k", modifiers: .command)
     }

@@ -26,7 +26,7 @@ final class BlockquoteGroup: Hashable {
 /// A view rather than a line drawing action: actions only run for the lines a
 /// redraw touches, which leaves a bar spanning many lines painted in fragments.
 final class BlockquoteBarView: PlatformView {
-    static let width: CGFloat = 4
+    static let width: CGFloat = 2.5
 
     init() {
         super.init(frame: .zero)
@@ -37,6 +37,7 @@ final class BlockquoteBarView: PlatformView {
         #elseif canImport(AppKit)
             wantsLayer = true
             layer?.cornerRadius = Self.width / 2
+            layer?.cornerCurve = .continuous
         #endif
     }
 
@@ -53,11 +54,14 @@ final class BlockquoteBarView: PlatformView {
     }
 
     private func applyThemeColor() {
-        let color = theme.colors.body.withAlphaComponent(0.1)
+        let color = theme.colors.body.withAlphaComponent(0.18)
         #if canImport(UIKit)
             backgroundColor = color
         #elseif canImport(AppKit)
-            layer?.backgroundColor = color.cgColor
+            // A layer takes a fixed colour, so resolve it for this appearance.
+            effectiveAppearance.performAsCurrentDrawingAppearance {
+                layer?.backgroundColor = color.cgColor
+            }
         #endif
     }
 

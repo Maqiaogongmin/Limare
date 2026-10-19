@@ -30,7 +30,8 @@ struct ReasoningDisclosureView: View {
                     isManuallyExpanded = !isExpanded
                 }
             } label: {
-                HStack(spacing: AppSpacing.xSmall) {
+                // Lined up with the tool rows it sits among, and as quiet: no fill of its own.
+                HStack(spacing: AppSpacing.small) {
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(.secondary)
@@ -39,17 +40,15 @@ struct ReasoningDisclosureView: View {
                     Image(systemName: "brain.head.profile")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+                        .frame(width: 14)
 
                     Text(label)
-                        .font(AppTypography.interfaceSubheadline.weight(.medium))
+                        .font(AppTypography.interfaceSubheadline)
                         .foregroundStyle(Color.secondary)
 
                     Spacer()
                 }
-                .padding(.horizontal, AppSpacing.small)
                 .padding(.vertical, AppSpacing.xxSmall)
-                .background(Color.secondary.opacity(0.05))
-                .clipShape(RoundedRectangle(cornerRadius: AppRadius.row, style: .continuous))
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

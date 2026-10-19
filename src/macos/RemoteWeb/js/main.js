@@ -8,7 +8,7 @@ import { loadMarkdown } from './markdown.js';
 import { refreshPicker, closePicker } from './picker.js';
 import { closeViewer } from './views/files.js';
 
-const PROTOCOL_VERSION = 5;
+const PROTOCOL_VERSION = 6;
 window.limareStarted = true; // every module loaded; boot.js stands down
 
 const app = document.getElementById('app');

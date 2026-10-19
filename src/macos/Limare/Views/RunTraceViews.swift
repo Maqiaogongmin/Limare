@@ -14,11 +14,11 @@ struct ChatRunStatusView: View {
                 Image(systemName: icon(for: run.status))
                     .foregroundStyle(color(for: run.status))
                 Text(trace.currentStatus)
-                    .font(.subheadline)
+                    .font(AppTypography.interfaceSubheadline)
                 Spacer()
                 Button("View run details") { showsDetails = true }
                     .buttonStyle(.link)
-                    .font(.caption)
+                    .font(AppTypography.interfaceCaption)
             }
             .padding(.horizontal, AppSpacing.chatHorizontal)
             .padding(.vertical, AppSpacing.xSmall)
@@ -60,8 +60,8 @@ struct RunTraceDetailSheet: View {
         VStack(spacing: 0) {
             HStack {
                 VStack(alignment: .leading) {
-                    Text("Run details").font(.headline)
-                    if let provider = trace.actualProvider, let model = trace.actualModel { Text("\(provider) · \(model)").font(.caption).foregroundStyle(.secondary) }
+                    Text("Run details").font(AppTypography.interfaceTitle2)
+                    if let provider = trace.actualProvider, let model = trace.actualModel { Text("\(provider) · \(model)").font(AppTypography.interfaceCaption).foregroundStyle(.secondary) }
                 }
                 Spacer()
                 Button("Done") { dismiss() }
@@ -70,20 +70,24 @@ struct RunTraceDetailSheet: View {
             List(trace.events) { event in
                 HStack(alignment: .top, spacing: AppSpacing.small) {
                     Text(event.timestamp, format: .dateTime.hour().minute().second())
-                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        .font(AppTypography.interfaceCaption.monospacedDigit()).foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(event.presentationRole.rawValue).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                        Text(event.summary).font(.body)
+                        // Routine lifecycle steps carry no label; causes, diagnostics, routing
+                        // and the result keep theirs.
+                        if event.presentationRole != .lifecycle {
+                            Text(event.presentationRole.rawValue).font(AppTypography.interfaceCaption.weight(.semibold)).foregroundStyle(.secondary)
+                        }
+                        Text(event.summary).font(AppTypography.interface)
                     }
                 }.padding(.vertical, 2)
             }
             Divider()
-            HStack { Spacer(); Button("Technical details") { showsTechnical.toggle() }.buttonStyle(.link) }.padding()
+            HStack { Spacer(); Button("Technical details") { showsTechnical.toggle() }.buttonStyle(.link).font(AppTypography.interfaceSubheadline) }.padding()
             if showsTechnical {
                 ScrollView { VStack(alignment: .leading, spacing: 8) {
                     ForEach(trace.events) { event in
                         Text("\(event.kind)  \(event.metadata.map { "\($0.key)=\($0.value)" }.sorted().joined(separator: "  "))")
-                            .font(.caption.monospaced()).textSelection(.enabled)
+                            .font(AppTypography.codeMeta).textSelection(.enabled)
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading).padding([.horizontal, .bottom]) }
             }

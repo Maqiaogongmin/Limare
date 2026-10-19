@@ -38,6 +38,31 @@ Every change from upstream is listed here; `git log -- deps/MarkdownView` holds 
    with a thousand code spans took 600 ms to measure at each new width, now 15 ms.
    File: `Supplements/InlineCode.swift`.
 
+6. **Headings are styled per level.** `MarkdownTheme.headings` holds a font and letter spacing
+   for each level (`#` first; deeper levels take the last); empty keeps upstream's single
+   `fonts.title`. Files: `MarkdownTheme/MarkdownTheme.swift`,
+   `MarkdownTextBuilder/BlockProcessor.swift`.
+7. **Links have their own colour.** `colors.highlight`, which only ever coloured links, is
+   renamed `colors.link`; `colors.linkUnderline` underlines them. Files:
+   `MarkdownTheme/MarkdownTheme.swift`, `Supplements/InlineNode+Render.swift`.
+8. **Code blocks take a corner radius, an edge and a bar label font from the theme.**
+   `sizes.codeBlockCornerRadius` (default 8, as upstream), `colors.codeBlockBorder` (none by
+   default) and `fonts.codeBlockLabel` (default: the code font); the block is clipped to its
+   corners on macOS so an opaque bar keeps to them, and the bar's height follows the label
+   font in both layout and measurement. The language name is shown in lower case at half the
+   body's opacity; the bar's buttons are 11 pt glyphs in the secondary label colour.
+   Files: `MarkdownTheme/MarkdownTheme.swift`, `Components/CodeView/CodeView.swift`,
+   `Components/CodeView/CodeViewConfiguration.swift`, `Components/CodeView/CodeView+Actions.swift`.
+9. **Quieter quote bars and bullets.** The quote bar is 2.5 pt wide (upstream 4) at 18% of the
+   body colour (upstream 10%); bullets are drawn at `sizes.bullet` diameter (default 6, the
+   size upstream hard-coded; upstream's own `sizes.bullet` was unused) at 45% of their text's
+   colour. Files: `Components/BlockquoteBarView.swift`, `MarkdownTextBuilder/TextBuilder+Do.swift`,
+   `MarkdownTheme/MarkdownTheme.swift`.
+10. **Images show as a label, not their URL.** Images are never loaded; upstream wrote an
+    image's whole source URL out as body text. It is now an inline-code label of its alternative
+    text (its file name when it has none), linked to the source. A link's underline skips
+    inline code, whose pill already marks it. File: `Supplements/InlineNode+Render.swift`.
+
 ## Updating
 
 Copy the two source directories from the new upstream tag over these, re-apply the changes

@@ -404,6 +404,13 @@ final class AppState {
             // session and must not be ended or rebound merely by viewing B.
         }
 
+        conversations.isConversationInUse = { [weak self] id in
+            guard let self else { return true }
+            return (self.windows.isEmpty ? [self.primaryWindow] : self.windows).contains {
+                $0.conversationID == id || $0.chat.holdsUnarchivedComposer(for: id)
+            }
+        }
+
         conversations.onWorkspaceChanged = { [weak self] in
             self?.syncEffectiveWorkspace()
         }
@@ -436,6 +443,16 @@ final class AppState {
 
     /// A window opened: it gets the primary window's stores if no window holds them, else its
     /// own, and shows the requested conversation or the focused window's.
+    /// Starts a conversation for the sidebar's New Conversation and ⌘N: in the project of the
+    /// conversation the window shows, as working in a project carries on there; outside any
+    /// project, under Conversations.
+    func newConversation(in window: WindowSession) {
+        let projectID = window.conversation?.projectID.flatMap { id in
+            conversations.projects.contains { $0.id == id } ? id : nil
+        }
+        conversations.newConversation(projectID: projectID)
+    }
+
     func openWindowSession() -> WindowSession {
         let session: WindowSession
         if windows.contains(where: { $0 === primaryWindow }) {

@@ -10,7 +10,6 @@ struct SidebarView: View {
     var body: some View {
         VStack(spacing: 0) {
             topBar
-            Divider()
 
             List {
                 if !searchText.isEmpty {
@@ -24,9 +23,19 @@ struct SidebarView: View {
                 }
             }
             .listStyle(.sidebar)
+            // No rules above or below the list: rows cut off at either end fade out instead.
+            // The last row scrolls clear of the bottom fade.
+            .contentMargins(.bottom, AppSpacing.xLarge, for: .scrollContent)
+            .mask(
+                VStack(spacing: 0) {
+                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                        .frame(height: AppSpacing.small)
+                    Color.black
+                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                        .frame(height: AppSpacing.xLarge)
+                }
+            )
             .accessibilityIdentifier("conversation.sidebar")
-
-            Divider()
 
             bottomUtilityBar
         }
@@ -47,23 +56,29 @@ struct SidebarView: View {
                     isViewingArchived = true
                 }
             ) {
-                Image(systemName: "archivebox")
-                    .font(AppTypography.interfaceSubheadline)
-                    .foregroundStyle(Color.secondary)
-                Text("Archived Conversations")
-                    .font(AppTypography.interfaceSubheadline)
-                    .lineLimit(1)
-                    .foregroundStyle(Color.primary.opacity(0.88))
-                Spacer()
-                if !appState.conversations.archivedConversations.isEmpty {
-                    Text("\(appState.conversations.archivedConversations.count)")
-                        .font(AppTypography.interfaceCaption2.weight(.semibold))
+                // Takes the row ahead of the container's own trailing spacer, so the count sits
+                // at the right edge.
+                HStack(spacing: AppSpacing.xSmall) {
+                    Image(systemName: "archivebox")
+                        .font(AppTypography.interfaceSubheadline)
                         .foregroundStyle(Color.secondary)
-                        .padding(.horizontal, AppSpacing.xSmall)
-                        .padding(.vertical, 1)
-                        .background(Color.secondary.opacity(0.18))
-                        .clipShape(Capsule())
+                    Text("Archived")
+                        .font(AppTypography.interfaceSubheadline)
+                        .lineLimit(1)
+                        .foregroundStyle(Color.primary.opacity(0.88))
+                    Spacer(minLength: AppSpacing.small)
+                    if !appState.conversations.archivedConversations.isEmpty {
+                        Text("\(appState.conversations.archivedConversations.count)")
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Color.secondary)
+                            .padding(.horizontal, AppSpacing.xSmall)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(Color.secondary.opacity(0.14)))
+                            .fixedSize()
+                    }
                 }
+                .frame(maxWidth: .infinity)
+                .layoutPriority(1)
             }
 
             SidebarRowContainer(
@@ -96,7 +111,7 @@ struct SidebarView: View {
         VStack(spacing: AppSpacing.small) {
             Button {
                 appState.focus(window)
-                appState.conversations.newConversation()
+                appState.newConversation(in: window)
             } label: {
                 HStack(spacing: AppSpacing.small) {
                     Image(systemName: "square.and.pencil")
@@ -110,8 +125,16 @@ struct SidebarView: View {
                 }
                 .padding(.horizontal, AppSpacing.medium)
                 .padding(.vertical, AppSpacing.small)
-                .background(AppColors.surfaceInteractive)
-                .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
+                // A raised card, a step above the search field under it.
+                .background(
+                    RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous)
+                        .fill(AppColors.raisedSurface)
+                        .shadow(color: .black.opacity(0.04), radius: 2, x: 0, y: 1)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous)
+                        .strokeBorder(AppColors.raisedStroke, lineWidth: 1)
+                )
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -173,63 +196,93 @@ struct SettingsSidebarView: View {
     @Binding var selection: AppScreen
 
     var body: some View {
-        List(selection: $selection) {
+        List {
+            // A white capsule with a hairline edge, apart from the pages below it.
             Button {
                 Task { @MainActor in
                     selection = .chat
                 }
             } label: {
-                Label("Back to Limare", systemImage: "arrow.left")
+                // The icon set apart from the Label: a list tints a row's label icon blue.
+                HStack(spacing: AppSpacing.xSmall) {
+                    Image(systemName: "arrow.left")
+                    Text("Back to Limare")
+                }
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Color.primary.opacity(0.85))
+                    .padding(.horizontal, AppSpacing.medium)
+                    .frame(height: 28)
+                    .background(Capsule().fill(AppColors.raisedSurface))
+                    .overlay(Capsule().strokeBorder(AppColors.raisedStroke, lineWidth: 1))
+                    .contentShape(Capsule())
             }
             .buttonStyle(.plain)
-            .tag(AppScreen.chat)
+            .padding(.bottom, AppSpacing.small)
 
             Section {
-                Label("General", systemImage: "gearshape")
-                    .tag(AppScreen.settingsGeneral)
-                Label("Personalization", systemImage: "person.text.rectangle")
-                    .tag(AppScreen.settingsSoul)
-                Label("Permissions", systemImage: "lock.shield")
-                    .tag(AppScreen.settingsPermissions)
-                Label("Remote Access", systemImage: "iphone.and.arrow.forward")
-                    .tag(AppScreen.settingsRemoteAccess)
+                row("General", systemImage: "gearshape", screen: .settingsGeneral)
+                row("Personalization", systemImage: "person.text.rectangle", screen: .settingsSoul)
+                row("Permissions", systemImage: "lock.shield", screen: .settingsPermissions)
+                row("Remote Access", systemImage: "iphone.and.arrow.forward", screen: .settingsRemoteAccess)
             }
 
             Section("Models") {
-                Label("Providers", systemImage: "server.rack")
-                    .tag(AppScreen.settingsProviders)
-                Label("Model Groups", systemImage: "square.stack.3d.up")
-                    .tag(AppScreen.settingsModelGroups)
+                row("Providers", systemImage: "server.rack", screen: .settingsProviders)
+                row("Model Groups", systemImage: "square.stack.3d.up", screen: .settingsModelGroups)
             }
 
             Section("Extensions") {
-                Label("Skills", systemImage: "wand.and.stars")
-                    .tag(AppScreen.settingsSkills)
-                Label("MCP", systemImage: "network")
-                    .tag(AppScreen.settingsMCP)
-                Label("Hooks", systemImage: "arrow.triangle.branch")
-                    .tag(AppScreen.settingsHooks)
+                row("Skills", systemImage: "wand.and.stars", screen: .settingsSkills)
+                row("MCP", systemImage: "network", screen: .settingsMCP)
+                row("Hooks", systemImage: "arrow.triangle.branch", screen: .settingsHooks)
             }
 
             Section("Advanced") {
-                Label("Logs", systemImage: "doc.text.magnifyingglass")
-                    .tag(AppScreen.settingsLogs)
+                row("Logs", systemImage: "doc.text.magnifyingglass", screen: .settingsLogs)
             }
         }
         .font(AppTypography.interface)
-        .labelStyle(SettingsSidebarLabelStyle())
         .listStyle(.sidebar)
         .navigationTitle("Settings")
     }
+
+    /// A page, drawn as the chat sidebar draws its rows: the selected one on a warm tint in
+    /// full-strength semibold text, the others quieter; no system selection blue.
+    private func row(_ title: String, systemImage: String, screen: AppScreen) -> some View {
+        SettingsSidebarRow(title: title, systemImage: systemImage, isSelected: selection == screen) {
+            selection = screen
+        }
+    }
 }
 
-private struct SettingsSidebarLabelStyle: LabelStyle {
-    func makeBody(configuration: Configuration) -> some View {
+private struct SettingsSidebarRow: View {
+    let title: String
+    let systemImage: String
+    let isSelected: Bool
+    let onSelect: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
         HStack(spacing: AppSpacing.small) {
-            configuration.icon
-                .foregroundStyle(.secondary)
-            configuration.title
-                .foregroundStyle(.primary)
+            Image(systemName: systemImage)
+                .frame(width: 18)
+            Text(title)
+                .fontWeight(isSelected ? .semibold : .regular)
+            Spacer(minLength: 0)
         }
+        .foregroundStyle(isSelected ? Color.primary : Color.primary.opacity(0.68))
+        .padding(.horizontal, AppSpacing.small)
+        .frame(height: AppControlHeight.row)
+        .background(
+            RoundedRectangle(cornerRadius: AppRadius.control, style: .continuous)
+                .fill(isSelected ? Color.primary.opacity(0.07) : (isHovering ? Color.primary.opacity(0.04) : .clear))
+        )
+        .contentShape(Rectangle())
+        .onHover { isHovering = $0 }
+        .onTapGesture(perform: onSelect)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction { onSelect() }
     }
 }

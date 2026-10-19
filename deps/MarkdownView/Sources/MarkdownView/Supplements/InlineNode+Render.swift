@@ -114,20 +114,40 @@ extension MarkdownInlineNode {
             ans.addAttributes(
                 [
                     .link: destination,
-                    .foregroundColor: theme.colors.highlight,
+                    .foregroundColor: theme.colors.link,
                 ],
                 range: NSRange(location: 0, length: ans.length),
             )
+            if let underline = theme.colors.linkUnderline {
+                // Limare: not under inline code, whose pill already sets it apart; a line
+                // through the pill's foot reads as a strike, not a link.
+                ans.enumerateAttribute(
+                    .inlineCodeBackground,
+                    in: NSRange(location: 0, length: ans.length),
+                ) { background, range, _ in
+                    guard background == nil else { return }
+                    ans.addAttributes(
+                        [
+                            .underlineStyle: NSUnderlineStyle.single.rawValue,
+                            .underlineColor: underline,
+                        ],
+                        range: range,
+                    )
+                }
+            }
             return ans
-        case let .image(source, _): // children => alternative text can be ignored?
-            return NSAttributedString(
-                string: source,
-                attributes: [
-                    .link: source,
-                    .font: theme.fonts.body,
-                    .foregroundColor: theme.colors.body,
-                ],
-            )
+        case let .image(source, children):
+            // Limare: images are not loaded, so one shows as a compact label of its
+            // alternative text (or, without any, its file name) linked to the source,
+            // rather than the whole source URL written out as a line of text.
+            let alternative = children.render(theme: theme, context: context).string
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let label = alternative.isEmpty
+                ? (URL(string: source)?.lastPathComponent).flatMap { $0.isEmpty ? nil : $0 } ?? source
+                : alternative
+            let ans = NSMutableAttributedString(attributedString: InlineCode.attributedString(label, theme: theme))
+            ans.addAttribute(.link, value: source, range: NSRange(location: 0, length: ans.length))
+            return ans
         case let .math(content, replacementIdentifier):
             // Get LaTeX content from rendered context or fallback to raw content
             let latexContent = context.rendered[replacementIdentifier]?.text ?? content

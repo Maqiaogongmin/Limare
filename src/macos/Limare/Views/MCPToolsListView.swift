@@ -44,7 +44,7 @@ struct MCPToolsListView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(Color.primary.opacity(0.8))
 
                 Divider()
                     .frame(height: 14)
@@ -143,7 +143,7 @@ struct MCPToolsListView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(Color.primary.opacity(0.8))
             }
 
             if isExpanded {

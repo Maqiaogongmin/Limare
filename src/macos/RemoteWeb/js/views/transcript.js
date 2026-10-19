@@ -1,41 +1,69 @@
 import { h } from '../dom.js';
 import { renderMessage, disclosure } from './message.js';
 
+const UNSUCCESSFUL = new Set(['failed', 'timedOut', 'cancelled', 'denied', 'interrupted']);
+
 /// The Mac transcript's grouping (TranscriptTurnGrouping in MessageListView.swift): a turn is the
-/// messages between two user messages. Once its last message is a finished answer (complete, no
-/// tool calls, some text), the work before it folds under one disclosure and the answer shows
-/// alone; until then every message shows, as it streams.
-export function groupTranscript(messages) {
+/// messages between two user messages. Its earlier steps fold under one disclosure once it ends
+/// in a finished answer (complete, no tool calls, some text), while the run works on it (all but
+/// the current step) and before a message the user sent while it worked; otherwise every message
+/// shows. `frozen` ({ key, count }) keeps the last turn's fold where it was while the reader is
+/// away from the bottom. Folded calls that did not succeed are counted on the fold's title.
+export function groupTranscript(messages, { runActive = false, frozen = null } = {}) {
   const entries = [];
   let turn = [];
-  const flush = () => {
+  const flush = (isLast, endsAtSteer) => {
     if (!turn.length) return;
     const final = turn[turn.length - 1];
     const finished = final.state === 'complete' && !final.toolCalls.length && final.content.trim() !== '';
-    const history = turn.slice(0, -1);
+    let rowIndex = turn.length - 1;
+    let folded = false;
+    let hidesReasoning = false;
+    if (frozen && frozen.key === turn[0].id) {
+      rowIndex = Math.min(frozen.count, turn.length - 1);
+      folded = rowIndex > 0;
+      hidesReasoning = folded && finished && rowIndex === turn.length - 1;
+    } else if (finished) {
+      folded = turn.length > 1 || !!final.reasoning;
+      hidesReasoning = folded;
+    } else if (turn.length > 1 && ((isLast && runActive) || endsAtSteer)) {
+      folded = true;
+    }
+    if (!folded) rowIndex = 0;
+    const history = turn.slice(0, rowIndex);
     entries.push({
       kind: 'turn',
       key: turn[0].id,
       messages: turn,
-      folded: finished && (history.length > 0 || !!final.reasoning),
+      folded,
+      rowIndex,
+      hidesReasoning,
+      unsuccessful: history.flatMap((m) => m.toolCalls).filter((t) => UNSUCCESSFUL.has(t.state)).length,
     });
     turn = [];
   };
   for (const message of messages) {
     if (message.role === 'user') {
-      flush();
+      flush(false, !!message.sentWhileWorking);
       entries.push({ kind: 'user', key: message.id, messages: [message], folded: false });
     } else {
       turn.push(message);
     }
   }
-  flush();
+  flush(true, false);
   return entries;
 }
 
+/// The last turn's current fold, to keep while the reader is away from the bottom.
+export function currentFold(entries) {
+  const last = entries[entries.length - 1];
+  return last && last.kind === 'turn' ? { key: last.key, count: last.folded ? last.rowIndex : 0 } : null;
+}
+
 /// One entry as an element named by `data-entry`. A folded turn builds its history only when
-/// it is opened; `ui.openHistory` keeps the ones the reader opened across re-renders. Its files
-/// show on its answer, not inside the folded history (the Mac's `TurnDeliverables`).
+/// it is opened; `ui.openHistory` keeps the ones the reader opened across re-renders, by the
+/// turn's first message, so a fold stays open from its first step to the answer. The turn's
+/// files show on the row after the fold, not inside it (the Mac's `TurnDeliverables`).
 export function renderEntry(entry, ui) {
   if (entry.kind === 'user') {
     const element = renderMessage(entry.messages[0], ui);
@@ -47,14 +75,18 @@ export function renderEntry(entry, ui) {
     for (const message of entry.messages) element.append(renderMessage(message, ui));
     return element;
   }
-  const final = entry.messages[entry.messages.length - 1];
-  const history = entry.messages.slice(0, -1);
+  const history = entry.messages.slice(0, entry.rowIndex);
+  const row = entry.messages[entry.rowIndex];
+  const rest = entry.messages.slice(entry.rowIndex + 1);
+  const title = h('summary', {}, `执行过程 · ${history.length} 条记录`,
+    entry.unsuccessful ? h('span', { class: 'warn' }, ` · ${entry.unsuccessful} 个未成功`) : null);
   element.append(
-    disclosure({ class: 'history' }, h('summary', {}, `执行过程 · ${history.length} 条记录`), ui.openHistory, final.id,
+    disclosure({ class: 'history' }, title, ui.openHistory, entry.key,
       () => h('div', { class: 'history-body' },
-        final.reasoning ? renderReasoning(final, ui) : null,
+        entry.hidesReasoning && row.reasoning ? renderReasoning(row, ui) : null,
         history.map((message) => renderMessage(message, ui, { files: [] })))),
-    renderMessage(final, ui, { hidesReasoning: true, files: turnFiles(entry.messages) }));
+    renderMessage(row, ui, { hidesReasoning: entry.hidesReasoning, files: turnFiles(entry.messages) }),
+    ...rest.map((message) => renderMessage(message, ui, { files: [] })));
   return element;
 }
 

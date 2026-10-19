@@ -96,9 +96,11 @@ extension TextBuilder {
             .withBulletDrawing { context, line, lineOrigin, depth in
                 let style = markerStyle(of: line)
                 let column = ListMarkerLayout.column(lineOrigin: lineOrigin, font: style.font)
-                context.setStrokeColor(style.color.cgColor)
-                context.setFillColor(style.color.cgColor)
-                let radius: CGFloat = 3
+                // Quieter than the text, so a bullet marks the item without competing with it.
+                let color = style.color.withAlphaComponent(0.45)
+                context.setStrokeColor(color.cgColor)
+                context.setFillColor(color.cgColor)
+                let radius = theme.sizes.bullet / 2
                 let rect = CGRect(
                     x: column.midX - radius,
                     y: column.midY - radius,

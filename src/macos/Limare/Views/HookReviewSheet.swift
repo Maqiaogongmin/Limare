@@ -19,7 +19,7 @@ struct HookReviewSheet: View {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: AppSpacing.xxxSmall) {
                     Text("Review Hook Package")
-                        .font(.headline)
+                        .font(AppTypography.interfaceTitle2)
                         .foregroundStyle(AppColors.textPrimary)
                     Text(source.name)
                         .font(.subheadline)
@@ -98,7 +98,7 @@ struct HookReviewSheet: View {
                                     Text(isTechnicalDetailsExpanded ? "Hide Details" : "Show Details")
                                         .font(.caption.weight(.medium))
                                 }
-                                .foregroundStyle(Color.accentColor)
+                                .foregroundStyle(AppColors.sendFill)
                             }
                             .buttonStyle(.plain)
 
@@ -143,7 +143,7 @@ struct HookReviewSheet: View {
                     Label("Trust & Enable", systemImage: "checkmark.shield.fill")
                         .font(.body.weight(.semibold))
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.charcoalProminent)
                 .controlSize(.regular)
                 .keyboardShortcut(.defaultAction)
             }

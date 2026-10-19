@@ -1128,7 +1128,8 @@ final class ConversationRunCoordinator {
 
     /// Conversation boundary (switch / end / reset): clear the Layer-1 activation session. App
     /// approvals belong to their conversation and are cleared only with it.
-    /// A window left `conversationID`: the Computer Use session ends if that conversation holds it.
+    /// A window left `conversationID`: the Computer Use session ends if that conversation holds it
+    /// and its run is not in progress.
     func resetForConversationBoundary(leaving conversationID: UUID) {
         computerUseActivation?.resetForConversationBoundary(leaving: conversationID)
     }

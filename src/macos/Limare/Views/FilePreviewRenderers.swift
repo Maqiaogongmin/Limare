@@ -102,6 +102,7 @@ public struct FilePreviewToolbar: View {
             .buttonStyle(.plain)
             .foregroundStyle(AppColors.textSecondary)
             .help("Refresh File")
+            .accessibilityLabel("Refresh File")
 
             // Open in Default App
             Button {
@@ -114,6 +115,7 @@ public struct FilePreviewToolbar: View {
             .buttonStyle(.plain)
             .foregroundStyle(AppColors.textSecondary)
             .help("Open in Default App")
+            .accessibilityLabel("Open in Default App")
 
             // Reveal in Finder
             Button {
@@ -126,6 +128,7 @@ public struct FilePreviewToolbar: View {
             .buttonStyle(.plain)
             .foregroundStyle(AppColors.textSecondary)
             .help("Reveal in Finder")
+            .accessibilityLabel("Reveal in Finder")
 
             // Toggle File Tree
             Button {
@@ -144,6 +147,7 @@ public struct FilePreviewToolbar: View {
             }
             .buttonStyle(.plain)
             .help(storedTreeWidth > 20 ? "Collapse File Tree" : "Show File Tree")
+            .accessibilityLabel(storedTreeWidth > 20 ? "Collapse File Tree" : "Show File Tree")
         }
         .padding(.horizontal, AppSpacing.standard)
         .padding(.vertical, AppSpacing.xSmall)
@@ -165,20 +169,30 @@ public struct MarkdownFilePreviewView: View {
     public var body: some View {
         VStack(spacing: 0) {
             if showsSource {
-                CodeFilePreviewView(code: source, language: "Markdown")
+                CodeFilePreviewView(code: source, language: "Markdown", wrapsLines: true)
             } else {
+                // A document's margins, and a fade where lines leave the bottom of the sheet
+                // rather than a cut across them; the bottom margin lets the last line rest clear.
                 ScrollView(.vertical) {
                     VStack(alignment: .leading, spacing: AppSpacing.medium) {
                         LimareMarkdownView(source: source, profile: .document)
                     }
-                    .padding(AppSpacing.standard)
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, AppSpacing.large)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
                 }
+                .mask(
+                    VStack(spacing: 0) {
+                        Color.black
+                        LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                            .frame(height: AppSpacing.standard)
+                    }
+                )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AppColors.surfacePrimary)
+        .background(AppColors.workSurface)
     }
 }
 
@@ -249,17 +263,20 @@ public struct TextFilePreviewView: View {
     public var body: some View {
         ReadOnlyTextViewRepresentable(text: text, isMonospaced: true)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(AppColors.surfacePrimary)
+            .background(AppColors.workSurface)
     }
 }
 
 public struct CodeFilePreviewView: View {
     let code: String
     let language: String
+    /// Prose sources (Markdown) wrap; code keeps its lines and scrolls sideways.
+    let wrapsLines: Bool
 
-    public init(code: String, language: String) {
+    public init(code: String, language: String, wrapsLines: Bool = false) {
         self.code = code
         self.language = language
+        self.wrapsLines = wrapsLines
     }
 
     public var body: some View {
@@ -281,10 +298,10 @@ public struct CodeFilePreviewView: View {
 
             Divider()
 
-            CodePreviewTextView(code: code, language: language)
+            CodePreviewTextView(code: code, language: language, wrapsLines: wrapsLines)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(AppColors.surfacePrimary)
+        .background(AppColors.workSurface)
     }
 }
 
@@ -389,8 +406,26 @@ public final class ImageZoomScrollView: NSScrollView {
         guard currentImage !== image else { return }
         currentImage = image
         imageView.image = image
+        // Transparent areas sit on a checkerboard, the usual sign for "nothing here", so dark
+        // artwork stays visible on the dark panel and light artwork on the light one. An opaque
+        // image covers it entirely.
+        let hasAlpha = image.representations.contains { $0.hasAlpha }
+        imageView.layer?.backgroundColor = hasAlpha ? Self.checkerboard.cgColor : NSColor.clear.cgColor
         fitImageToViewport()
     }
+
+    private static let checkerboard: NSColor = {
+        let cell: CGFloat = 8
+        let tile = NSImage(size: NSSize(width: cell * 2, height: cell * 2), flipped: false) { rect in
+            NSColor.white.setFill()
+            rect.fill()
+            NSColor(white: 0.86, alpha: 1).setFill()
+            NSRect(x: 0, y: 0, width: cell, height: cell).fill()
+            NSRect(x: cell, y: cell, width: cell, height: cell).fill()
+            return true
+        }
+        return NSColor(patternImage: tile)
+    }()
 
     public override func layout() {
         super.layout()
@@ -523,7 +558,7 @@ public struct PDFFilePreviewView: View {
     public var body: some View {
         PDFKitViewRepresentable(url: url)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(AppColors.surfacePrimary)
+            .background(AppColors.workSurface)
     }
 }
 
@@ -572,7 +607,7 @@ public struct HTMLFilePreviewView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AppColors.surfacePrimary)
+        .background(AppColors.workSurface)
     }
 }
 
@@ -684,7 +719,7 @@ public struct UnsupportedFilePreviewView: View {
         }
         .padding(AppSpacing.standard)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AppColors.surfacePrimary)
+        .background(AppColors.workSurface)
     }
 }
 
@@ -738,7 +773,7 @@ public struct TooLargeFilePreviewView: View {
         }
         .padding(AppSpacing.standard)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AppColors.surfacePrimary)
+        .background(AppColors.workSurface)
     }
 }
 
@@ -771,7 +806,7 @@ public struct EmptyFilePreviewView: View {
         }
         .padding(AppSpacing.standard)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AppColors.surfacePrimary)
+        .background(AppColors.workSurface)
     }
 }
 
@@ -803,6 +838,6 @@ public struct ErrorFilePreviewView: View {
         }
         .padding(AppSpacing.standard)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AppColors.surfacePrimary)
+        .background(AppColors.workSurface)
     }
 }

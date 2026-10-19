@@ -17,15 +17,17 @@ struct ComposerSubagentControl: View {
             Button {
                 appState.conversations.setSubagentEnabled(id: conversation.id, enabled: !enabled)
             } label: {
+                // On is the one state shown: the accent, on a faint accent fill.
                 Image(systemName: "person.2")
-                    .font(.system(size: 11, weight: enabled ? .semibold : .regular))
-                    .foregroundStyle(enabled ? Color.accentColor : AppColors.textMuted)
+                    .fontWeight(enabled ? .semibold : .regular)
+                    .foregroundStyle(enabled ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.foreground))
                     .frame(width: AppControlHeight.composerButton, height: AppControlHeight.composerButton)
-                    .background(enabled ? Color.accentColor.opacity(0.12) : AppColors.surfaceInteractive)
-                    .clipShape(Circle())
-                    .contentShape(Circle())
+                    .background(
+                        RoundedRectangle(cornerRadius: AppRadius.control, style: .continuous)
+                            .fill(enabled ? Color.accentColor.opacity(0.10) : .clear)
+                    )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(GhostIconButtonStyle())
             .accessibilityIdentifier("chat.composer.subagent")
             .accessibilityLabel("Subagent")
             .accessibilityValue(enabled ? "enabled" : "disabled")

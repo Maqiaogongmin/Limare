@@ -10,10 +10,12 @@ struct UserMessageNavigator: View {
 
     @State private var pointerY: CGFloat?
 
-    private let restingTickWidth: CGFloat = 10
-    private let activeTickWidth: CGFloat = 18
-    private let proximityGrowth: CGFloat = 12
-    private let hitWidth: CGFloat = 36
+    // Short, faint ticks against the window's edge, clear of the text column's margin; they
+    // grow under the pointer, where the hit area reaches.
+    private let restingTickWidth: CGFloat = 6
+    private let activeTickWidth: CGFloat = 10
+    private let proximityGrowth: CGFloat = 8
+    private let hitWidth: CGFloat = 22
 
     private var pitch: CGFloat {
         UserMessageNavigatorModel.tickPitch(entryCount: entries.count, availableHeight: availableHeight)
@@ -90,8 +92,8 @@ struct UserMessageNavigator: View {
         let isHovered = index == hoveredIndex
         let width = (isActive ? activeTickWidth : restingTickWidth) + proximityGrowth * proximity
         let color: Color = isActive || isHovered
-            ? Color.primary.opacity(0.85)
-            : Color.secondary.opacity(0.35 + 0.4 * proximity)
+            ? Color.primary.opacity(0.55)
+            : Color.primary.opacity(0.14 + 0.3 * proximity)
 
         return Capsule()
             .fill(color)
