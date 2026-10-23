@@ -14,6 +14,7 @@ enum LimareSelfDescription {
         var delegationAvailable: Bool
         var modelUseAvailable: Bool
         var mcpAvailable: Bool
+        var schedulingAvailable = false
     }
 
     static func section(_ facts: Facts) -> String {
@@ -26,6 +27,9 @@ enum LimareSelfDescription {
         ]
         if facts.mcpAvailable {
             lines.append("- MCP servers add tools; manage them with mcp_manage (steps in its description).")
+        }
+        if facts.schedulingAvailable {
+            lines.append("- Work for later or on a repeat: create a scheduled task with schedule_manage (Schedules in the sidebar).")
         }
         lines.append("- Skills: folders with a SKILL.md in ~/.agents/skills/<name>/ or <project>/.agents/skills/; the user enables and rescans them in Settings → Skills.")
         lines.append("- Hooks come from ~/.codex/hooks.json, <project>/.codex/hooks.json or packages imported in Settings → Hooks; a new hook runs only after the user trusts it there.")

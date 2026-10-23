@@ -43,6 +43,9 @@ enum ProviderClientError: LocalizedError, Equatable {
     case incompleteToolCall(String)
     case responsesFailed(code: String, message: String)
     case responsesIncomplete(reason: String)
+    /// An error object sent inside an accepted (HTTP 2xx) stream. It carries no HTTP status:
+    /// the request was taken and the stream broke, so only `code` says whether a retry can help.
+    case streamError(code: String?, message: String)
 
     var errorDescription: String? {
         switch self {
@@ -60,6 +63,8 @@ enum ProviderClientError: LocalizedError, Equatable {
             message.isEmpty ? "Responses API request failed with code \(code)." : "Responses API error [\(code)]: \(message)"
         case .responsesIncomplete(let reason):
             "Responses stream incomplete: \(reason)"
+        case .streamError(let code, let message):
+            code.map { "Provider stream error [\($0)]: \(message)" } ?? "Provider stream error: \(message)"
         }
     }
 }
@@ -290,7 +295,12 @@ struct OpenAICompatibleClient: ProviderClient {
                             var nativeDiagnostics = ProviderStreamDiagnostics(streamOpened: true)
                             for try await line in bytes.lines {
                                 try Task.checkCancellation()
-                                for event in try decoder.parseLine(line) {
+                                let decoded: [NativeDecodedEvent]
+                                do { decoded = try decoder.parseLine(line) }
+                                catch NativeWireError.streamError(let code, let message) {
+                                    throw ProviderClientError.streamError(code: code, message: message)
+                                }
+                                for event in decoded {
                                     let projectedEvent: AgentStreamEvent?
                                     switch event {
                                     case .text(let t):
@@ -571,6 +581,10 @@ struct OpenAICompatibleClient: ProviderClient {
         // try cannot change are not: a bad URL, a rejected or untrusted certificate.
         if let url = error as? URLError {
             return !Self.permanentURLErrors.contains(url.code)
+        }
+        if case .streamError? = error as? ProviderClientError {
+            if case .providerInvocation(_, true, _) = ModelRoutingClassifier.classify(error) { return true }
+            return false
         }
         guard case .http(let status, let message) = error as? ProviderClientError else { return false }
         if status == 400 {

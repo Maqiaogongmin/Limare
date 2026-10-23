@@ -19,6 +19,10 @@ enum AppSpacing {
     /// Between the composer's draft and its button row; with the editor's own 6pt inset, 22pt
     /// between the text and the buttons.
     static let composerDraftToolbarGap: CGFloat = 16
+    /// The same in a new conversation's fuller composer.
+    static let emptyStateDraftToolbarGap: CGFloat = 28
+    /// A new conversation: between the greeting's line and the composer card.
+    static let emptyStateGreetingGap: CGFloat = 30
     /// The Work Surface sheet's inset from the window's edges and the chat beside it.
     static let workSurfaceInset: CGFloat = 8
     /// The sheet's top in the title bar, level with the sidebar's.
@@ -31,9 +35,14 @@ enum AppRadius {
     static let card: CGFloat = 8
     static let modal: CGFloat = 10
     static let bubble: CGFloat = 12
+    /// A file card in the transcript, and the tile its icon sits in.
+    static let fileCard: CGFloat = 10
+    static let fileIconTile: CGFloat = 7
     static let composer: CGFloat = 14
     /// The composer card itself (its menus keep `composer`).
-    static let composerCard: CGFloat = 18
+    static let composerCard: CGFloat = 12
+    /// The composer's send, stop and pause tiles, in step with the card's corners.
+    static let runButton: CGFloat = 8
     /// Ghost icon buttons' hover fill, the composer's pills and the sidebar's card button.
     static let control: CGFloat = 8
     static let badge: CGFloat = 10
@@ -53,6 +62,8 @@ enum AppControlHeight {
     static let row: CGFloat = 30
     static let button: CGFloat = 32
     static let composerButton: CGFloat = 28
+    /// The composer's send, stop and pause tiles.
+    static let runButton: CGFloat = 28
     /// The composer's thinking and model pills.
     static let pill: CGFloat = 26
 }
@@ -63,14 +74,18 @@ enum AppLayout {
     static let sidebarIdealWidth: CGFloat = 224
     static let sidebarMaximumWidth: CGFloat = 280
     static let transcriptMaximumWidth: CGFloat = 760
-    static let userMessageMaximumWidth: CGFloat = 560
+    /// A user's message wraps past this width; a shorter one hugs its text.
+    static let userMessageMaximumWidth: CGFloat = 460
     static let settingsListMinimumWidth: CGFloat = 210
     static let settingsListIdealWidth: CGFloat = 230
     static let settingsListMaximumWidth: CGFloat = 280
     static let settingsDetailMinimumWidth: CGFloat = 480
     static let approvalMinimumWidth: CGFloat = 520
     static let approvalIdealWidth: CGFloat = 600
-    static let messageGutterMinimumWidth: CGFloat = 80
+    static let messageGutterMinimumWidth: CGFloat = 100
+    /// A file card in the transcript: compact, never the column's whole width.
+    static let fileCardMinimumWidth: CGFloat = 220
+    static let fileCardMaximumWidth: CGFloat = 320
     static let toolOutputMaximumHeight: CGFloat = 180
     /// Long tool arguments (a large file_write, for example) scroll inside this height,
     /// as the tool output already does.
@@ -80,10 +95,12 @@ enum AppLayout {
     /// The composer's model button text, beyond which it truncates in the middle; room for a
     /// group name with the model it uses.
     static let composerModelLabelMaximumWidth: CGFloat = 240
-    /// A new conversation gathers its greeting, the composer and the starters in a column this
+    /// A new conversation gathers its greeting and the composer in a column this
     /// wide, centred at `emptyStateCenterFraction` of the chat's height.
     static let emptyStateMaximumWidth: CGFloat = 680
     static let emptyStateCenterFraction: CGFloat = 0.45
+    /// A new conversation's composer card, at least this tall.
+    static let emptyStateComposerMinimumHeight: CGFloat = 110
     /// Below this chat width the greeting steps down from its full size.
     static let emptyStateCompactWidth: CGFloat = 540
     /// The fade at a scrolling transcript's or document's edges, where lines leave the view.
@@ -194,24 +211,44 @@ enum AppColors {
     // The appearance-dependent colours are made once: each `NSColor(name:dynamicProvider:)` is
     // equal only to itself, so one made per read never matches the last and every view that
     // compares it (a Markdown theme, a SwiftUI style) takes it for a change.
-    /// The chat canvas: warm paper in light mode rather than pure white, so the white composer
-    /// card reads as raised above it.
-    static let canvas: Color = dynamic(light: 0xF8F7F4, dark: 0x0D0E11)
+    /// The chat canvas: a cool neutral off-white in light mode rather than pure white, so the
+    /// white composer card stands apart from it; no warm cast against the system sidebar.
+    static let canvas: Color = dynamic(light: 0xF7F7F8, dark: 0x0D0E11)
     /// The composer card and the sidebar's New Conversation card, one step above the canvas.
     static let raisedSurface: Color = dynamic(light: 0xFFFFFF, dark: 0x17181E)
     static let raisedStroke = Color(nsColor: NSColor(name: nil) { appearance in
         isDark(appearance) ? NSColor.white.withAlphaComponent(0.09) : NSColor.black.withAlphaComponent(0.08)
     })
-    /// The composer's thinking and model pills: a tint, no edge, and text quieter than the draft.
-    static var pillFill: Color { Color.primary.opacity(0.035) }
-    static var pillText: Color { Color.primary.opacity(0.65) }
-    /// A white piece lying on the canvas (a starter chip, the greeting's badge): its hairline edge.
+    /// The composer card's edge: a crisp 1pt line that marks the card, in place of a shadow.
+    static let composerStroke = Color(nsColor: NSColor(name: nil) { appearance in
+        isDark(appearance) ? NSColor.white.withAlphaComponent(0.14) : NSColor.black.withAlphaComponent(0.13)
+    })
+    /// The composer's thinking and model menus: bare text quieter than the draft, a tint only
+    /// under the pointer.
+    static var pillText: Color { Color.primary.opacity(0.60) }
+    static var pillHover: Color { Color.primary.opacity(0.05) }
+    /// A user's message on the canvas: a white card (a raised slate in dark), edged in
+    /// `cardStroke`.
+    static let userBubble: Color = dynamic(light: 0xFFFFFF, dark: 0x1C1D23)
+    /// A file card in the transcript.
+    static let fileCard: Color = dynamic(light: 0xFFFFFF, dark: 0x18191F)
+    /// The 1pt edge of a card lying in the transcript: a user message, a file card.
+    static let cardStroke = Color(nsColor: NSColor(name: nil) { appearance in
+        isDark(appearance) ? NSColor.white.withAlphaComponent(0.10) : NSColor.black.withAlphaComponent(0.085)
+    })
+    /// The icons under a user message: faint, near full ink under the pointer.
+    static var bubbleActionIdle: Color { Color.primary.opacity(0.38) }
+    static var bubbleActionHover: Color { Color.primary.opacity(0.85) }
+    /// A text action inside a status line ("View run details", "查看撤销"): charcoal on a faint
+    /// tint, never the system link blue.
+    static var quietLinkText: Color { Color.primary.opacity(0.78) }
+    static var quietLinkFill: Color { Color.primary.opacity(0.05) }
+    static var quietLinkHover: Color { Color.primary.opacity(0.09) }
+    /// A reply the runtime wrote (a failed request, a stop): a small tinted status line.
+    static var noticeFill: Color { Color.primary.opacity(0.04) }
+    /// A white piece lying on the canvas (a launcher row, a settings card): its hairline edge.
     static let hairline = Color(nsColor: NSColor(name: nil) { appearance in
         isDark(appearance) ? NSColor.white.withAlphaComponent(0.08) : NSColor.black.withAlphaComponent(0.07)
-    })
-    /// Starter chips: translucent porcelain over the canvas.
-    static let chipFill = Color(nsColor: NSColor(name: nil) { appearance in
-        NSColor.white.withAlphaComponent(isDark(appearance) ? 0.05 : 0.80)
     })
     /// The Work Surface sheet, inset on the canvas, and what its surfaces paint.
     static let workSurface: Color = Color(nsColor: workSurfaceNSColor)
@@ -227,6 +264,10 @@ enum AppColors {
     /// Restrained status text: forest green for a healthy state, dark red for danger.
     static let positiveText: Color = dynamic(light: 0x15803D, dark: 0x4ADE80)
     static let dangerText: Color = dynamic(light: 0xB91C1C, dark: 0xF87171)
+    /// A caution glyph beside quiet text (the scheduled editor's unattended note): dark amber.
+    static let cautionIcon: Color = dynamic(light: 0xB45309, dark: 0xF59E0B)
+    /// A destructive icon under the pointer (an archived row's trash).
+    static let dangerHover: Color = dynamic(light: 0xDC2626, dark: 0xF87171)
     /// A text editor set into a white card: a shade warmer than the card.
     static let editorWell: Color = dynamic(light: 0xFAF9F7, dark: 0x121317)
     static let controlOn: Color = dynamic(light: 0x18181B, dark: 0x16A34A)
@@ -282,15 +323,57 @@ struct GhostIconButtonStyle: ButtonStyle {
     }
 }
 
+/// A text action set in a status line: 12pt medium charcoal on a faint 6pt tint, a step
+/// darker under the pointer.
+struct QuietLinkButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        QuietLinkBody(configuration: configuration)
+    }
+
+    private struct QuietLinkBody: View {
+        let configuration: ButtonStyleConfiguration
+        @State private var isHovering = false
+
+        var body: some View {
+            configuration.label
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AppColors.quietLinkText)
+                .padding(.horizontal, AppSpacing.xSmall)
+                .padding(.vertical, AppSpacing.xxxSmall)
+                .background(
+                    RoundedRectangle(cornerRadius: AppRadius.row, style: .continuous)
+                        .fill(isHovering || configuration.isPressed ? AppColors.quietLinkHover : AppColors.quietLinkFill)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: AppRadius.row, style: .continuous))
+                .onHover { isHovering = $0 }
+                .animation(AppMotion.resolved(AppMotion.quick), value: isHovering)
+        }
+    }
+}
+
 extension View {
-    /// The composer's thinking and model menus: quiet text on a faint rounded tint.
+    /// The composer's thinking and model menus: quiet bare text, a faint rounded tint under the
+    /// pointer.
     func composerPill() -> some View {
-        self
+        modifier(ComposerPill())
+    }
+}
+
+private struct ComposerPill: ViewModifier {
+    @State private var isHovering = false
+
+    func body(content: Content) -> some View {
+        content
             .foregroundStyle(AppColors.pillText)
             .padding(.horizontal, AppSpacing.small)
             .padding(.vertical, AppSpacing.xxSmall)
-            .background(RoundedRectangle(cornerRadius: AppRadius.row, style: .continuous).fill(AppColors.pillFill))
+            .background(
+                RoundedRectangle(cornerRadius: AppRadius.row, style: .continuous)
+                    .fill(isHovering ? AppColors.pillHover : .clear)
+            )
             .contentShape(RoundedRectangle(cornerRadius: AppRadius.row, style: .continuous))
+            .onHover { isHovering = $0 }
+            .animation(AppMotion.resolved(AppMotion.quick), value: isHovering)
     }
 }
 

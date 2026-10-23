@@ -103,6 +103,12 @@ struct RootView: View {
                 switch window.screen {
                 case .chat:
                     ChatView()
+                case .scheduled:
+                    SchedulesWorkspaceView()
+                        .safeAreaInset(edge: .bottom) {
+                            ApprovalElsewhereNotice(excluding: nil)
+                                .padding(AppSpacing.small)
+                        }
                 default:
                     SettingsDetailView(screen: window.screen)
                         .safeAreaInset(edge: .bottom) {
@@ -112,6 +118,14 @@ struct RootView: View {
                 }
             }
         }
+        .overlay {
+            if window.screen == .scheduled, let mode = window.scheduledPanel.editing {
+                ScheduledEditorModal(mode: mode)
+                    .id(mode.id)
+                    .transition(.opacity)
+            }
+        }
+        .animation(AppMotion.resolved(AppMotion.standard), value: window.scheduledPanel.editing?.id)
         .sheet(item: activeSheet) { item in
             switch item {
             case .permission(let approval):
@@ -157,7 +171,7 @@ struct RootView: View {
     }
 
     private var workSurfaceFillsWindow: Bool {
-        !window.screen.isSettings && window.workSurface.isPresented && window.workSurface.coverage == .window
+        window.screen == .chat && window.workSurface.isPresented && window.workSurface.coverage == .window
     }
 
     private enum ActiveSheet: Identifiable {

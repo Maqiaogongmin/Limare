@@ -6,6 +6,9 @@ import Observation
 final class PermissionStore {
     /// Called when an approval request is shown (the Background Alerts notifier listens).
     @ObservationIgnored var onApprovalPresented: ((PendingApproval) -> Void)?
+    /// Whether a run is an unattended scheduled run (ConversationRunCoordinator.isUnattended);
+    /// set by the composition root. Such a run is refused instead of queueing a human approval.
+    @ObservationIgnored var isUnattendedRun: ((UUID) -> Bool)?
     @ObservationIgnored
     private let defaults: UserDefaults
     @ObservationIgnored
@@ -120,6 +123,10 @@ final class PermissionStore {
         request: ToolPermissionRequest,
         reason: String
     ) async -> ToolApprovalState {
+        if let runID = request.runID, isUnattendedRun?(runID) == true {
+            logs.info("Permission", "Unattended scheduled run; refused human approval for \(request.toolName) without queueing.")
+            return denied(request, "This is an unattended scheduled run, so no one can approve this \(request.toolName) call. Do not retry it; continue within the current permissions, and say in your final reply which step needs a manual run.")
+        }
         let details = approvalDetails(for: request)
         let id = UUID()
         let approval = PendingApproval(

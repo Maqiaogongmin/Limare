@@ -11,8 +11,9 @@ struct ConversationRow: View {
     @State private var renameText = ""
     @State private var isConfirmingDelete = false
 
+    /// The shown conversation, unless the window shows Schedules, whose row is the selected one then.
     private var isSelected: Bool {
-        window.conversationID == conversation.id
+        window.screen == .chat && window.conversationID == conversation.id
     }
 
     private var iconForegroundStyle: Color {
@@ -30,7 +31,7 @@ struct ConversationRow: View {
             isSelected: isSelected,
             isIndented: isIndented,
             onSelect: {
-                appState.focus(window)
+                appState.showChat(in: window)
                 appState.conversations.selectConversation(id: conversation.id)
             }
         ) {
@@ -170,7 +171,7 @@ struct ConversationRow: View {
         }
 
         Button {
-            appState.focus(window)
+            appState.showChat(in: window)
             appState.conversations.selectConversation(id: conversation.id)
             window.chat.compactConversation()
         } label: {

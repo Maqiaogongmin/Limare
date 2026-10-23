@@ -4,7 +4,6 @@ struct SidebarView: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowSession.self) private var window
     @State private var isCreatingProject = false
-    @State private var isViewingArchived = false
     @State private var searchText = ""
 
     var body: some View {
@@ -43,44 +42,12 @@ struct SidebarView: View {
         .sheet(isPresented: $isCreatingProject) {
             CreateProjectSheet()
         }
-        .sheet(isPresented: $isViewingArchived) {
-            ArchivedConversationsSheet()
-        }
     }
 
+    /// Only Settings stays pinned at the bottom; Schedules sits under Search and Archived is a
+    /// Settings page, so the footer does not grow with each feature.
     private var bottomUtilityBar: some View {
         VStack(spacing: AppSpacing.xxxSmall) {
-            SidebarRowContainer(
-                isSelected: false,
-                onSelect: {
-                    isViewingArchived = true
-                }
-            ) {
-                // Takes the row ahead of the container's own trailing spacer, so the count sits
-                // at the right edge.
-                HStack(spacing: AppSpacing.xSmall) {
-                    Image(systemName: "archivebox")
-                        .font(AppTypography.interfaceSubheadline)
-                        .foregroundStyle(Color.secondary)
-                    Text("Archived")
-                        .font(AppTypography.interfaceSubheadline)
-                        .lineLimit(1)
-                        .foregroundStyle(Color.primary.opacity(0.88))
-                    Spacer(minLength: AppSpacing.small)
-                    if !appState.conversations.archivedConversations.isEmpty {
-                        Text("\(appState.conversations.archivedConversations.count)")
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
-                            .foregroundStyle(Color.secondary)
-                            .padding(.horizontal, AppSpacing.xSmall)
-                            .padding(.vertical, 1)
-                            .background(Capsule().fill(Color.secondary.opacity(0.14)))
-                            .fixedSize()
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .layoutPriority(1)
-            }
-
             SidebarRowContainer(
                 isSelected: false,
                 onSelect: {
@@ -110,7 +77,7 @@ struct SidebarView: View {
     private var topBar: some View {
         VStack(spacing: AppSpacing.small) {
             Button {
-                appState.focus(window)
+                appState.showChat(in: window)
                 appState.newConversation(in: window)
             } label: {
                 HStack(spacing: AppSpacing.small) {
@@ -141,9 +108,13 @@ struct SidebarView: View {
             .accessibilityIdentifier("chat.sidebar.newConversation")
 
             SidebarSearchField(text: $searchText)
+
+            SidebarSchedulesRow()
+                .padding(.top, AppSpacing.xSmall - AppSpacing.small)
         }
         .padding(.horizontal, AppSpacing.medium)
-        .padding(.vertical, AppSpacing.small)
+        .padding(.top, AppSpacing.small)
+        .padding(.bottom, AppSpacing.xSmall)
     }
 
     @ViewBuilder
@@ -192,6 +163,58 @@ struct SidebarView: View {
     }
 }
 
+/// Schedules under Search: a ghost row with no chrome at rest, so it never competes with New
+/// Conversation. A tint shows only under the pointer or while Schedules is open.
+private struct SidebarSchedulesRow: View {
+    @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
+    @State private var isHovering = false
+
+    var body: some View {
+        let isSelected = window.screen == .scheduled
+        let enabledCount = appState.scheduled.store.tasks.filter(\.isEnabled).count
+        HStack(spacing: AppSpacing.small) {
+            Image(systemName: "clock")
+                .font(.system(size: 13, weight: .light))
+                .frame(width: 16)
+            Text("Schedules")
+                .font(.system(size: 13, weight: isSelected ? .medium : .regular))
+                .lineLimit(1)
+            Spacer(minLength: AppSpacing.small)
+            if enabledCount > 0 {
+                Text("\(enabledCount)")
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
+                    .foregroundStyle(Color.secondary)
+                    .padding(.horizontal, AppSpacing.xSmall)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(Color.primary.opacity(0.06)))
+                    .fixedSize()
+            }
+        }
+        .foregroundStyle(isSelected ? Color.primary : Color.primary.opacity(0.72))
+        .padding(.horizontal, AppSpacing.small)
+        .frame(height: 28)
+        .background(
+            RoundedRectangle(cornerRadius: AppRadius.row, style: .continuous)
+                .fill(isSelected ? Color.primary.opacity(0.07) : (isHovering ? Color.primary.opacity(0.04) : .clear))
+        )
+        .contentShape(Rectangle())
+        .onHover { isHovering = $0 }
+        .onTapGesture(perform: open)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Schedules")
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction { open() }
+        .accessibilityIdentifier("sidebar.scheduled")
+    }
+
+    private func open() {
+        Task { @MainActor in
+            window.screen = .scheduled
+        }
+    }
+}
+
 struct SettingsSidebarView: View {
     @Binding var selection: AppScreen
 
@@ -222,6 +245,7 @@ struct SettingsSidebarView: View {
             Section {
                 row("General", systemImage: "gearshape", screen: .settingsGeneral)
                 row("Personalization", systemImage: "person.text.rectangle", screen: .settingsSoul)
+                row("Archived", systemImage: "archivebox", screen: .settingsArchived)
                 row("Permissions", systemImage: "lock.shield", screen: .settingsPermissions)
                 row("Remote Access", systemImage: "iphone.and.arrow.forward", screen: .settingsRemoteAccess)
             }

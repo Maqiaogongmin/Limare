@@ -2,6 +2,16 @@
 
 All notable behavior and architecture changes to Limare are recorded here. Entries before the 2026-10-09 identity cleanup use the old names (Minis Mac, MinisMac, org.openminis.MinisMac) as they were at the time.
 
+## 0.1.4 — 2026-10-23
+
+- **定时任务**：在侧栏「Schedules」中创建一次性、每天、工作日、每周、每隔几小时或每月运行的任务，Limare 开启时按时在新对话或指定对话中无人值守执行，可查看运行记录并接收完成通知；对话中的 AI 可通过 schedule_manage 创建和修改定时任务。
+- **侧栏与归档**：侧栏底部只保留设置；Schedules 位于搜索下方；归档会话移到设置 › 归档。搜索框只在点击或 ⌘K 时获得光标。
+- **对话外观**：用户消息气泡贴合文字宽度；运行失败、停止等提示以状态行显示；新对话问候更安静。
+- **流畅度**：流式输出合并为每秒 30 次刷新，长对话快速输出时滚动不再卡顿。
+- **稳定性**：/compact 期间发送的消息排队等待；回复中途网络断开时从工具检查点重试；忽略 SIGPIPE，Hook 不读取输入时不再导致 Limare 退出。
+
+支持 Apple Silicon（arm64）、macOS 15.0 及以上。首次安装下载签名、公证并装订的 DMG；已安装正式版可通过 **Limare → 检查更新…** 手动更新。无后台更新检查或静默安装。
+
 ## 0.1.3 — 2026-10-19
 
 - **更安静的对话**：同一轮回复共用标题，执行中的早期步骤可折叠；工具调用以简洁状态行展示，手机远程对话同步优化。

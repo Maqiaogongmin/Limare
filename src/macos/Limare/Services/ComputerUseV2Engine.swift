@@ -21,6 +21,13 @@ public extension ComputerUseActivationProviding {
 public protocol ComputerUseAppAuthorizing: Sendable {
     func getAuthorizationStatus(conversationID: UUID, bundleID: String) async -> ComputerUseAppAuthorizationState
     func requestAppApproval(conversationID: UUID, bundleID: String, appLocalizedName: String) async -> ComputerUseAppAuthorizationState
+    /// The text the model gets when an app was not granted because no one can grant it now (an
+    /// unattended scheduled run); nil when a person declined or the request was cancelled.
+    func unattendedRefusal(conversationID: UUID, appName: String) async -> String?
+}
+
+extension ComputerUseAppAuthorizing {
+    public func unattendedRefusal(conversationID: UUID, appName: String) async -> String? { nil }
 }
 
 /// Limare-owned Control Plane & Execution Engine for Computer Use v0.2.
@@ -276,7 +283,9 @@ public final class ComputerUseV2Engine: @unchecked Sendable {
                     return ComputerUseV2ActionResult(status: .cancelled, actionKind: .launchApp, targetAppBundleID: bundleID, detail: "Run lost mutation authority during Layer-2 approval.")
                 }
                 if resolution != .allowedForConversation {
-                    return ComputerUseV2ActionResult(status: .denied, actionKind: .launchApp, targetAppBundleID: bundleID, detail: "Layer-2 authorization denied for '\(bundleID)'.")
+                    let detail = await appAuthorizer.unattendedRefusal(conversationID: conversationID, appName: bundleID)
+                        ?? "Layer-2 authorization denied for '\(bundleID)'."
+                    return ComputerUseV2ActionResult(status: .denied, actionKind: .launchApp, targetAppBundleID: bundleID, detail: detail)
                 }
             }
 
@@ -369,7 +378,9 @@ public final class ComputerUseV2Engine: @unchecked Sendable {
                 return ComputerUseV2ActionResult(status: .cancelled, actionKind: input.action, targetAppBundleID: target.bundleID, detail: "Run lost mutation authority during Layer-2 approval.")
             }
             if resolution != .allowedForConversation {
-                return ComputerUseV2ActionResult(status: .denied, actionKind: input.action, targetAppBundleID: target.bundleID, detail: "Layer-2 authorization denied for '\(target.bundleID)'.")
+                let detail = await appAuthorizer.unattendedRefusal(conversationID: conversationID, appName: target.bundleID)
+                    ?? "Layer-2 authorization denied for '\(target.bundleID)'."
+                return ComputerUseV2ActionResult(status: .denied, actionKind: input.action, targetAppBundleID: target.bundleID, detail: detail)
             }
         }
 

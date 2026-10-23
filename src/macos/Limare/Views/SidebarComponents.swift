@@ -195,22 +195,69 @@ struct SidebarRenameSheet: View {
 
 // MARK: - Sidebar Search Field
 
+/// At rest this is a button, not a text field: AppKit gives a window's caret to its first text
+/// field whenever the window becomes key with nothing focused (Schedules and Settings have no
+/// composer to take it), and the search must only start when asked for, by a click or ⌘K.
 struct SidebarSearchField: View {
     @Binding var text: String
+    @State private var isActive = false
     @FocusState private var isFocused: Bool
 
     var body: some View {
+        Group {
+            if isActive || !text.isEmpty {
+                field
+            } else {
+                Button(action: activate) {
+                    content(prompt: Text("Search").foregroundStyle(Color(nsColor: .placeholderTextColor)))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Search")
+            }
+        }
+        // ⌘K reaches the search in either state, so it lives on a button that is always there.
+        .background {
+            Button("Search", action: activate)
+                .keyboardShortcut("k", modifiers: .command)
+                .opacity(0)
+                .accessibilityHidden(true)
+        }
+        .onChange(of: isFocused) { _, focused in
+            if !focused && text.isEmpty { isActive = false }
+        }
+    }
+
+    private var field: some View {
+        // No bezel or focus ring of its own: the field's rounded edge shows focus.
+        let textField = TextField("Search", text: $text)
+            .textFieldStyle(.plain)
+            .focusEffectDisabled()
+            .focused($isFocused)
+            .onExitCommand {
+                text = ""
+                isFocused = false
+            }
+        return content(prompt: textField)
+            // The field is inserted by this update; focus it once it is in the window.
+            .onAppear { DispatchQueue.main.async { isFocused = true } }
+    }
+
+    private func activate() {
+        // A field already shown takes focus here; a new one takes it as it appears.
+        isActive = true
+        isFocused = true
+    }
+
+    private func content(prompt: some View) -> some View {
         HStack(spacing: AppSpacing.xSmall) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
 
-            // No bezel or focus ring of its own: the field's rounded edge shows focus.
-            TextField("Search", text: $text)
-                .textFieldStyle(.plain)
-                .focusEffectDisabled()
+            prompt
                 .font(AppTypography.interfaceSubheadline)
-                .focused($isFocused)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             if text.isEmpty {
                 // The shortcut as a key cap, apart from the prompt.
@@ -246,7 +293,6 @@ struct SidebarSearchField: View {
             RoundedRectangle(cornerRadius: AppRadius.row)
                 .strokeBorder(Color.primary.opacity(isFocused ? 0.18 : 0.06), lineWidth: 1)
         )
-        .keyboardShortcut("k", modifiers: .command)
     }
 }
 

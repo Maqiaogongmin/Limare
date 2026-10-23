@@ -145,6 +145,21 @@ struct ModelRoutingClassifier {
                     return .providerInvocation(reason: msg, isTransient: true, statusCode: 500)
                 }
                 return .permanentProviderRejection(reason: msg, statusCode: nil)
+            case .streamError(let code, let message):
+                // Like Codex for a failed stream: only a code naming a cause a retry cannot change
+                // stops it; anything else is the provider dropping an accepted stream.
+                let msg = SecretMasker.redactCredentials(clientError.localizedDescription)
+                if ProviderContextOverflowRecognizer.isOverflow(responsesCode: code ?? "", message: message) {
+                    return .providerContextOverflow(reason: msg, statusCode: nil)
+                }
+                switch code?.lowercased() {
+                case "rate_limit_exceeded", "rate_limit_error", "resource_exhausted", "429":
+                    return .providerRateLimit(reason: msg)
+                case "insufficient_quota", "authentication_error", "permission_error", "unauthenticated", "permission_denied", "401", "403":
+                    return .permanentProviderRejection(reason: msg, statusCode: nil)
+                default:
+                    return .providerInvocation(reason: msg, isTransient: true, statusCode: nil)
+                }
             case .responsesIncomplete(let reason):
                 if reason == "content_filter" { return .providerContentFiltered(reason: "Provider filtered the response") }
                 return .providerInvocation(reason: "Responses stream incomplete: \(SecretMasker.redactCredentials(reason))", isTransient: false, statusCode: nil)

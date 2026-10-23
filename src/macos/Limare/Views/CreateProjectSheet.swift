@@ -207,7 +207,7 @@ struct CreateProjectSheet: View {
         let trimmed = projectName.trimmingCharacters(in: .whitespacesAndNewlines)
         let finalName = trimmed.isEmpty ? (selectedWorkspace?.name ?? "New Project") : trimmed
         let project = appState.conversations.newProject(name: finalName, workspace: selectedWorkspace)
-        appState.focus(window)
+        appState.showChat(in: window)
         appState.conversations.newConversation(projectID: project.id)
         dismiss()
     }

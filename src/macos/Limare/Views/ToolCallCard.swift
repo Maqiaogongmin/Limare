@@ -151,8 +151,7 @@ struct ToolCallCard: View {
                         .accessibilityIdentifier("toolcard.changedOnFailure")
                     if notice.ownerMessageID == window.chat.retractableUserMessageID {
                         Button("查看撤销") { pendingUndo = UndoRequest(messageID: notice.ownerMessageID) }
-                            .buttonStyle(.link)
-                            .font(.caption)
+                            .buttonStyle(QuietLinkButtonStyle())
                     }
                     Spacer()
                 }

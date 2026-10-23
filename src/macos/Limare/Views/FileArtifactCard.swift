@@ -116,11 +116,16 @@ public struct FileArtifactCard: View {
                 FileOpening.open(url) { window.previewArtifact(id: id, conversationID: conversationID) }
             }
         } label: {
-            HStack(spacing: AppSpacing.small) {
+            let shape = RoundedRectangle(cornerRadius: AppRadius.fileCard, style: .continuous)
+            HStack(spacing: AppSpacing.small + 2) {
                 Image(systemName: iconSystemName)
                     .font(.system(size: 15, weight: .regular))
-                    .foregroundStyle(AppColors.textSecondary)
-                    .frame(width: AppControlHeight.iconSmall, height: AppControlHeight.iconSmall)
+                    .foregroundStyle(Color.primary.opacity(0.70))
+                    .frame(width: 32, height: 32)
+                    .background(
+                        RoundedRectangle(cornerRadius: AppRadius.fileIconTile, style: .continuous)
+                            .fill(Color.primary.opacity(0.045))
+                    )
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(filename)
@@ -141,15 +146,15 @@ public struct FileArtifactCard: View {
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(AppColors.textMuted.opacity(0.6))
             }
-            .padding(.horizontal, AppSpacing.medium)
+            .padding(.leading, AppSpacing.small)
+            .padding(.trailing, AppSpacing.medium)
             .padding(.vertical, AppSpacing.small)
-            .background(isHovered ? AppColors.surfaceInteractive : AppColors.surfaceElevated)
-            .clipShape(RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous)
-                    .stroke(isHovered ? AppColors.borderMuted : AppColors.separator, lineWidth: 1)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous))
+            // Compact wherever it sits: a file is a card, not a row across the column.
+            .frame(minWidth: AppLayout.fileCardMinimumWidth, maxWidth: AppLayout.fileCardMaximumWidth, alignment: .leading)
+            .background(shape.fill(AppColors.fileCard))
+            .overlay(shape.fill(isHovered ? AppColors.pillHover : .clear))
+            .overlay(shape.stroke(AppColors.cardStroke, lineWidth: 1))
+            .contentShape(shape)
         }
         .buttonStyle(.plain)
         .onHover { hovering in

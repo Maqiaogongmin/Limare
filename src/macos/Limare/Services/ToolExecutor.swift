@@ -52,7 +52,7 @@ final class ToolExecutor {
         "delegation_result", "shell_execute", "file_read", "file_list", "file_search", "file_write", "file_edit",
         "read_image", "model_use", "browser_use", "delegate_task", "delegation_control", "update_plan",
         "attachment_copy", "resource_convert", "artifact_acquire", "artifact_register", "tool_result_read", "computer_use",
-        "mcp_manage"
+        "mcp_manage", "schedule_manage"
     ]
 
     nonisolated static func recognizes(_ name: String) -> Bool {
@@ -92,6 +92,15 @@ final class ToolExecutor {
     func setSubagentCoordinator(_ coordinator: SubagentCoordinator) {
         subagents = coordinator
     }
+
+    private weak var scheduler: ScheduledScheduler?
+
+    func setScheduler(_ scheduler: ScheduledScheduler) {
+        self.scheduler = scheduler
+    }
+
+    /// Scheduled tasks are managed from a conversation's own run, never from a subagent's.
+    var supportsScheduling: Bool { subagentBinding == nil && scheduler != nil }
 
     private let workspace: WorkspaceStore
     private let permissions: PermissionStore
@@ -261,6 +270,7 @@ final class ToolExecutor {
         scoped.setConversationContext(activeConversationID: { conversationID }, modelSources: { modelSources })
         scoped.imageDataReader = imageDataReader
         scoped.subagents = subagents
+        scoped.scheduler = scheduler
         scoped.setComputerUseV2Engine(self.computerUseV2Engine)
         scoped.setComputerUseRoute(self.computerUseRoute)
         return scoped
@@ -396,6 +406,8 @@ final class ToolExecutor {
                     outcome = try await executeComputerUse(call, onUpdate: trackedUpdate)
                 case "mcp_manage":
                     outcome = try await executeMCPManage(call, onUpdate: trackedUpdate)
+                case "schedule_manage":
+                    outcome = try await executeScheduleManage(call, onUpdate: trackedUpdate)
                 default:
                     throw ToolExecutorError.unknownTool(call.function.name)
                 }
@@ -1715,6 +1727,256 @@ final class ToolExecutor {
         default:
             throw ToolExecutorError.invalidArguments("Supported actions: \(HarnessToolDefinitions.mcpManageActions.joined(separator: ", ")).")
         }
+    }
+
+    // MARK: - schedule_manage
+
+    private struct ScheduleManageArguments: Decodable {
+        let action: String
+        let task_id: String?
+        let name: String?
+        let prompt: String?
+        let `repeat`: String?
+        let time: String?
+        let weekdays: String?
+        let interval_hours: Int?
+        let day_of_month: Int?
+        let fire_at: String?
+        let target: String?
+        let enabled: Bool?
+        let notify: String?
+
+        var changesSchedule: Bool {
+            `repeat` != nil || time != nil || weekdays != nil || interval_hours != nil || day_of_month != nil || fire_at != nil
+        }
+    }
+
+    /// The model's side of the Schedules page: the same tasks, rules and scheduler calls as the editor.
+    private func executeScheduleManage(
+        _ call: ProviderToolCall,
+        onUpdate: @escaping UpdateHandler
+    ) async throws -> ToolExecutionOutcome {
+        guard let scheduler, subagentBinding == nil else { throw ToolExecutorError.unknownTool("schedule_manage") }
+        let startedAt = ContinuousClock.now
+        if let raw = (try? JSONSerialization.jsonObject(with: Data(call.function.arguments.utf8))) as? [String: Any] {
+            let unknown = Set(raw.keys).subtracting(HarnessToolDefinitions.scheduleManageProperties.keys).sorted()
+            guard unknown.isEmpty else {
+                throw ToolExecutorError.invalidArguments("Unsupported field on schedule_manage: \(unknown.joined(separator: ", ")).")
+            }
+        }
+        let args: ScheduleManageArguments = try decode(call)
+        let action = args.action.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let conversationID = activeConversationIDProvider?()
+
+        func completed(_ payload: [String: Any], approval: ToolApprovalState) -> ToolExecutionOutcome {
+            let content = jsonString(payload)
+            onUpdate(.init(state: .completed, approvalState: approval, output: content))
+            return .init(content: content, isError: false, approvalState: approval, durationMilliseconds: milliseconds(since: startedAt))
+        }
+        func approve(_ summary: String) async -> ToolApprovalState {
+            await authorize(ToolPermissionRequest(
+                toolName: "schedule_manage",
+                summary: summary,
+                workspaceURL: workspace.url,
+                affectedURLs: [],
+                command: nil,
+                environmentKeys: [],
+                requestsNetwork: false,
+                isHighRisk: false
+            ), onUpdate: onUpdate)
+        }
+        func existingTask() throws -> ScheduledTask {
+            guard let raw = args.task_id?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+                throw ToolExecutorError.invalidArguments("task_id is required for \(action); read it with list.")
+            }
+            guard let id = UUID(uuidString: raw), let task = scheduler.store.task(id: id) else {
+                throw ToolExecutorError.invalidArguments("No scheduled task has id \(raw); read the ids with list.")
+            }
+            return task
+        }
+        func target(_ raw: String) throws -> ScheduledTask.Target {
+            switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "new_conversation":
+                return .newConversation(projectID: conversationID.flatMap { scheduler.projectID(ofConversation: $0) })
+            case "this_conversation":
+                guard let conversationID else { throw ToolExecutorError.invalidArguments("this_conversation needs a conversation; use new_conversation.") }
+                return .conversation(id: conversationID)
+            default:
+                throw ToolExecutorError.invalidArguments("target must be new_conversation or this_conversation.")
+            }
+        }
+        func notify(_ raw: String) throws -> ScheduledTask.NotifyOn {
+            switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "completion_and_failure": return .completionAndFailure
+            case "failure_only": return .failureOnly
+            default: throw ToolExecutorError.invalidArguments("notify must be completion_and_failure or failure_only.")
+            }
+        }
+
+        switch action {
+        case "list":
+            let tasks = scheduler.store.tasks.map { scheduleDescription($0, scheduler: scheduler, conversationID: conversationID) }
+            return completed(["tasks": tasks, "count": tasks.count], approval: .notRequired)
+
+        case "create":
+            guard let prompt = args.prompt, !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw ToolExecutorError.invalidArguments("prompt is required for create.")
+            }
+            guard args.repeat != nil else {
+                throw ToolExecutorError.invalidArguments("repeat is required for create: once, daily, weekdays, weekly, every_n_hours or monthly.")
+            }
+            let timeZoneID = TimeZone.current.identifier
+            var task = ScheduledTask(
+                name: args.name ?? "",
+                prompt: prompt,
+                schedule: try Self.schedule(args, base: ScheduledRuleDraft(), timeZoneID: timeZoneID),
+                timeZoneID: timeZoneID,
+                target: try target(args.target ?? "new_conversation")
+            )
+            if let raw = args.notify { task.notifyOn = try notify(raw) }
+            if let enabled = args.enabled { task.isEnabled = enabled }
+            let approval = await approve("Create scheduled task '\(task.name.isEmpty ? String(prompt.prefix(40)) : task.name)'")
+            guard approval != .denied else { return deniedOutcome() }
+            let created = try scheduler.create(task)
+            return completed(["task": scheduleDescription(created, scheduler: scheduler, conversationID: conversationID)], approval: approval)
+
+        case "update":
+            var task = try existingTask()
+            if let name = args.name { task.name = name }
+            if let prompt = args.prompt { task.prompt = prompt }
+            if args.changesSchedule {
+                task.schedule = try Self.schedule(args, base: ScheduledRuleDraft(schedule: task.schedule), timeZoneID: task.timeZoneID)
+            }
+            if let raw = args.target { task.target = try target(raw) }
+            if let raw = args.notify { task.notifyOn = try notify(raw) }
+            if let enabled = args.enabled { task.isEnabled = enabled }
+            let approval = await approve("Change scheduled task '\(task.name)'")
+            guard approval != .denied else { return deniedOutcome() }
+            let updated = try scheduler.update(task)
+            return completed(["task": scheduleDescription(updated, scheduler: scheduler, conversationID: conversationID)], approval: approval)
+
+        case "delete":
+            let task = try existingTask()
+            let approval = await approve("Delete scheduled task '\(task.name)'")
+            guard approval != .denied else { return deniedOutcome() }
+            try scheduler.delete(taskID: task.id)
+            return completed(["deleted": task.id.uuidString, "name": task.name], approval: approval)
+
+        case "run_now":
+            let task = try existingTask()
+            let approval = await approve("Run scheduled task '\(task.name)' now")
+            guard approval != .denied else { return deniedOutcome() }
+            do {
+                try scheduler.runNow(taskID: task.id)
+            } catch let refusal as ScheduledScheduler.ManualRunRefusal {
+                switch refusal {
+                case .anotherRunActive: throw ToolExecutorError.invalidArguments("Another scheduled run is in progress; try again after it ends.")
+                case .taskNotFound: throw ToolExecutorError.invalidArguments("No scheduled task has id \(task.id.uuidString).")
+                case .notReadable: throw ToolExecutorError.invalidArguments("Scheduling is paused because the schedules file could not be read; the user can see why in Schedules.")
+                }
+            }
+            return completed(["task": scheduleDescription(task, scheduler: scheduler, conversationID: conversationID)], approval: approval)
+
+        default:
+            throw ToolExecutorError.invalidArguments("action must be one of: list, create, update, delete, run_now.")
+        }
+    }
+
+    /// What the model reads about a task: the rule in the words the Schedules page shows, and times
+    /// in the task's own time zone.
+    private func scheduleDescription(_ task: ScheduledTask, scheduler: ScheduledScheduler, conversationID: UUID?) -> [String: Any] {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = TimeZone(identifier: task.timeZoneID) ?? .current
+        var item: [String: Any] = [
+            "task_id": task.id.uuidString,
+            "name": task.name,
+            "prompt": task.prompt,
+            "rule": ScheduledRuleDraft(schedule: task.schedule).summary(timeZoneID: task.timeZoneID),
+            "enabled": task.isEnabled,
+            "notify": task.notifyOn == .failureOnly ? "failure_only" : "completion_and_failure",
+            "next_run": task.nextNominalAt.map { formatter.string(from: $0) } ?? "none",
+        ]
+        switch task.target {
+        case .newConversation: item["target"] = "new_conversation"
+        case .conversation(let id): item["target"] = id == conversationID ? "this_conversation" : "conversation \(id.uuidString)"
+        }
+        if let run = scheduler.store.runs(for: task.id).first {
+            var last: [String: Any] = ["status": run.status.rawValue, "at": formatter.string(from: run.finishedAt ?? run.claimedAt)]
+            if let reason = run.skipReason { last["skip_reason"] = reason.rawValue }
+            item["last_run"] = last
+        }
+        return item
+    }
+
+    /// Builds a rule the editor can show and edit: the given fields over `base`.
+    private static func schedule(_ args: ScheduleManageArguments, base: ScheduledRuleDraft, timeZoneID: String) throws -> ScheduledTask.Schedule {
+        var draft = base
+        if let raw = args.repeat {
+            switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "once": draft.kind = .once
+            case "daily": draft.kind = .daily
+            case "weekdays": draft.kind = .weekdays
+            case "weekly": draft.kind = .weekly
+            case "every_n_hours": draft.kind = .everyNHours
+            case "monthly": draft.kind = .monthly
+            default: throw ToolExecutorError.invalidArguments("repeat must be once, daily, weekdays, weekly, every_n_hours or monthly.")
+            }
+        }
+        if let raw = args.time {
+            let parts = raw.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: ":")
+            guard parts.count == 2, let hour = Int(parts[0]), let minute = Int(parts[1]), (0...23).contains(hour), (0...59).contains(minute) else {
+                throw ToolExecutorError.invalidArguments("time must be HH:mm, e.g. 09:00.")
+            }
+            draft.hour = hour
+            draft.minute = minute
+        }
+        if let raw = args.weekdays {
+            let numbers: [String: Int] = ["sun": 1, "mon": 2, "tue": 3, "wed": 4, "thu": 5, "fri": 6, "sat": 7]
+            let days = try raw.split(separator: ",").map { token -> Int in
+                guard let day = numbers[String(token.trimmingCharacters(in: .whitespaces).lowercased().prefix(3))] else {
+                    throw ToolExecutorError.invalidArguments("weekdays takes mon, tue, wed, thu, fri, sat, sun.")
+                }
+                return day
+            }
+            guard !days.isEmpty else { throw ToolExecutorError.invalidArguments("weekdays is empty.") }
+            draft.weekdays = Set(days)
+        } else if draft.kind == .weekly, base.kind != .weekly {
+            throw ToolExecutorError.invalidArguments("weekly needs weekdays, e.g. \"mon,wed,fri\".")
+        }
+        if let hours = args.interval_hours {
+            guard (1...24).contains(hours) else { throw ToolExecutorError.invalidArguments("interval_hours must be 1 to 24.") }
+            draft.intervalHours = hours
+        }
+        if let day = args.day_of_month {
+            guard (1...31).contains(day) else { throw ToolExecutorError.invalidArguments("day_of_month must be 1 to 31.") }
+            draft.dayOfMonth = day
+        }
+        if let raw = args.fire_at {
+            guard let date = scheduleDate(raw, timeZoneID: timeZoneID) else {
+                throw ToolExecutorError.invalidArguments("fire_at must be ISO 8601, e.g. 2026-10-24T15:30:00+08:00.")
+            }
+            draft.fireAt = date
+        } else if draft.kind == .once, base.kind != .once {
+            throw ToolExecutorError.invalidArguments("once needs fire_at.")
+        }
+        return draft.schedule(timeZoneID: timeZoneID)
+    }
+
+    /// ISO 8601 with an offset; a time without one is read in the task's time zone.
+    private static func scheduleDate(_ raw: String, timeZoneID: String) -> Date? {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let iso = ISO8601DateFormatter()
+        if let date = iso.date(from: text) { return date }
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = iso.date(from: text) { return date }
+        let local = DateFormatter()
+        local.locale = Locale(identifier: "en_US_POSIX")
+        local.timeZone = TimeZone(identifier: timeZoneID) ?? .current
+        for format in ["yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd HH:mm"] {
+            local.dateFormat = format
+            if let date = local.date(from: text) { return date }
+        }
+        return nil
     }
 
     private func authorize(

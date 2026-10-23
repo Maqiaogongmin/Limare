@@ -23,6 +23,10 @@ final class ComputerUseAppAuthorizationStore {
     @ObservationIgnored
     private let logs: DebugLogStore?
 
+    /// Whether the conversation's live run is an unattended scheduled run; set by the composition
+    /// root. Such a run never queues an App authorization request.
+    @ObservationIgnored var isUnattendedConversation: ((UUID) -> Bool)?
+
     init(logs: DebugLogStore? = nil) {
         self.logs = logs
     }
@@ -61,6 +65,11 @@ final class ComputerUseAppAuthorizationStore {
         }
         if current == .blockedForConversation {
             return .blockedForConversation
+        }
+        // Only a person can grant an app; an unattended scheduled run is refused instead of waiting.
+        if isUnattendedConversation?(conversationID) == true {
+            logs?.info("ComputerUse", "Unattended scheduled run; refused Layer-2 App authorization for [\(bundleID)] without queueing.")
+            return .cancelled
         }
 
         let pending = ComputerUseAppApprovalPending(

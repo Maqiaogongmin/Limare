@@ -42,6 +42,36 @@ struct ChatMessage: Identifiable, Codable, Sendable, Equatable {
     /// A message the user sent while a run was working (a steer), not a new request.
     var sentWhileWorking = false
 
+    /// Set when the runtime, not the model, wrote this reply's text: a request that failed
+    /// before any output, a stop, an interruption. The transcript draws it as a status line.
+    var runtimeNotice: RuntimeNotice?
+
+    enum RuntimeNotice: String, Codable, Sendable {
+        case failed, stopped, interrupted
+
+        static let stoppedText = "Stopped."
+        static let interruptedText = "Response interrupted."
+        static let requestFailedText = "Request failed."
+        static let providerUnavailableText = "Provider unavailable."
+        static let apiKeyErrorText = "API key error."
+        static let groupUnavailableText = "Model group unavailable."
+        static let groupModelsUnavailableText = "Group models unavailable."
+        static let groupNoCandidateText = "Model group has no executable candidate."
+        static let groupExecutionFailedText = "Group execution failed."
+
+        /// Replies saved before the flag existed are recognised by the texts above.
+        static func legacy(content: String, state: State) -> RuntimeNotice? {
+            switch (state, content) {
+            case (.failed, stoppedText): .stopped
+            case (.interrupted, interruptedText): .interrupted
+            case (.failed, requestFailedText), (.failed, providerUnavailableText), (.failed, apiKeyErrorText),
+                 (.failed, groupUnavailableText), (.failed, groupModelsUnavailableText),
+                 (.failed, groupNoCandidateText), (.failed, groupExecutionFailedText): .failed
+            default: nil
+            }
+        }
+    }
+
     /// A message the user wrote.
     var isUserPrompt: Bool { role == .user && !isSystemNotice }
 
@@ -89,7 +119,7 @@ struct ChatMessage: Identifiable, Codable, Sendable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case id, role, content, reasoningContent, state, toolCalls, attachments, responsesReasoningEcho
         case resolvedProviderID, resolvedModelID, rejectedAssistantTurn, isSystemNotice, nativeProtocolMetadata
-        case sentWhileWorking
+        case sentWhileWorking, runtimeNotice
     }
 
     init(from decoder: Decoder) throws {
@@ -110,6 +140,11 @@ struct ChatMessage: Identifiable, Codable, Sendable, Equatable {
         self.isSystemNotice = try container.decodeIfPresent(Bool.self, forKey: .isSystemNotice)
             ?? (role == .user && content.hasPrefix(Self.systemNoticePrefix))
         self.sentWhileWorking = try container.decodeIfPresent(Bool.self, forKey: .sentWhileWorking) ?? false
+        if container.contains(.runtimeNotice) {
+            self.runtimeNotice = try container.decodeIfPresent(RuntimeNotice.self, forKey: .runtimeNotice)
+        } else if role == .assistant, toolCalls.isEmpty {
+            self.runtimeNotice = RuntimeNotice.legacy(content: content, state: state)
+        }
     }
 
     func encode(to encoder: Encoder) throws {
@@ -132,6 +167,11 @@ struct ChatMessage: Identifiable, Codable, Sendable, Equatable {
         try container.encode(isSystemNotice, forKey: .isSystemNotice)
         if sentWhileWorking {
             try container.encode(sentWhileWorking, forKey: .sentWhileWorking)
+        }
+        // Written on every assistant reply, null included, so only records saved before the
+        // flag existed fall back to the texts.
+        if role == .assistant {
+            try container.encode(runtimeNotice, forKey: .runtimeNotice)
         }
     }
 }
@@ -800,8 +840,36 @@ enum HarnessToolDefinitions {
         required: ["action"]
     )
 
+    /// Every argument schedule_manage accepts; the executor rejects any other field.
+    static let scheduleManageProperties: [String: ChatToolDefinition.Property] = [
+        "action": .init(type: "string", description: "One of: list, create, update, delete, run_now."),
+        "task_id": .init(type: "string", description: "The task's id from list; required for update, delete and run_now."),
+        "name": .init(type: "string", description: "Short display name in the user's language."),
+        "prompt": .init(type: "string", description: "The instruction each run sends as a user message. With target new_conversation a run starts with none of this conversation's context, so make it self-contained: what to do, sources, output format and language."),
+        "repeat": .init(type: "string", description: "Required for create: once, daily, weekdays (Mon–Fri), weekly, every_n_hours or monthly."),
+        "time": .init(type: "string", description: "Local time HH:mm for daily, weekdays, weekly and monthly (default 09:00); for every_n_hours only the minute is used."),
+        "weekdays": .init(type: "string", description: "weekly only: comma-separated days, e.g. \"mon,wed,fri\"."),
+        "interval_hours": .init(type: "number", description: "every_n_hours only: 1 to 24."),
+        "day_of_month": .init(type: "number", description: "monthly only: 1 to 31."),
+        "fire_at": .init(type: "string", description: "once only: a future moment, ISO 8601 with offset (e.g. 2026-10-24T15:30:00+08:00)."),
+        "target": .init(type: "string", description: "new_conversation (default): every run opens a new conversation in this conversation's project. this_conversation: every run posts the prompt here."),
+        "enabled": .init(type: "boolean", description: "update only: false pauses the task, true resumes it."),
+        "notify": .init(type: "string", description: "completion_and_failure (default) or failure_only."),
+    ]
+
+    static let scheduleManageDefinition: ChatToolDefinition = definition(
+        name: "schedule_manage",
+        description: """
+        Manage Limare's scheduled tasks (the Schedules page): a prompt that runs by itself once at a future moment or on a repeating rule. Use it when the user asks for something to happen later or repeatedly ("every day at 9", "tomorrow at 3pm"); if the time or the content is unclear, ask first. Times are the user's local time zone.
+        Runs happen only while Limare is running (a missed run is caught up once on the next launch). A run is unattended: steps that need approval are refused, so the prompt should only need what the current permission mode allows. Each run's result is a conversation plus a macOS notification; Limare cannot send email or messages unless a tool for that is available in the run.
+        After create, tell the user the name, the rule and the next run time from the result; they can edit, pause or run it from Schedules in the sidebar.
+        """,
+        properties: scheduleManageProperties,
+        required: ["action"]
+    )
+
     static var all: [ChatToolDefinition] {
-        workspaceTools + [readImageDefinition, browserUseDefinition, delegateTaskDefinition, mcpManageDefinition]
+        workspaceTools + [readImageDefinition, browserUseDefinition, delegateTaskDefinition, mcpManageDefinition, scheduleManageDefinition]
     }
 
     private static func definition(

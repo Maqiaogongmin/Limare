@@ -57,6 +57,7 @@ final class AppState {
     let hooks: HookStore
     let hookCoordinator: HookSessionCoordinator
     let subagents: SubagentCoordinator
+    let scheduled: ScheduledScheduler
     let voiceInput: VoiceInputStore
     let voiceOutput: VoiceOutputStore
     let runtimeModelRegistry: RuntimeModelRegistry
@@ -331,6 +332,31 @@ final class AppState {
         }
         subagents.reconcileRestart()
 
+        // Scheduled tasks: the ledger reconciles and the run observer registers before the first
+        // tick. Every human wait asks the coordinator whether its run is unattended.
+        let scheduled = ScheduledScheduler(
+            store: ScheduledStateStore(storageRootURL: storageRootURL, logs: logs),
+            interaction: chat.interaction,
+            runs: chat.runCoordinator,
+            conversations: conversations,
+            runtimeEvents: runtimeEvents,
+            logs: logs
+        )
+        self.scheduled = scheduled
+        toolExecutor.setScheduler(scheduled)
+        permissions.isUnattendedRun = { [weak coordinator = chat.runCoordinator] runID in
+            coordinator?.isUnattended(runID: runID) == true
+        }
+        mcp.isUnattendedRun = { [weak coordinator = chat.runCoordinator] runID in
+            coordinator?.isUnattended(runID: runID) == true
+        }
+        computerUseAppAuthorization.isUnattendedConversation = { [weak coordinator = chat.runCoordinator] conversationID in
+            guard let coordinator, let run = coordinator.run(for: conversationID), !run.status.isTerminal else { return false }
+            return coordinator.isUnattended(runID: run.id)
+        }
+        // Only the Limare app ticks; test runners drive `tick(now:)` themselves.
+        scheduled.start(startTimer: LimareStorage.isLimareApp)
+
         let voiceInputResolver = VoiceInputResolver(
             modelGroups: modelGroups,
             providers: providers,
@@ -498,6 +524,13 @@ final class AppState {
     func focus(_ window: WindowSession) {
         guard windows.contains(where: { $0 === window }) else { return }
         focusedWindowID = window.id
+    }
+
+    /// The sidebar opened or started a conversation: this window acts on conversations and
+    /// shows the chat again if it was showing Schedules.
+    func showChat(in window: WindowSession) {
+        focus(window)
+        if window.screen == .scheduled { window.screen = .chat }
     }
 
     /// Conversations whose run waits on the user's approval, Computer Use app control first.

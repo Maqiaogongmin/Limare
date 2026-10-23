@@ -285,22 +285,23 @@ struct ComposerView: View {
 
                     ComposerRunControls(canSend: canSend, onSend: handleSend)
                 }
-                .padding(.top, AppSpacing.composerDraftToolbarGap - AppSpacing.xSmall)
+                .padding(.top, (isEmptyState ? AppSpacing.emptyStateDraftToolbarGap : AppSpacing.composerDraftToolbarGap) - AppSpacing.xSmall)
             }
             .padding(.top, AppSpacing.standard)
             .padding(.bottom, AppSpacing.medium)
             .padding(.horizontal, AppSpacing.standard)
-            // A white card raised over the warm canvas: a hairline edge, a wide soft shadow
-            // for distance and a tight one where it meets the page.
+            // A new conversation's composer is the page's centre: a fuller card.
+            .frame(minHeight: isEmptyState ? AppLayout.emptyStateComposerMinimumHeight : nil, alignment: .top)
+            // A matte white card on the canvas: a crisp 1pt edge marks it, and only a tight
+            // shadow where it meets the page, no diffuse halo.
             .background(
                 RoundedRectangle(cornerRadius: AppRadius.composerCard, style: .continuous)
                     .fill(AppColors.raisedSurface)
-                    .shadow(color: .black.opacity(0.05), radius: 18, x: 0, y: 8)
-                    .shadow(color: .black.opacity(0.03), radius: 3, x: 0, y: 1)
+                    .shadow(color: .black.opacity(0.025), radius: 2, x: 0, y: 1)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: AppRadius.composerCard, style: .continuous)
-                    .strokeBorder(isFileTargeted ? Color.accentColor : AppColors.raisedStroke, lineWidth: isFileTargeted ? 2 : 1)
+                    .strokeBorder(isFileTargeted ? Color.accentColor : AppColors.composerStroke, lineWidth: isFileTargeted ? 2 : 1)
             )
             .dropDestination(for: URL.self) { urls, _ in
                 importFiles(urls.map { HostFileSelection.droppedByUser(url: $0) })
@@ -781,9 +782,9 @@ private struct ComposerRunControls: View {
                         Image(systemName: "play.fill")
                             .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(Color.white)
-                            .frame(width: 22, height: 22)
+                            .frame(width: AppControlHeight.runButton, height: AppControlHeight.runButton)
                             .background(Color.accentColor)
-                            .clipShape(Circle())
+                            .clipShape(RoundedRectangle(cornerRadius: AppRadius.runButton, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .help("Resume run")
@@ -794,9 +795,9 @@ private struct ComposerRunControls: View {
                     } label: {
                         ProgressView()
                             .controlSize(.mini)
-                            .frame(width: 22, height: 22)
+                            .frame(width: AppControlHeight.runButton, height: AppControlHeight.runButton)
                             .background(AppColors.statusWarning.opacity(0.2))
-                            .clipShape(Circle())
+                            .clipShape(RoundedRectangle(cornerRadius: AppRadius.runButton, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .help("Pausing at next boundary (click to cancel)")
@@ -810,9 +811,9 @@ private struct ComposerRunControls: View {
                         Image(systemName: "pause.fill")
                             .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(AppColors.textPrimary)
-                            .frame(width: AppControlHeight.composerButton, height: AppControlHeight.composerButton)
+                            .frame(width: AppControlHeight.runButton, height: AppControlHeight.runButton)
                             .background(AppColors.surfaceInteractive)
-                            .clipShape(Circle())
+                            .clipShape(RoundedRectangle(cornerRadius: AppRadius.runButton, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .help("Pause run")
@@ -825,9 +826,9 @@ private struct ComposerRunControls: View {
                     Image(systemName: "stop.fill")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(AppColors.surfacePrimary)
-                        .frame(width: AppControlHeight.composerButton, height: AppControlHeight.composerButton)
+                        .frame(width: AppControlHeight.runButton, height: AppControlHeight.runButton)
                         .background(AppColors.textPrimary)
-                        .clipShape(Circle())
+                        .clipShape(RoundedRectangle(cornerRadius: AppRadius.runButton, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .help("Stop current run")
@@ -875,13 +876,17 @@ private struct ComposerRunControls: View {
         Button {
             onSend?()
         } label: {
-            // Quiet until there is something to send, then the strongest mark in the composer.
+            // A faint tile until there is something to send, so the card always ends on it, then
+            // a charcoal one, the strongest mark in the composer.
             Image(systemName: "arrow.up")
                 .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(canSend ? AppColors.sendGlyph : Color.secondary.opacity(0.6))
-                .frame(width: AppControlHeight.composerButton, height: AppControlHeight.composerButton)
-                .background(Circle().fill(canSend ? AppColors.sendFill : Color.primary.opacity(0.06)))
-                .contentShape(Circle())
+                .foregroundStyle(canSend ? AppColors.sendGlyph : Color.primary.opacity(0.35))
+                .frame(width: AppControlHeight.runButton, height: AppControlHeight.runButton)
+                .background(
+                    RoundedRectangle(cornerRadius: AppRadius.runButton, style: .continuous)
+                        .fill(canSend ? AppColors.sendFill : Color.primary.opacity(0.06))
+                )
+                .contentShape(RoundedRectangle(cornerRadius: AppRadius.runButton, style: .continuous))
                 .animation(AppMotion.resolved(AppMotion.quick), value: canSend)
         }
         .buttonStyle(.plain)

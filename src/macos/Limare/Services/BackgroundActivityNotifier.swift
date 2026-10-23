@@ -28,12 +28,31 @@ final class BackgroundActivityNotifier {
         }
         UNUserNotificationCenter.current().delegate = clickHandler
         subscription = appState.conversationRuns.observe { [weak self] event in
-            guard case .runFinished(let conversationID, let status, _) = event else { return }
-            self?.runFinished(conversationID: conversationID, status: status)
+            guard case .runFinished(let conversationID, let runID, let status, _) = event else { return }
+            self?.runFinished(conversationID: conversationID, runID: runID, status: status)
         }
         appState.permissions.onApprovalPresented = { [weak self] approval in
             self?.approvalPresented(approval)
         }
+        // A scheduled run gets its own notice from the scheduler and never the generic one too.
+        appState.scheduled.onRunEnded = { [weak self] task, run in
+            self?.scheduledRunEnded(task: task, run: run)
+        }
+        appState.scheduled.onOneTimeMissed = { [weak self] task in
+            self?.post(event: .scheduledMissed(taskName: task.name), identifier: "scheduled-missed-\(task.id.uuidString)", conversationID: nil)
+        }
+    }
+
+    private func scheduledRunEnded(task: ScheduledTask?, run: ScheduledRun) {
+        guard let task else { return }
+        let event = BackgroundNotificationPolicy.Event.scheduledRunFinished(
+            taskName: task.name, status: run.status, isCatchUp: run.trigger == .catchUp, notifyOn: task.notifyOn)
+        post(event: event, identifier: "scheduled-\(run.id.uuidString)", conversationID: run.conversationID)
+    }
+
+    private func post(event: BackgroundNotificationPolicy.Event, identifier: String, conversationID: UUID?) {
+        guard BackgroundNotificationPolicy.shouldNotify(event: event, isAppActive: NSApp.isActive, isEnabled: isEnabled) else { return }
+        post(body: BackgroundNotificationPolicy.body(for: event), identifier: identifier, conversationID: conversationID)
     }
 
     /// Asks once; false when the user has denied notifications (or this is not the app).
@@ -55,13 +74,15 @@ final class BackgroundActivityNotifier {
         return await UNUserNotificationCenter.current().notificationSettings().authorizationStatus == .denied
     }
 
-    private func runFinished(conversationID: UUID, status: ConversationRunStatus) {
-        guard let run = appState?.conversationRuns.run(for: conversationID), !notifiedRunIDs.contains(run.id) else { return }
+    private func runFinished(conversationID: UUID, runID: UUID, status: ConversationRunStatus) {
+        guard let appState, !notifiedRunIDs.contains(runID),
+              !appState.scheduled.store.runs.contains(where: { $0.runID == runID }),
+              let run = appState.conversationRuns.run(for: conversationID), run.id == runID else { return }
         let duration = (run.completedAt ?? Date()).timeIntervalSince(run.startedAt)
         let event = BackgroundNotificationPolicy.Event.runFinished(status: status, duration: duration)
         guard BackgroundNotificationPolicy.shouldNotify(event: event, isAppActive: NSApp.isActive, isEnabled: isEnabled) else { return }
-        notifiedRunIDs.insert(run.id)
-        post(body: BackgroundNotificationPolicy.body(for: event), identifier: "run-\(run.id.uuidString)", conversationID: conversationID)
+        notifiedRunIDs.insert(runID)
+        post(body: BackgroundNotificationPolicy.body(for: event), identifier: "run-\(runID.uuidString)", conversationID: conversationID)
     }
 
     private func approvalPresented(_ approval: PendingApproval) {

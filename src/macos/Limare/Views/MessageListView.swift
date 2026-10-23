@@ -416,12 +416,22 @@ private struct MessageRow: View, Equatable {
                 Spacer(minLength: AppLayout.messageGutterMinimumWidth)
 
                 VStack(alignment: .trailing, spacing: AppSpacing.xxSmall) {
+                    if let scheduled = scheduledMessage {
+                        ScheduledMessageBadge(parsed: scheduled)
+                    }
                     messageBubble(presentation: presentation)
                     UserMessageActionBar(
                         message: message,
                         isVisible: isHovered,
                         onRetract: retractAction
                     )
+                }
+                // Bubble, gap and bar are one hover region. Hovering only what draws (the bubble
+                // and the bar's glyphs) hid the bar as the pointer crossed the gap toward it, and
+                // a hidden bar takes no hits, so it never came back.
+                .contentShape(Rectangle())
+                .onHover { hovering in
+                    isHovered = hovering
                 }
                 // The action bar shows on hover only, and a hidden bar is out of the
                 // accessibility tree; the message itself offers undo to accessibility clients.
@@ -437,9 +447,6 @@ private struct MessageRow: View, Equatable {
                 messageBubble(presentation: presentation)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-        }
-        .onHover { hovering in
-            isHovered = hovering
         }
     }
 
@@ -485,19 +492,9 @@ private struct MessageRow: View, Equatable {
                 .padding(.top, AppSpacing.xxSmall)
             }
         }
-        .padding(.horizontal, message.role == .user ? AppSpacing.medium : 0)
-        .padding(.vertical, message.role == .user ? AppSpacing.small : 0)
-        .background(
-            message.role == .user
-                ? Color.secondary.opacity(0.12)
-                : Color.clear
-        )
-        .clipShape(
-            RoundedRectangle(
-                cornerRadius: message.role == .user ? AppRadius.bubble : 0,
-                style: .continuous
-            )
-        )
+        .modifier(UserBubbleChrome(isUser: message.role == .user))
+        // After the chrome: the bubble hugs its text and only a longer message reaches this
+        // width and wraps.
         .frame(
             maxWidth: message.role == .user ? AppLayout.userMessageMaximumWidth : AppLayout.transcriptMaximumWidth,
             alignment: message.role == .user ? .trailing : .leading
@@ -551,9 +548,14 @@ private struct MessageRow: View, Equatable {
         }
     }
 
+    /// A message a scheduled run sent: its header line becomes the badge above the bubble.
+    private var scheduledMessage: ScheduledMessage.Parsed? {
+        message.role == .user ? ScheduledMessage.parse(message.content) : nil
+    }
+
     @ViewBuilder
     private var userTextContent: some View {
-        UserMessageTextView(content: message.content, onCollapse: onCollapse)
+        UserMessageTextView(content: scheduledMessage?.body ?? message.content, onCollapse: onCollapse)
     }
 
     @ViewBuilder
@@ -572,6 +574,17 @@ private struct MessageRow: View, Equatable {
         }
     }
 
+    /// The runtime's own words in a reply that never came; a reply that went on afterwards
+    /// is the model's again.
+    private var runtimeNotice: ChatMessage.RuntimeNotice? {
+        switch message.state {
+        case .failed, .interrupted:
+            message.runtimeNotice ?? (message.content.isEmpty && message.state == .interrupted ? .interrupted : nil)
+        case .complete, .streaming:
+            nil
+        }
+    }
+
     @ViewBuilder
     private var assistantTextContent: some View {
         if message.content.isEmpty && message.state == .streaming {
@@ -581,10 +594,8 @@ private struct MessageRow: View, Equatable {
                 ProviderWaitLabel()
             }
             .padding(.vertical, AppSpacing.xxSmall)
-        } else if message.content.isEmpty && message.state == .interrupted {
-            Text("Response interrupted.")
-                .font(AppTypography.chatBodyItalic)
-                .foregroundStyle(.secondary)
+        } else if let notice = runtimeNotice {
+            RuntimeNoticeLabel(notice: notice, text: message.content.isEmpty ? ChatMessage.RuntimeNotice.interruptedText : message.content)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             LimareMarkdownView(
@@ -635,7 +646,6 @@ private struct UserMessageTextView: View {
                 // the natural height is measured before the clamp, and a collapsed message
                 // fades out at the collapsed height.
                 LimareMarkdownView(source: content, profile: .typed)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
                     .fixedSize(horizontal: false, vertical: true)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
                         if abs(height - measuredHeight) > 1 { measuredHeight = height }
@@ -692,6 +702,86 @@ private struct UserMessageTextView: View {
     }
 }
 
+/// "🕒 定时任务 · <name> · HH:mm" over a message a scheduled run sent, in place of the
+/// `[Scheduled task …]` line the message carries for the model.
+private struct ScheduledMessageBadge: View {
+    let parsed: ScheduledMessage.Parsed
+
+    var body: some View {
+        HStack(spacing: AppSpacing.xxSmall) {
+            Image(systemName: "clock")
+                .font(.system(size: 10, weight: .medium))
+            Text("定时任务 · \(parsed.taskName) · \(parsed.time)")
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .font(.system(size: 11.5, weight: .medium))
+        .foregroundStyle(Color.primary.opacity(0.6))
+        .padding(.horizontal, AppSpacing.xSmall)
+        .padding(.vertical, 3)
+        .background(RoundedRectangle(cornerRadius: AppRadius.row, style: .continuous).fill(Color.primary.opacity(0.05)))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("transcript.scheduledBadge")
+    }
+}
+
+/// A user's message: a white card with a hairline edge and a faint contact shadow on the
+/// canvas. A reply has no chrome.
+private struct UserBubbleChrome: ViewModifier {
+    let isUser: Bool
+
+    func body(content: Content) -> some View {
+        if isUser {
+            let shape = RoundedRectangle(cornerRadius: AppRadius.bubble, style: .continuous)
+            content
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(
+                    shape
+                        .fill(AppColors.userBubble)
+                        .shadow(color: .black.opacity(0.02), radius: 2, x: 0, y: 1)
+                )
+                .overlay(shape.stroke(AppColors.cardStroke, lineWidth: 1))
+        } else {
+            content
+        }
+    }
+}
+
+/// A reply the runtime wrote, not the model ("Request failed.", "Stopped."): a small status
+/// line, not prose.
+private struct RuntimeNoticeLabel: View {
+    let notice: ChatMessage.RuntimeNotice
+    let text: String
+
+    private var icon: String {
+        switch notice {
+        case .failed: "exclamationmark.circle"
+        case .stopped: "stop.circle"
+        case .interrupted: "bolt.slash"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: AppSpacing.xxSmall) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .medium))
+            Text(text)
+                .font(.system(size: 12))
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, AppSpacing.small)
+        .padding(.vertical, AppSpacing.xxSmall)
+        .background(
+            RoundedRectangle(cornerRadius: AppRadius.row, style: .continuous)
+                .fill(AppColors.noticeFill)
+        )
+        .help(text)
+    }
+}
+
 /// Hover-revealed actions beneath the bottom-right corner of a user bubble. The row always
 /// reserves its height so revealing it never shifts the transcript.
 private struct UserMessageActionBar: View {
@@ -713,10 +803,9 @@ private struct UserMessageActionBar: View {
                 Button(action: onRetract) {
                     Image(systemName: "arrow.uturn.backward")
                         .font(.system(size: 11))
-                        .foregroundStyle(Color.secondary)
                         .frame(width: 14, height: 14)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(BubbleActionButtonStyle())
                 .focused($focusedAction, equals: .retract)
                 .help("撤销这条消息")
                 .accessibilityLabel("撤销这条消息")
@@ -728,7 +817,6 @@ private struct UserMessageActionBar: View {
             }
         }
         .frame(height: 14)
-        .padding(.trailing, AppSpacing.xSmall)
         .opacity(isShown ? 1 : 0)
         .animation(AppMotion.resolved(AppMotion.standard), value: isShown)
         .allowsHitTesting(isShown)
@@ -750,11 +838,30 @@ private struct CopyMessageButton: View {
         } label: {
             Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
                 .font(.system(size: 11))
-                .foregroundStyle(isCopied ? Color.accentColor : Color.secondary)
                 .frame(width: 14, height: 14)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(BubbleActionButtonStyle())
         .help("Copy Message")
+    }
+}
+
+/// The icons under a user bubble: faint at rest, near full ink under the pointer.
+private struct BubbleActionButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        BubbleActionBody(configuration: configuration)
+    }
+
+    private struct BubbleActionBody: View {
+        let configuration: ButtonStyleConfiguration
+        @State private var isHovering = false
+
+        var body: some View {
+            configuration.label
+                .foregroundStyle(isHovering || configuration.isPressed ? AppColors.bubbleActionHover : AppColors.bubbleActionIdle)
+                .contentShape(Rectangle())
+                .onHover { isHovering = $0 }
+                .animation(AppMotion.resolved(AppMotion.quick), value: isHovering)
+        }
     }
 }
 
@@ -832,7 +939,6 @@ private struct DeliveredFilesView: View {
             VStack(alignment: .leading, spacing: AppSpacing.xSmall) {
                 ForEach(descriptors) { descriptor in
                     FileArtifactCard(artifact: descriptor, artifactStore: store)
-                        .frame(maxWidth: 320, alignment: .leading)
                 }
             }
         }
@@ -876,7 +982,6 @@ private struct MessageAttachmentThumbnailView: View {
             .help("Preview image in Files Surface")
         } else {
             FileArtifactCard(attachment: attachment, attachmentStore: appState.attachments)
-                .frame(maxWidth: 320, alignment: .leading)
         }
     }
 }
@@ -965,8 +1070,10 @@ struct TranscriptRow: Identifiable, Equatable, Sendable {
 /// Presentation projection only: canonical message history and copy/read-aloud semantics remain unchanged.
 ///
 /// A turn is the assistant messages between two user messages. Its earlier steps fold under one
-/// disclosure once it ends in a finished answer, while it runs (all but the current step), and
-/// before a message the user sent while it worked; otherwise each message shows on its own.
+/// disclosure once it ends in a finished answer, while it runs (all but the current step), before
+/// a message the user sent while it worked, and once it ended any other way (failed, stopped,
+/// interrupted), its last message staying in view; only a stream with no run behind it shows
+/// each message on its own.
 enum TranscriptTurnGrouping {
     struct Entry: Identifiable, Equatable, Sendable {
         /// A folding turn's first message, so the entry keeps its identity, and its fold's
@@ -1036,7 +1143,7 @@ enum TranscriptTurnGrouping {
             } else if isFinished {
                 let hasDetails = turn.count > 1 || !(final.reasoningContent ?? "").isEmpty
                 result.append(hasDetails ? folded(rowIndex: turn.count - 1, hidesReasoning: true) : plain(final, startsTurn: true))
-            } else if turn.count > 1, (isLast && isRunActive) || endsAtSteer {
+            } else if turn.count > 1, (isLast && isRunActive) || endsAtSteer || final.state != .streaming {
                 result.append(folded(rowIndex: turn.count - 1, hidesReasoning: false))
             } else {
                 result.append(contentsOf: turn.enumerated().map { plain($1, startsTurn: $0 == 0) })

@@ -34,6 +34,16 @@ extension ComputerUseAppAuthorizationStore: ComputerUseAppAuthorizing {
         @unknown default: return .unknown
         }
     }
+
+    public func unattendedRefusal(conversationID: UUID, appName: String) async -> String? {
+        await MainActor.run {
+            // Only an app the run would have asked about; one the user blocked keeps the plain denial.
+            let status = self.authorizationStatus(conversationID: conversationID, bundleID: appName)
+            guard self.isUnattendedConversation?(conversationID) == true,
+                  status != .allowedForConversation, status != .blockedForConversation else { return nil }
+            return "This is an unattended scheduled run, so access to \(appName) cannot be granted now. Do not retry; continue without it, and say in your final reply that this app needs approval in a manual run."
+        }
+    }
 }
 
 extension ComputerUseV2Engine {

@@ -13,6 +13,8 @@ enum MCPOAuthError: LocalizedError {
     case clientRegistrationUnavailable
     case authorizationDenied(String)
     case cancelled
+    /// Cancelled because the caller is an unattended scheduled run: no one can sign in.
+    case unattended
     case browserOpenFailed
     /// The authorization server issued a credential that Limare could not durably store.
     case credentialNotCommitted
@@ -29,6 +31,8 @@ enum MCPOAuthError: LocalizedError {
             return "Authorization was denied: \(reason)"
         case .cancelled:
             return "Sign-in was cancelled or timed out."
+        case .unattended:
+            return "Sign-in was cancelled or timed out. No one is present to enter credentials during an unattended scheduled run."
         case .browserOpenFailed:
             return "Could not open the browser for sign-in."
         case .credentialNotCommitted:

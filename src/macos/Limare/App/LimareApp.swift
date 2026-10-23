@@ -98,6 +98,10 @@ struct LimareApp: App {
     @StateObject private var updates = ManualUpdateController()
 
     init() {
+        // A write to a pipe or socket whose reader is gone must fail with EPIPE, not kill
+        // Limare, as Node and Rust programs (Claude Code, Codex) behave. A hook that exited
+        // before reading a 62 KB tool payload from stdin terminated the app on 2026-10-22.
+        signal(SIGPIPE, SIG_IGN)
         if let isolatedRoot = TestStorageBootstrap.resolveStorageRoot() {
             _appState = State(initialValue: AppState(storageRootURL: isolatedRoot))
         } else {

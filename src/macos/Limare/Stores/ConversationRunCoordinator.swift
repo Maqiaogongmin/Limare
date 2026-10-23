@@ -23,7 +23,7 @@ enum ConversationRunEvent {
     /// a queued input admitted, a tool record committed as running, a Stop marking).
     case messagesChanged(conversationID: UUID)
     case providerHistoryUpdated(conversationID: UUID, history: [ChatRequestMessage])
-    case runFinished(conversationID: UUID, status: ConversationRunStatus, error: String?)
+    case runFinished(conversationID: UUID, runID: UUID, status: ConversationRunStatus, error: String?)
     case outcomeHandoff(conversationID: UUID, handoff: OutcomeHandoff)
 
     var conversationID: UUID {
@@ -31,7 +31,7 @@ enum ConversationRunEvent {
         case .turnStarted(let id, _), .reasoningDelta(let id, _, _), .textDelta(let id, _, _),
              .toolCallAccumulated(let id, _, _, _), .toolUpdated(let id, _, _, _), .toolOutcome(let id, _, _, _),
              .assistantCompleted(let id, _, _, _, _, _), .messagesChanged(let id),
-             .providerHistoryUpdated(let id, _), .runFinished(let id, _, _), .outcomeHandoff(let id, _):
+             .providerHistoryUpdated(let id, _), .runFinished(let id, _, _, _), .outcomeHandoff(let id, _):
             id
         }
     }
@@ -52,7 +52,9 @@ final class ConversationRunSubscription {
     }
 }
 
-private enum ConversationRunTaskContext {
+/// The id of the run whose execution Task is current; read-only outside the coordinator (the
+/// unattended checks of human waits use it).
+enum ConversationRunTaskContext {
     @TaskLocal static var runID: UUID?
 }
 
@@ -380,7 +382,8 @@ final class ConversationRunCoordinator {
                     if msgs[idx].state == .streaming {
                         msgs[idx].state = .interrupted
                         if msgs[idx].content.isEmpty && msgs[idx].toolCalls.isEmpty {
-                            msgs[idx].content = "Response interrupted."
+                            msgs[idx].content = ChatMessage.RuntimeNotice.interruptedText
+                            msgs[idx].runtimeNotice = .interrupted
                         }
                         changed = true
                     }
@@ -739,6 +742,26 @@ final class ConversationRunCoordinator {
     /// Change journal for undo; set by the composition root.
     @ObservationIgnored var undoJournal: UndoJournalStore?
 
+    /// Whether a run id has a pending scheduled-run record (ScheduledStateStore); set by the
+    /// composition root. Nil means no run is ever unattended.
+    @ObservationIgnored var scheduledRunLookup: ((UUID) -> Bool)?
+
+    /// A run is unattended when the scheduled ledger holds it as pending, or when it is a native
+    /// child whose parent conversation's live run is unattended (recursively). No one can answer a
+    /// human prompt for such a run, so every human wait refuses it instead of queueing.
+    func isUnattended(runID: UUID) -> Bool {
+        var current = runID
+        var visited: Set<UUID> = []
+        while visited.insert(current).inserted {
+            if scheduledRunLookup?(current) == true { return true }
+            guard let binding = subagentRuns[current],
+                  let parent = activeRuns[binding.parentConversationID],
+                  !parent.status.isTerminal else { return false }
+            current = parent.id
+        }
+        return false
+    }
+
     /// The recorder that journals a run's file-tool writes, attributed to the user message the
     /// turn currently answers. A native child's writes go to the parent message that delegated it.
     private func makeChangeRecorder(conversationID: UUID, runID: UUID) -> UndoChangeRecorder? {
@@ -771,6 +794,8 @@ final class ConversationRunCoordinator {
     }
 
     func admissionHoldReason(conversationID: UUID) -> String? {
+        // A run started meanwhile would take the context and drop the summary.
+        if compactions[conversationID]?.isRunning == true { return "正在压缩对话，完成后再开始。" }
         for hold in admissionHolds {
             if let reason = hold(conversationID) { return reason }
         }
@@ -832,6 +857,11 @@ final class ConversationRunCoordinator {
     /// Delivers `event` to the subscribers as if the run had produced it.
     func testPublish(_ event: ConversationRunEvent) {
         publish(event)
+    }
+
+    /// Registers a native child's binding without starting its run (unattended inheritance tests).
+    func testRegisterSubagentRun(_ binding: SubagentRunBinding) {
+        subagentRuns[binding.runID] = binding
     }
 
     func testClearActiveRun(_ conversationID: UUID) {
@@ -1146,7 +1176,8 @@ final class ConversationRunCoordinator {
         outcomeDeclaration: OutcomeRunDeclaration? = nil,
         executionPolicy: RunExecutionPolicy = .full,
         subagentRunID: UUID? = nil,
-        subagentInstruction: String? = nil
+        subagentInstruction: String? = nil,
+        onRunAdmitted: ((_ conversationID: UUID, _ runID: UUID) throws -> Void)? = nil
     ) {
         guard canStartRun(conversationID: conversationID) else { return }
         if let reason = admissionHoldReason(conversationID: conversationID) {
@@ -1245,7 +1276,31 @@ final class ConversationRunCoordinator {
                 activeMutationOwners.removeValue(forKey: conversationID)
                 runProtectionHints.removeValue(forKey: run.id)
                 runtimeEvents.record(conversationID: conversationID, runID: run.id, domain: .run, kind: "run.failed", severity: .error, summary: "Failed to persist active run marker: \(error.localizedDescription)")
-                publish(.runFinished(conversationID: conversationID, status: .failed, error: error.localizedDescription))
+                publish(.runFinished(conversationID: conversationID, runID: run.id, status: .failed, error: error.localizedDescription))
+                return
+            }
+        }
+
+        // The caller's durable binding of this run (a scheduled run's ledger record). It runs
+        // before the execution Task exists, so a failed write fails the run with no hook, tool or
+        // provider request ever started.
+        if let onRunAdmitted {
+            do {
+                try onRunAdmitted(conversationID, run.id)
+            } catch {
+                logs.error("ConversationRun", "Admission binding failed for run '\(run.id)': \(error.localizedDescription)")
+                activeRuns[conversationID]?.status = .failed
+                activeRuns[conversationID]?.completedAt = Date()
+                activeRuns[conversationID]?.error = error.localizedDescription
+                outcomeDeclarations.removeValue(forKey: run.id)
+                outcomeRunConversations.removeValue(forKey: run.id)
+                outcomeReceipts.removeValue(forKey: run.id)
+                outcomeVerificationResults.removeValue(forKey: run.id)
+                activeMutationOwners.removeValue(forKey: conversationID)
+                runProtectionHints.removeValue(forKey: run.id)
+                try? recoveryStore?.recordRunTerminal(conversationID: conversationID, runID: run.id, status: .failed, error: error.localizedDescription)
+                runtimeEvents.record(conversationID: conversationID, runID: run.id, domain: .run, kind: "run.failed", severity: .error, summary: "Admission binding failed: \(error.localizedDescription)")
+                publish(.runFinished(conversationID: conversationID, runID: run.id, status: .failed, error: error.localizedDescription))
                 return
             }
         }
@@ -1403,8 +1458,26 @@ final class ConversationRunCoordinator {
     /// same summarizer, validation and derived state as automatic compaction, which only
     /// starts near the context window, far off for a 1M-token model.
     func compactConversation(conversationID: UUID, modelSource: ConversationModelSource) async {
-        guard canStartRun(conversationID: conversationID), compactions[conversationID]?.isRunning != true else { return }
+        guard beginCompaction(conversationID: conversationID) else { return }
+        await runCompaction(conversationID: conversationID, modelSource: modelSource)
+    }
+
+    /// Starts the Compact command and returns at once. It is marked running before this
+    /// returns, so a message sent right after it waits for it instead of starting a run.
+    @discardableResult
+    func startCompaction(conversationID: UUID, modelSource: ConversationModelSource) -> Bool {
+        guard beginCompaction(conversationID: conversationID) else { return false }
+        Task { await runCompaction(conversationID: conversationID, modelSource: modelSource) }
+        return true
+    }
+
+    private func beginCompaction(conversationID: UUID) -> Bool {
+        guard canStartRun(conversationID: conversationID), compactions[conversationID]?.isRunning != true else { return false }
         compactions[conversationID] = .running(since: Date())
+        return true
+    }
+
+    private func runCompaction(conversationID: UUID, modelSource: ConversationModelSource) async {
         // The summary covers the transcript as it is now; the transcript shows it after this message.
         let lastMessageID = conversationMessages(for: conversationID).last?.id
         do {
@@ -1422,6 +1495,8 @@ final class ConversationRunCoordinator {
             compactions[conversationID] = .failed(message)
             logs.error("ContextLifecycle", "Compact for conversation '\(conversationID)' failed: \(message)")
         }
+        // Messages sent while it ran waited in the queue, as Claude Code holds them.
+        startQueuedAfterHold(conversationID: conversationID)
     }
 
     func dismissCompaction(conversationID: UUID) {
@@ -1509,7 +1584,7 @@ final class ConversationRunCoordinator {
         guard let provider = providers.providers.first(where: { $0.id == providerID }) else {
             let msg = "Configured Provider not found."
             recordPreflightFailure(conversationID: conversationID, runID: runID, classification: .provider, provider: nil, modelID: modelID, recoverable: nil)
-            markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: "Provider unavailable.")
+            markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: ChatMessage.RuntimeNotice.providerUnavailableText)
             finishRun(conversationID: conversationID, runID: runID, status: .failed, error: msg, model: modelID)
             return
         }
@@ -1519,7 +1594,7 @@ final class ConversationRunCoordinator {
         } catch {
             let msg = error.localizedDescription
             recordPreflightFailure(conversationID: conversationID, runID: runID, classification: .authentication, provider: provider.name, modelID: modelID, recoverable: nil)
-            markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: "API key error.")
+            markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: ChatMessage.RuntimeNotice.apiKeyErrorText)
             finishRun(conversationID: conversationID, runID: runID, status: .failed, error: msg, model: modelID)
             return
         }
@@ -1635,7 +1710,7 @@ final class ConversationRunCoordinator {
         guard let group = modelGroups?.group(for: groupID) else {
             let msg = "Model Group '\(groupID)' not found."
             recordPreflightFailure(conversationID: conversationID, runID: runID, classification: .provider, groupID: groupID, recoverable: nil)
-            markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: "Model group unavailable.")
+            markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: ChatMessage.RuntimeNotice.groupUnavailableText)
             finishRun(conversationID: conversationID, runID: runID, status: .failed, error: msg)
             return
         }
@@ -1660,7 +1735,7 @@ final class ConversationRunCoordinator {
             recordPreflightFailure(conversationID: conversationID, runID: runID, classification: classification, groupID: groupID, recoverable: nil, availability: "none")
             let detail = skipped.map { "- \($0.name): \($0.reason)" }.joined(separator: "\n")
             let msg = "No available models in Group '\(group.name)':\n\(detail.isEmpty ? "All member providers are unconfigured or missing credentials." : detail)"
-            markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: "Group models unavailable.")
+            markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: ChatMessage.RuntimeNotice.groupModelsUnavailableText)
             finishRun(conversationID: conversationID, runID: runID, status: .failed, error: msg)
             return
         }
@@ -1737,7 +1812,7 @@ final class ConversationRunCoordinator {
                 } else {
                     recordPreflightFailure(conversationID: conversationID, runID: runID, classification: preflightClassification, provider: currentCandidate.provider.name, modelID: currentCandidate.modelID, recoverable: "false")
                     let msg = "Model admission failed for \(currentCandidate.provider.name): \(errDesc)"
-                    markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: "Model group has no executable candidate.")
+                    markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: ChatMessage.RuntimeNotice.groupNoCandidateText)
                     finishRun(conversationID: conversationID, runID: runID, status: .failed, error: msg)
                     return
                 }
@@ -1764,6 +1839,7 @@ final class ConversationRunCoordinator {
                         onToolOutcomeCommitted: { committedCount in
                             hasCommittedToolCheckpoint = true
                             lastCommittedCheckpointMessageCount = committedCount
+                            currentRetryCount = 0
                         }
                     )
                 }
@@ -1800,9 +1876,11 @@ final class ConversationRunCoordinator {
                     toolExecutionOccurred: candidateToolExecutionOccurred,
                     hasCommittedToolCheckpoint: hasCommittedToolCheckpoint,
                     currentRetryCount: currentRetryCount,
-                    // The client owns HTTP retries. A rejected assistant turn happens after
-                    // streaming and needs one bounded replay from the durable tool checkpoint.
-                    maxRetries: hasCommittedToolCheckpoint && (error as? AssistantTurnError)?.isTransient == true ? 1 : 0
+                    // The client retries a request only until output streams; a connection lost,
+                    // a provider error or a rejected turn after that reaches here. Like Codex's
+                    // stream retries, replay from the durable tool checkpoint; the budget renews
+                    // whenever a later tool outcome commits.
+                    maxRetries: hasCommittedToolCheckpoint ? 2 : 0
                 )
                 let recoverable: String
                 switch decision {
@@ -1882,7 +1960,7 @@ final class ConversationRunCoordinator {
                                 markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: ctxErr.userFacingMessage)
                             }
                         } else {
-                            markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: "Group execution failed.")
+                            markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: ChatMessage.RuntimeNotice.groupExecutionFailedText)
                         }
                         finishRun(conversationID: conversationID, runID: runID, status: .failed, error: msg)
                         return
@@ -1894,14 +1972,14 @@ final class ConversationRunCoordinator {
                     if let ctxErr = error as? ContextLifecycleError {
                         msg = ctxErr.userFacingMessage
                     } else {
-                        msg = "Group '\(group.name)' failed with non-retryable error (\(failureClass.label)): \(safeMessage)"
+                        msg = "Group '\(group.name)' stopped (\(reason)) after \(failureClass.label): \(safeMessage)"
                     }
                     if let ctxErr = error as? ContextLifecycleError {
                         if !removeEmptyStreamingMessage(conversationID: conversationID, runID: runID) {
                             markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: ctxErr.userFacingMessage)
                         }
                     } else {
-                        markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: "Request failed.")
+                        markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: ChatMessage.RuntimeNotice.requestFailedText)
                     }
                     finishRun(conversationID: conversationID, runID: runID, status: .failed, error: msg)
                     return
@@ -2748,7 +2826,7 @@ final class ConversationRunCoordinator {
         steeringInputs[conversationID] = steeringInputs[conversationID]?.filter { $0.runID != current.id }
         logs.info("ConversationRun", "Finished run '\(current.id)' for conversation '\(conversationID)' with status '\(effectiveStatus.rawValue)'.")
 
-        publish(.runFinished(conversationID: conversationID, status: effectiveStatus, error: effectiveError))
+        publish(.runFinished(conversationID: conversationID, runID: current.id, status: effectiveStatus, error: effectiveError))
         if let engine = toolExecutor.computerUseV2Engine {
             Task { await engine.finishRun(conversationID: conversationID, runID: current.id) }
         }
@@ -3257,6 +3335,7 @@ final class ConversationRunCoordinator {
         }
         if msgs[index].content.isEmpty, msgs[index].toolCalls.isEmpty {
             msgs[index].content = fallback
+            msgs[index].runtimeNotice = .failed
         }
         updateConversationMessages(conversationID: conversationID, messages: msgs, expectedRunID: effectiveRunID)
     }
@@ -3301,7 +3380,8 @@ final class ConversationRunCoordinator {
             }
         }
         if msgs[index].content.isEmpty, msgs[index].toolCalls.isEmpty {
-            msgs[index].content = "Stopped."
+            msgs[index].content = ChatMessage.RuntimeNotice.stoppedText
+            msgs[index].runtimeNotice = .stopped
         }
         applyKernelAuthorizedMessageUpdate(conversationID: conversationID, messages: msgs)
     }
@@ -3816,7 +3896,8 @@ No tools, shell, browser, or file system access are available for this turn. Res
             browserAvailable: toolNames.contains("browser_use"),
             delegationAvailable: toolNames.contains("delegate_task"),
             modelUseAvailable: toolNames.contains("model_use"),
-            mcpAvailable: toolNames.contains("mcp_manage")
+            mcpAvailable: toolNames.contains("mcp_manage"),
+            schedulingAvailable: toolNames.contains("schedule_manage")
         ))
 
         // Hook projection (STRICT: only from validated hook contributions, zero legacy fallback)
@@ -3928,6 +4009,9 @@ No tools, shell, browser, or file system access are available for this turn. Res
         // manifest composes from validated contributions instead (it passes includeMCP: false).
         if mcp != nil {
             tools.append(HarnessToolDefinitions.mcpManageDefinition)
+        }
+        if toolExecutor.supportsScheduling {
+            tools.append(HarnessToolDefinitions.scheduleManageDefinition)
         }
         if includeMCP {
             if let mcpTools = mcp?.activeChatToolDefinitions, !mcpTools.isEmpty {

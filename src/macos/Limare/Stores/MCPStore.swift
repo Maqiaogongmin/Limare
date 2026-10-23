@@ -83,6 +83,15 @@ final class MCPStore {
     /// LocalAuthentication; acceptance fixtures inject a stand-in. Never reachable from the model.
     @ObservationIgnored
     var humanConsentProvider: MCPHumanConsent.Provider = { try await MCPHumanConsent.authorize(operationID: $0, reason: $1) }
+    /// Whether a run is an unattended scheduled run (ConversationRunCoordinator.isUnattended); set
+    /// by the composition root.
+    @ObservationIgnored var isUnattendedRun: ((UUID) -> Bool)?
+
+    /// The calling run, read from `ConversationRunTaskContext`; no run id (Settings) counts as attended.
+    private var isCurrentRunUnattended: Bool {
+        guard let runID = ConversationRunTaskContext.runID else { return false }
+        return isUnattendedRun?(runID) == true
+    }
 
     init(
         logs: DebugLogStore,
@@ -353,6 +362,10 @@ final class MCPStore {
         credentialName: String = "Token",
         timeoutSeconds: TimeInterval = MCPOAuth.interactiveTimeoutSeconds
     ) async -> String? {
+        if isCurrentRunUnattended {
+            logs.info("MCP", "Unattended scheduled run; refused the credential request for '\(serverID)' without queueing.")
+            return nil
+        }
         let id = UUID()
         let currentGen = connectionGenerations[serverID, default: 0]
         let request = MCPCredentialRequest(
@@ -689,6 +702,9 @@ final class MCPStore {
             throw MCPHostControlError.revisionConflict
         }
         try validateRuntimeAction(action, serverID: serverID)
+        // Sign-in waits for a person (device authentication, a browser, or a credential prompt)
+        // before it ever reaches the credential prompt; an unattended run never starts one.
+        if action == "authenticate", isCurrentRunUnattended { throw MCPOAuthError.unattended }
         guard let controlRecords, operationJournal.activeOperations.count < 8 else { throw MCPHostControlError.unavailable }
         var journal = operationJournal
         journal.activeOperations.append(MCPHostOperationReceipt(id: requestID, createdAt: Date(), outcome: .pending,
@@ -1086,7 +1102,7 @@ final class MCPStore {
             let prompt = "Enter \(slot.name) for “\(server.id)”. Limare stores it in its private storage and gives it only to this server."
             guard let value = await requestCredential(serverID: server.id, serverName: server.id, promptText: prompt, credentialName: slot.name),
                   !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                throw MCPOAuthError.cancelled
+                throw isCurrentRunUnattended ? MCPOAuthError.unattended : MCPOAuthError.cancelled
             }
             var entered = value.trimmingCharacters(in: .whitespacesAndNewlines)
             // An Authorization header takes a bare token as a bearer credential, as the token prompt always has.
@@ -1116,7 +1132,7 @@ final class MCPStore {
         let prompt = "Enter the credential for this explicit generic bearer connection in Limare's secure UI."
         let token = await requestCredential(serverID: server.id, serverName: server.id, promptText: prompt)
         guard let token, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw MCPOAuthError.cancelled
+            throw isCurrentRunUnattended ? MCPOAuthError.unattended : MCPOAuthError.cancelled
         }
         do {
             try saveAuthorizationBearerToken(token, serverID: server.id, authorization: ticket)

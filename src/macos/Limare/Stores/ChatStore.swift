@@ -295,15 +295,34 @@ final class ChatStore {
             case .providerHistoryUpdated(let conversationID, let history):
                 guard isViewing(conversationID: conversationID) else { return }
                 conversation = history
-            case .runFinished(let conversationID, let status, let error):
+            case .runFinished(let conversationID, _, let status, let error):
                 guard isViewing(conversationID: conversationID) else { return }
                 refreshVisibleRunMessages(conversationID: conversationID)
                 if status == .failed, let error {
                     errorMessage = error
                 }
+            case .reasoningDelta(let conversationID, _, _), .textDelta(let conversationID, _, _):
+                scheduleStreamedTextRefresh(conversationID: conversationID)
             default:
                 refreshVisibleRunMessages(conversationID: event.conversationID)
             }
+        }
+    }
+
+    /// Streamed text reaches the transcript at most once a frame of a 30 fps cap (Ink, Claude
+    /// Code's renderer, caps its frames the same way), not once a token. Every refresh lays out
+    /// the whole transcript: in a long run with its execution history open that took 5–9 ms, and
+    /// a provider streaming 100+ tokens a second left scrolling no frames (2026-10-22).
+    @ObservationIgnored private var streamedTextRefresh: Task<Void, Never>?
+    static let streamedTextRefreshInterval: Duration = .milliseconds(33)
+
+    private func scheduleStreamedTextRefresh(conversationID: UUID) {
+        guard isViewing(conversationID: conversationID), streamedTextRefresh == nil else { return }
+        streamedTextRefresh = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.streamedTextRefreshInterval)
+            guard !Task.isCancelled, let self else { return }
+            self.streamedTextRefresh = nil
+            self.refreshVisibleRunMessages(conversationID: conversationID)
         }
     }
 
@@ -312,6 +331,9 @@ final class ChatStore {
     /// the visible ChatStore instead of recreating parallel UI-only records.
     private func refreshVisibleRunMessages(conversationID: UUID) {
         guard isViewing(conversationID: conversationID) else { return }
+        // Any other change shows the text streamed so far with it.
+        streamedTextRefresh?.cancel()
+        streamedTextRefresh = nil
         if let runMessages = runCoordinator.activeRunMessages(for: conversationID) {
             messages = runMessages
         } else if let convMessages = conversationStore?.conversations.first(where: { $0.id == conversationID })?.messages {

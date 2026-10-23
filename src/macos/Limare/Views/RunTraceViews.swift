@@ -17,12 +17,18 @@ struct ChatRunStatusView: View {
                     .font(AppTypography.interfaceSubheadline)
                 Spacer()
                 Button("View run details") { showsDetails = true }
-                    .buttonStyle(.link)
-                    .font(AppTypography.interfaceCaption)
+                    .buttonStyle(QuietLinkButtonStyle())
             }
-            .padding(.horizontal, AppSpacing.chatHorizontal)
-            .padding(.vertical, AppSpacing.xSmall)
-            .background(AppColors.surfaceElevated)
+            .padding(.leading, AppSpacing.medium)
+            .padding(.trailing, AppSpacing.xSmall)
+            .padding(.vertical, AppSpacing.xxSmall)
+            // A thin inset strip on the canvas, not a full-width band.
+            .overlay(
+                RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous)
+                    .stroke(AppColors.hairline, lineWidth: 1)
+            )
+            .padding(.horizontal, AppSpacing.standard)
+            .padding(.top, AppSpacing.xSmall)
             .sheet(isPresented: $showsDetails) {
                 RunTraceDetailSheet(run: run, trace: trace)
                     .environment(appState)

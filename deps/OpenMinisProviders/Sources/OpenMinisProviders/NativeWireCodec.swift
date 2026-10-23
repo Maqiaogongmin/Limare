@@ -5,11 +5,14 @@ public enum NativeWireProtocol: String, Sendable { case anthropicMessages, gemin
 
 public enum NativeWireError: LocalizedError {
     case invalidInput, incompleteStream, terminal(String)
+    /// An error object the provider sent inside an accepted stream (Anthropic `overloaded_error`, Gemini `UNAVAILABLE`).
+    case streamError(code: String?, message: String)
     public var errorDescription: String? {
         switch self {
         case .invalidInput: "Native protocol input could not be projected without losing information."
         case .incompleteStream: "The native stream ended without a successful protocol terminal event."
         case .terminal(let reason): "Native provider terminated: \(reason)."
+        case .streamError(let code, let message): "Native provider stream error [\(code ?? "provider_error")]: \(message)"
         }
     }
 }
@@ -244,7 +247,10 @@ public final class NativeStreamDecoder {
         let raw = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
         if raw == "[DONE]" { return [] }
         guard let data = raw.data(using: .utf8), let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw NativeWireError.invalidInput }
-        if let error = root["error"] as? [String: Any] { throw NativeWireError.terminal(error["type"] as? String ?? error["status"] as? String ?? "provider_error") }
+        if let error = root["error"] as? [String: Any] {
+            let code = error["type"] as? String ?? error["status"] as? String ?? (error["code"] as? Int).map(String.init)
+            throw NativeWireError.streamError(code: code, message: error["message"] as? String ?? "")
+        }
         var events: [NativeDecodedEvent] = []
         if let usage = root["usageMetadata"] as? [String: Any] {
             events.append(.usage(input: usage["promptTokenCount"] as? Int ?? 0, output: usage["candidatesTokenCount"] as? Int ?? 0))

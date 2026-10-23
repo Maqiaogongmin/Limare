@@ -14,6 +14,8 @@ struct SettingsDetailView: View {
                 SkillsSettingsView()
             case .settingsSoul:
                 SoulSettingsView()
+            case .settingsArchived:
+                ArchivedConversationsSettingsView()
             case .settingsMCP:
                 MCPSettingsView()
             case .settingsHooks:
@@ -24,7 +26,7 @@ struct SettingsDetailView: View {
                 RemoteAccessSettingsView()
             case .settingsLogs:
                 DebugLogsView()
-            case .settingsGeneral, .chat:
+            case .settingsGeneral, .chat, .scheduled:
                 GeneralSettingsView()
             }
         }

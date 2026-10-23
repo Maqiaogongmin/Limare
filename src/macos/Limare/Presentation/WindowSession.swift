@@ -15,6 +15,8 @@ final class WindowSession: Identifiable {
     let workSurface: WorkSurfaceStore
     let files: FilesSurfaceStore
     var screen: AppScreen = .chat
+    /// The scheduled-task manager's selection, editor and error, shared by its two columns.
+    let scheduledPanel = ScheduledPanelState()
     /// Bumped by the Focus Composer command; the composer makes its editor first responder.
     var composerFocusRequest = 0
     /// The last request a composer acted on. A request made from Settings is acted on when the

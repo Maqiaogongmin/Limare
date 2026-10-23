@@ -1,8 +1,8 @@
 {
   "product": "Limare",
   "bundleIdentifier": "app.limare.Limare",
-  "version": "0.1.3",
-  "build": "4",
+  "version": "0.1.4",
+  "build": "5",
   "architecture": "arm64",
   "minimumMacOS": "15.0",
   "developer": "Maqiaogongmin",

@@ -6,6 +6,10 @@ enum BackgroundNotificationPolicy {
     enum Event: Equatable {
         case approvalRequested
         case runFinished(status: ConversationRunStatus, duration: TimeInterval)
+        /// A scheduled run ended. Not held to `minimumRunDuration`: the user asked for this result.
+        case scheduledRunFinished(taskName: String, status: ScheduledRun.Status, isCatchUp: Bool, notifyOn: ScheduledTask.NotifyOn)
+        /// A one-time task could not run within the catch-up window.
+        case scheduledMissed(taskName: String)
     }
 
     static let minimumRunDuration: TimeInterval = 20
@@ -28,6 +32,14 @@ enum BackgroundNotificationPolicy {
             case .cancelled, .queued, .running, .paused:
                 return false
             }
+        case .scheduledRunFinished(_, let status, _, let notifyOn):
+            switch status {
+            case .failed, .interrupted: return true
+            case .completed, .cancelled: return notifyOn == .completionAndFailure
+            case .pending, .skipped: return false
+            }
+        case .scheduledMissed:
+            return true
         }
     }
 
@@ -47,6 +59,17 @@ enum BackgroundNotificationPolicy {
             case .interrupted: return "任务中断"
             default: return "任务完成"
             }
+        case .scheduledRunFinished(let name, let status, let isCatchUp, _):
+            let outcome: String
+            switch status {
+            case .failed: outcome = "运行失败"
+            case .interrupted: outcome = "已中断"
+            case .cancelled: outcome = "已取消"
+            default: outcome = "已完成"
+            }
+            return "「\(name)」\(outcome)" + (isCatchUp ? "（补跑）" : "")
+        case .scheduledMissed(let name):
+            return "「\(name)」已错过"
         }
     }
 }

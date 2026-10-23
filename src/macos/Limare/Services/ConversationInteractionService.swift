@@ -36,6 +36,10 @@ final class ConversationInteractionService {
         /// in-memory conversation. With a ConversationStore it must be nil, so an id the store
         /// does not hold is refused instead of running without a durable commit.
         var unpersistedTranscript: [ChatMessage]?
+        /// Passed to `ConversationRunCoordinator.startRun`: a synchronous, throwing write of the
+        /// admitted run's identity, made before the run's execution Task exists. Nil for every
+        /// interactive caller.
+        var onRunAdmitted: ((_ conversationID: UUID, _ runID: UUID) throws -> Void)?
 
         init(
             conversationID: UUID?,
@@ -46,7 +50,8 @@ final class ConversationInteractionService {
             modelSource: ConversationModelSource? = nil,
             thinkingLevelOverride: ThinkingLevel? = nil,
             outcomeDeclaration: OutcomeRunDeclaration? = nil,
-            unpersistedTranscript: [ChatMessage]? = nil
+            unpersistedTranscript: [ChatMessage]? = nil,
+            onRunAdmitted: ((_ conversationID: UUID, _ runID: UUID) throws -> Void)? = nil
         ) {
             self.conversationID = conversationID
             self.projectID = projectID
@@ -57,6 +62,7 @@ final class ConversationInteractionService {
             self.thinkingLevelOverride = thinkingLevelOverride
             self.outcomeDeclaration = outcomeDeclaration
             self.unpersistedTranscript = unpersistedTranscript
+            self.onRunAdmitted = onRunAdmitted
         }
     }
 
@@ -153,6 +159,21 @@ final class ConversationInteractionService {
         ModelChoiceCatalog.currentModelSource(conversation: conversationID.flatMap(record(for:)), modelGroups: modelGroups, providers: providers)
     }
 
+    /// Whether `modelSource` can serve a chat run now: a chat-eligible direct model, or a Model
+    /// Group with at least one usable member (the eligibility the composer offers by).
+    func isModelUsable(_ modelSource: ConversationModelSource) -> Bool {
+        switch modelSource {
+        case .direct(let providerID, let modelID):
+            return ModelGroupStore.evaluateMemberEligibility(
+                entryId: ModelGroup.makeEntryId(providerID: providerID, modelID: modelID),
+                providers: providers.providers
+            ).isChatEligible
+        case .group(let groupID):
+            guard let modelGroups, let group = modelGroups.group(for: groupID) else { return false }
+            return !modelGroups.availableEntries(for: group, providers: providers.providers).isEmpty
+        }
+    }
+
     /// Why images cannot be sent to `modelSource`, if they cannot: neither the model nor a
     /// usable Vision Group takes image input.
     func imageInputRefusal(for modelSource: ConversationModelSource) -> String? {
@@ -227,6 +248,16 @@ final class ConversationInteractionService {
 
         let userMessage = ChatMessage(role: .user, content: prompt, attachments: input.attachments)
 
+        // A Compact in progress: the message waits in the queue and is sent once it ends.
+        if !runs.isActive(conversationID: conversationID), runs.compactions[conversationID]?.isRunning == true {
+            if input.outcomeDeclaration != nil { return .refused(.outcomeRequiresIdle) }
+            guard runs.enqueue(conversationID: conversationID, message: userMessage, modelSource: modelSource) else {
+                return .refused(.queuePersistenceFailed)
+            }
+            adoptModelSource(modelSource, for: existing)
+            return .queued(conversationID: conversationID, messageID: userMessage.id)
+        }
+
         if !runs.isActive(conversationID: conversationID),
            let reason = runs.admissionHoldReason(conversationID: conversationID) {
             return .refused(.held(reason))
@@ -288,7 +319,8 @@ final class ConversationInteractionService {
             modelSource: modelSource,
             prompt: prompt,
             initialMessages: committedTranscript,
-            outcomeDeclaration: input.outcomeDeclaration
+            outcomeDeclaration: input.outcomeDeclaration,
+            onRunAdmitted: input.onRunAdmitted
         )
         // startRun can register a run and fail it synchronously (its recovery marker could not
         // be saved); only a new, non-terminal run counts as started.
@@ -310,8 +342,7 @@ final class ConversationInteractionService {
             return .refused(.compactUnavailable)
         }
         guard let source = modelSource(for: conversationID) else { return .refused(.noModel) }
-        let runs = runs
-        Task { await runs.compactConversation(conversationID: conversationID, modelSource: source) }
+        guard runs.startCompaction(conversationID: conversationID, modelSource: source) else { return .refused(.compactUnavailable) }
         return .compacting(conversationID: conversationID)
     }
 

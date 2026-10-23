@@ -77,7 +77,7 @@ struct ConversationSection: View {
                 Spacer()
 
                 Button {
-                    appState.focus(window)
+                    appState.showChat(in: window)
                     appState.conversations.newConversation()
                 } label: {
                     Image(systemName: "plus")

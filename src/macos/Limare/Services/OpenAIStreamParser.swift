@@ -221,8 +221,8 @@ public struct OpenAIStreamParser: Sendable {
             return []
         }
 
-        if let message = Self.providerErrorMessage(from: json) {
-            throw ProviderClientError.http(status: 400, message: message)
+        if let error = Self.providerStreamError(from: json) {
+            throw error
         }
 
         var events: [AgentStreamEvent] = []
@@ -423,8 +423,10 @@ public struct OpenAIStreamParser: Sendable {
         }
     }
 
-    static func providerErrorMessage(from root: [String: Any]) -> String? {
-        guard let error = root["error"] as? [String: Any] else { return nil }
-        return error["message"] as? String
+    /// An error object inside the stream arrives after an HTTP 200, so it has no status of its own.
+    static func providerStreamError(from root: [String: Any]) -> ProviderClientError? {
+        guard let error = root["error"] as? [String: Any], let message = error["message"] as? String else { return nil }
+        let code = error["code"] as? String ?? (error["code"] as? Int).map(String.init) ?? error["type"] as? String
+        return .streamError(code: code, message: message)
     }
 }

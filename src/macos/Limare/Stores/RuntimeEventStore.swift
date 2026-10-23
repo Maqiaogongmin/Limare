@@ -201,7 +201,7 @@ final class RuntimeEventStore {
             "targetBudget", "semanticFallbackCount", "reasoningItemsReduced",
             "attachmentsReduced", "toolResultsReduced", "stagesAttempted",
             "providerID", "fromProviderID", "toProviderID", "candidateState",
-            "skipReason", "truncated", "firstOutputMilliseconds", "inputTokens", "outputTokens", "toolCalls", "transport"
+            "skipReason", "scheduledTaskID", "scheduledRunID", "truncated", "firstOutputMilliseconds", "inputTokens", "outputTokens", "toolCalls", "transport"
         ]
         return metadata.reduce(into: [:]) { result, pair in
             if pair.key == "toolNames",
@@ -264,6 +264,8 @@ extension RuntimeFailureClassification {
                     return .context
                 }
                 return .provider
+            case .streamError:
+                break
             default:
                 return .provider
             }

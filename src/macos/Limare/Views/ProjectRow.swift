@@ -125,7 +125,7 @@ struct ProjectRow: View {
                 systemImage: "plus",
                 tooltip: "New Conversation in \(project.name)"
             ) {
-                appState.focus(window)
+                appState.showChat(in: window)
                 appState.conversations.newConversation(projectID: project.id)
             }
 
@@ -152,7 +152,7 @@ struct ProjectRow: View {
     @ViewBuilder
     private var projectMenuItems: some View {
         Button {
-            appState.focus(window)
+            appState.showChat(in: window)
             appState.conversations.newConversation(projectID: project.id)
         } label: {
             Label("New Conversation in Project", systemImage: "plus")

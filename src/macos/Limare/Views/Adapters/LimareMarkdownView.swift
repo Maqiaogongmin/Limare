@@ -45,7 +45,9 @@ public struct LimareMarkdownView: View {
             onSelectionBecameActive: onSelectionBecameActive,
             openURL: openURL
         )
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        // A reply fills the column; what a person typed hugs its text, so a two-word message
+        // sits in a two-word bubble.
+        .frame(maxWidth: profile == .typed ? nil : .infinity, alignment: .topLeading)
     }
 }
 
@@ -224,7 +226,7 @@ struct LimareMarkdownRepresentable: NSViewRepresentable {
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: LimareStreamView, context: Context) -> CGSize? {
-        context.coordinator.sizeThatFits(proposal, for: nsView)
+        context.coordinator.sizeThatFits(proposal, for: nsView, hugsText: profile == .typed)
     }
 
     @MainActor
@@ -237,7 +239,9 @@ struct LimareMarkdownRepresentable: NSViewRepresentable {
         var lastProfile: LimareMarkdownView.Profile?
         var lastTheme: MarkdownTheme = .default
 
-        func sizeThatFits(_ proposal: ProposedViewSize, for view: MarkdownTextView) -> CGSize? {
+        /// `hugsText` reports the width the wrapped text uses, at most the proposed one;
+        /// otherwise the view takes the whole proposed width.
+        func sizeThatFits(_ proposal: ProposedViewSize, for view: MarkdownTextView, hugsText: Bool) -> CGSize? {
             if proposal.width == 0 {
                 return .zero
             }
@@ -253,7 +257,10 @@ struct LimareMarkdownRepresentable: NSViewRepresentable {
                 return nil
             }
             let size = view.boundingSize(for: fittingWidth)
-            return CGSize(width: fittingWidth, height: ceil(size.height))
+            // Measuring again at the hugged width wraps the same lines: the label rounds its
+            // width up, never past the width it measured at.
+            let width = hugsText ? min(fittingWidth, ceil(size.width)) : fittingWidth
+            return CGSize(width: width, height: ceil(size.height))
         }
 
         func apply(
