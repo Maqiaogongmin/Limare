@@ -38,6 +38,36 @@ public enum VoiceTextChunker {
         return chunks
     }
 
+    /// Splits like `chunk`, but the first chunk is at most `firstCharacters` and each later one
+    /// at most `growthFactor` times the previous limit, capped at `maxCharacters`/`maxBytes`.
+    public static func progressiveChunk(
+        _ text: String,
+        firstCharacters: Int = VoiceOutputDefaults.firstChunkCharacters,
+        growthFactor: Int = VoiceOutputDefaults.chunkGrowthFactor,
+        maxCharacters: Int = maxChunkCharacters,
+        maxBytes: Int? = nil
+    ) -> [String] {
+        var chunks: [String] = []
+        var remaining = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var limit = max(1, min(firstCharacters, maxCharacters))
+
+        while !remaining.isEmpty {
+            if remaining.count <= limit && (maxBytes == nil || remaining.utf8.count <= maxBytes!) {
+                chunks.append(remaining)
+                break
+            }
+            let splitIndex = findSplitIndex(in: remaining, maxCharacters: limit, maxBytes: maxBytes)
+            let chunkText = String(remaining[..<splitIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !chunkText.isEmpty {
+                chunks.append(chunkText)
+            }
+            remaining = String(remaining[splitIndex...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            limit = min(maxCharacters, limit * max(1, growthFactor))
+        }
+
+        return chunks
+    }
+
     private static func findSplitIndex(
         in text: String,
         maxCharacters: Int,

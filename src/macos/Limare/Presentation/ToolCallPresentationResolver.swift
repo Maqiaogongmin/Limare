@@ -125,6 +125,12 @@ enum ToolCallPresentationResolver {
             }
         }
 
+        if name == "ask_user_question",
+           let questions = json["questions"] as? [[String: Any]],
+           let header = questions.first?["header"] as? String {
+            return questions.count > 1 ? "\(header) 等 \(questions.count) 题" : header
+        }
+
         if name.contains("file_") {
             if let path = json["path"] as? String {
                 return path

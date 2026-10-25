@@ -3,6 +3,8 @@ import AVFoundation
 
 public protocol AudioDataPlaying: AnyObject, Sendable {
     func play(data: Data) async throws
+    func pause()
+    func resume()
     func stop()
 }
 
@@ -12,11 +14,14 @@ public final class AudioDataPlayer: AudioDataPlaying, @unchecked Sendable {
     private var activePlayerID: ObjectIdentifier?
     private let lock = NSLock()
     private var activeContinuation: CheckedContinuation<Void, Error>?
+    /// Survives segment boundaries: a segment handed to `play(data:)` while paused is loaded
+    /// but starts only on `resume()`. Cleared by `stop()`.
+    private var isPaused = false
 
     public init() {}
 
     public func play(data: Data) async throws {
-        stop()
+        stopCurrent()
 
         guard !data.isEmpty else {
             throw VoiceOutputError.playbackFailed("Cannot play empty audio data.")
@@ -43,7 +48,7 @@ public final class AudioDataPlayer: AudioDataPlaying, @unchecked Sendable {
                 self.playerDelegate = delegate
                 self.activePlayerID = playerID
                 self.activeContinuation = continuation
-                let started = audioPlayer.play()
+                let started = self.isPaused || audioPlayer.play()
                 lock.unlock()
 
                 if !started {
@@ -62,7 +67,32 @@ public final class AudioDataPlayer: AudioDataPlaying, @unchecked Sendable {
         }
     }
 
+    /// Holds the current segment in place; `play(data:)` stays suspended until it finishes.
+    public func pause() {
+        lock.lock()
+        isPaused = true
+        player?.pause()
+        lock.unlock()
+    }
+
+    public func resume() {
+        lock.lock()
+        isPaused = false
+        let currentPlayer = player
+        lock.unlock()
+        if let currentPlayer, !currentPlayer.play() {
+            handleFinish(playerID: ObjectIdentifier(currentPlayer), success: false, error: nil)
+        }
+    }
+
     public func stop() {
+        lock.lock()
+        isPaused = false
+        lock.unlock()
+        stopCurrent()
+    }
+
+    private func stopCurrent() {
         lock.lock()
         let currentPlayer = player
         let continuation = activeContinuation

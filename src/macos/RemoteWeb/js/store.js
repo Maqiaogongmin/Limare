@@ -4,6 +4,7 @@ export class Store extends EventTarget {
     super();
     this.conversations = new Map();
     this.approvals = [];
+    this.questions = []; // every waiting question card, oldest first
     this.openID = null;
     this.open = null; // { conversation, messages: [], hasEarlier, runState, settings, compactions }
     this.projects = []; // in the Mac sidebar's order
@@ -33,10 +34,12 @@ export class Store extends EventTarget {
         this.projects = event.projects;
         this.models = event.models;
         this.approvals = event.approvals;
+        this.questions = event.questions;
         this.commands = event.commands;
         this.emit('list');
         this.emit('catalog');
         this.emit('approvals');
+        this.emit('questions');
         this.emit('hello');
         break;
       case 'conversations.changed':
@@ -95,6 +98,10 @@ export class Store extends EventTarget {
       case 'approvals.changed':
         this.approvals = event.approvals;
         this.emit('approvals');
+        break;
+      case 'questions.changed':
+        this.questions = event.questions;
+        this.emit('questions');
         break;
       default:
         break;

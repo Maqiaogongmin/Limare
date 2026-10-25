@@ -14,6 +14,7 @@ final class BackgroundActivityNotifier {
     private var subscription: ConversationRunSubscription?
     private var notifiedRunIDs: Set<UUID> = []
     private var lastApprovalNotice: [UUID: Date] = [:]
+    private var lastQuestionNotice: [UUID: Date] = [:]
     /// Approvals outside any conversation share one throttle.
     private static let noConversation = UUID()
     private let clickHandler = NotificationClickHandler()
@@ -33,6 +34,9 @@ final class BackgroundActivityNotifier {
         }
         appState.permissions.onApprovalPresented = { [weak self] approval in
             self?.approvalPresented(approval)
+        }
+        appState.userQuestions.onQuestionPresented = { [weak self] question in
+            self?.questionPresented(question)
         }
         // A scheduled run gets its own notice from the scheduler and never the generic one too.
         appState.scheduled.onRunEnded = { [weak self] task, run in
@@ -93,6 +97,15 @@ final class BackgroundActivityNotifier {
         guard !BackgroundNotificationPolicy.isApprovalThrottled(lastNotice: lastApprovalNotice[key], now: now) else { return }
         lastApprovalNotice[key] = now
         post(body: BackgroundNotificationPolicy.body(for: event), identifier: "approval-\(approval.id.uuidString)", conversationID: approval.conversationID)
+    }
+
+    private func questionPresented(_ question: PendingUserQuestion) {
+        let event = BackgroundNotificationPolicy.Event.questionRequested
+        guard BackgroundNotificationPolicy.shouldNotify(event: event, isAppActive: NSApp.isActive, isEnabled: isEnabled) else { return }
+        let now = Date()
+        guard !BackgroundNotificationPolicy.isApprovalThrottled(lastNotice: lastQuestionNotice[question.conversationID], now: now) else { return }
+        lastQuestionNotice[question.conversationID] = now
+        post(body: BackgroundNotificationPolicy.body(for: event), identifier: "question-\(question.id.uuidString)", conversationID: question.conversationID)
     }
 
     private func post(body: String, identifier: String, conversationID: UUID?) {

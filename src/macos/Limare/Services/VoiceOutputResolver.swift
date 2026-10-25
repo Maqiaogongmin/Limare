@@ -25,6 +25,15 @@ final class VoiceOutputResolver {
         self.logs = logs
     }
 
+    /// Identifies the configured voice output group and its members; audio synthesized under
+    /// one configuration is not replayed under another. Nil when no group is configured.
+    var configurationKey: String? {
+        guard let modelGroups,
+              let groupID = modelGroups.voiceOutputGroupId,
+              let group = modelGroups.group(for: groupID) else { return nil }
+        return ([group.id] + group.memberEntryIds).joined(separator: "|")
+    }
+
     func prepare(text: String, sessionSeed: Int = 0) async throws -> PreparedVoiceOutput {
         let sanitized = VoiceTextSanitizer.sanitize(text)
         guard !sanitized.isEmpty else {
@@ -99,70 +108,66 @@ final class VoiceOutputResolver {
                     return (VoiceOutputDefaults.maxChunkCharacters, nil)
                 }
             }()
-            let chunks = VoiceTextChunker.chunk(sanitized, maxCharacters: maxChars, maxBytes: maxBytes)
-            guard !chunks.isEmpty else {
+            let chunks = VoiceTextChunker.progressiveChunk(sanitized, maxCharacters: maxChars, maxBytes: maxBytes)
+            guard let firstChunk = chunks.first else {
                 throw VoiceOutputError.noSpeakableText
+            }
+
+            let speechClient = self.speechClient
+            let geminiClient = self.geminiClient
+            let audioValidator = self.audioValidator
+            let synthesize: @Sendable (String) async throws -> Data = { chunk in
+                let data: Data
+                switch route {
+                case .geminiNativeInteractions:
+                    data = try await geminiClient.synthesizeSpeech(
+                        provider: provider,
+                        apiKey: apiKey,
+                        modelID: modelID,
+                        text: chunk,
+                        voice: GeminiTTSClient.defaultVoice
+                    )
+                case .openAIAudioSpeech:
+                    data = try await speechClient.synthesizeSpeech(
+                        provider: provider,
+                        apiKey: apiKey,
+                        modelID: modelID,
+                        text: chunk
+                    )
+                case .protocolUnsupported:
+                    throw VoiceOutputError.synthesisFailed("Protocol unsupported")
+                }
+                try audioValidator.validate(data)
+                return data
             }
 
             logs.info("VoiceOutput", "Attempting cloud TTS with \(provider.name) / \(modelID) (\(sanitized.count) chars, \(chunks.count) chunks)...")
 
-            var candidateSegments: [Data] = []
-            var candidateFailed = false
-
-            for (idx, chunk) in chunks.enumerated() {
+            // Only the first chunk picks the candidate; the rest are synthesized while it plays.
+            let firstSegment: Data
+            do {
                 try Task.checkCancellation()
-                do {
-                    let data: Data
-                    switch route {
-                    case .geminiNativeInteractions:
-                        data = try await geminiClient.synthesizeSpeech(
-                            provider: provider,
-                            apiKey: apiKey,
-                            modelID: modelID,
-                            text: chunk,
-                            voice: GeminiTTSClient.defaultVoice
-                        )
-                    case .openAIAudioSpeech:
-                        data = try await speechClient.synthesizeSpeech(
-                            provider: provider,
-                            apiKey: apiKey,
-                            modelID: modelID,
-                            text: chunk
-                        )
-                    case .protocolUnsupported:
-                        throw VoiceOutputError.synthesisFailed("Protocol unsupported")
-                    }
-                    try audioValidator.validate(data)
-                    candidateSegments.append(data)
-                } catch is CancellationError {
+                firstSegment = try await synthesize(firstChunk)
+            } catch {
+                if Self.isCancellation(error) || Task.isCancelled {
                     throw CancellationError()
-                } catch let urlError as URLError where urlError.code == .cancelled {
-                    throw CancellationError()
-                } catch let nsError as NSError where nsError.domain == "Swift.CancellationError" || (nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled) {
-                    throw CancellationError()
-                } catch {
-                    if Task.isCancelled {
-                        throw CancellationError()
-                    }
-                    let errMsg = "\(provider.name)/\(modelID) chunk \(idx + 1)/\(chunks.count): \(error.localizedDescription)"
-                    logs.info("VoiceOutput", "Cloud TTS failed: \(errMsg). Trying next candidate or fallback...")
-                    candidateErrors.append(errMsg)
-                    candidateFailed = true
-                    break
                 }
+                let errMsg = "\(provider.name)/\(modelID) chunk 1/\(chunks.count): \(error.localizedDescription)"
+                logs.info("VoiceOutput", "Cloud TTS failed: \(errMsg). Trying next candidate or fallback...")
+                candidateErrors.append(errMsg)
+                continue
             }
 
-            if !candidateFailed && candidateSegments.count == chunks.count {
-                let modelDisplayName = provider.models.first(where: { $0.id == modelID })?.displayName ?? modelID
-                let totalBytes = candidateSegments.reduce(0) { $0 + $1.count }
-                logs.info("VoiceOutput", "Cloud TTS succeeded with \(provider.name) / \(modelID) (\(sanitized.count) chars, \(chunks.count) chunks, \(totalBytes) bytes)")
-                return .cloud(
-                    segments: candidateSegments,
-                    providerID: provider.id,
-                    modelID: modelID,
-                    label: "\(provider.name) · \(modelDisplayName)"
-                )
-            }
+            let modelDisplayName = provider.models.first(where: { $0.id == modelID })?.displayName ?? modelID
+            logs.info("VoiceOutput", "Cloud TTS started with \(provider.name) / \(modelID) (\(sanitized.count) chars, \(chunks.count) chunks, first chunk \(firstSegment.count) bytes)")
+            return .cloud(CloudVoiceSynthesis(
+                providerID: provider.id,
+                modelID: modelID,
+                label: "\(provider.name) · \(modelDisplayName)",
+                chunks: chunks,
+                firstSegment: firstSegment,
+                synthesize: synthesize
+            ))
         }
 
         // 3. Fallback to System Speech
@@ -173,5 +178,13 @@ final class VoiceOutputResolver {
             logs.info("VoiceOutput", "Falling back to macOS System Voice (\(sanitized.count) chars)...")
         }
         return .system(text: sanitized, fallbackReason: fallbackReason)
+    }
+
+    static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let urlError = error as? URLError, urlError.code == .cancelled { return true }
+        let nsError = error as NSError
+        return nsError.domain == "Swift.CancellationError"
+            || (nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled)
     }
 }

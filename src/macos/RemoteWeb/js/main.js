@@ -3,12 +3,13 @@ import { Store } from './store.js';
 import { ListView } from './views/list.js';
 import { ConversationView } from './views/conversation.js';
 import { renderApprovals } from './views/approval.js';
+import { renderQuestion } from './views/question.js';
 import { renderBanner } from './views/banner.js';
 import { loadMarkdown } from './markdown.js';
 import { refreshPicker, closePicker } from './picker.js';
 import { closeViewer } from './views/files.js';
 
-const PROTOCOL_VERSION = 6;
+const PROTOCOL_VERSION = 7;
 window.limareStarted = true; // every module loaded; boot.js stands down
 
 const app = document.getElementById('app');
@@ -49,6 +50,7 @@ function render() {
   }
   store.setOpen(current.id);
   view = new ConversationView({ store, connection, conversationID: current.id });
+  renderQuestion(view.questionSlot, store, connection);
   app.append(view.element);
   if (connection.isLive) openConversation(current.id);
 }
@@ -72,6 +74,7 @@ connection.addEventListener('status', (e) => {
   view?.onConnection();
   listView?.composer.render();
   renderApprovals(approvalLayer, store, connection);
+  renderQuestion(view?.questionSlot, store, connection);
 });
 
 store.addEventListener('hello', () => {
@@ -98,6 +101,7 @@ store.addEventListener('run', () => view?.updateRun());
 store.addEventListener('openSummary', () => view?.updateSummary());
 store.addEventListener('openRemoved', () => { location.hash = '#/'; });
 store.addEventListener('approvals', () => renderApprovals(approvalLayer, store, connection));
+store.addEventListener('questions', () => renderQuestion(view?.questionSlot, store, connection));
 
 window.addEventListener('hashchange', render);
 renderBanner(banner, connection.status);

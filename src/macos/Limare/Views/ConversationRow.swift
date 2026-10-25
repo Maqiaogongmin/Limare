@@ -50,6 +50,11 @@ struct ConversationRow: View {
                     .font(.caption2)
                     .foregroundStyle(.orange)
                     .help("Waiting for your approval")
+            } else if appState.conversationsAwaitingAnswer.contains(conversation.id) {
+                Image(systemName: "questionmark.bubble.fill")
+                    .font(.caption2)
+                    .foregroundStyle(Color.accentColor)
+                    .help("Waiting for your answer")
             } else if appState.conversationRuns.hasInterruptedRun(for: conversation.id) {
                 Image(systemName: "exclamationmark.circle.fill")
                     .font(.caption2)

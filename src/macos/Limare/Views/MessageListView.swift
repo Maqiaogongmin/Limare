@@ -991,44 +991,64 @@ private struct SpeakerButton: View {
     let spokenPayload: String
     @Environment(AppState.self) private var appState
 
+    private var state: VoiceOutputState { appState.voiceOutput.state }
+    private var isActive: Bool { state.activeMessageID == messageID }
+
     var body: some View {
-        Button {
-            appState.voiceOutput.toggle(messageID: messageID, text: spokenPayload)
-        } label: {
-            if appState.voiceOutput.state.activeMessageID == messageID {
-                if appState.voiceOutput.state.isPreparing {
+        HStack(spacing: AppSpacing.small) {
+            Button {
+                appState.voiceOutput.toggle(messageID: messageID, text: spokenPayload)
+            } label: {
+                if isActive && state.isPreparing {
                     ProgressView()
                         .controlSize(.mini)
                         .frame(width: 14, height: 14)
-                } else {
-                    Image(systemName: "stop.fill")
+                } else if isActive {
+                    Image(systemName: state.isPaused ? "play.fill" : "pause.fill")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(Color.accentColor)
                         .frame(width: 14, height: 14)
+                } else {
+                    Image(systemName: "speaker.wave.2")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 14, height: 14)
                 }
-            } else {
-                Image(systemName: "speaker.wave.2")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 14, height: 14)
+            }
+            .buttonStyle(.plain)
+            .help(helpText)
+
+            if isActive && !state.isPreparing {
+                Button {
+                    appState.voiceOutput.stop()
+                } label: {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 14, height: 14)
+                }
+                .buttonStyle(.plain)
+                .help("Stop reading")
+            }
+
+            if case .failed(let failedID, let message) = state, failedID == messageID {
+                VoiceErrorCapsule(message: message, onDismiss: { appState.voiceOutput.clearError() })
             }
         }
-        .buttonStyle(.plain)
-        .help(helpText)
     }
 
     private var helpText: String {
-        if appState.voiceOutput.state.activeMessageID == messageID {
-            if appState.voiceOutput.state.isPreparing {
-                return "Preparing voice output…"
+        if isActive {
+            switch state {
+            case .preparing:
+                return "Preparing voice output… (click to cancel)"
+            case .playing(_, let engineLabel):
+                return "Pause reading · \(engineLabel)"
+            case .paused(_, let engineLabel):
+                return "Resume reading · \(engineLabel)"
+            case .idle, .failed:
+                break
             }
-            if case .playing(_, let engineLabel) = appState.voiceOutput.state {
-                return "Stop reading · \(engineLabel)"
-            }
-            return "Stop reading"
-        }
-        if case .failed(let failedID, let msg) = appState.voiceOutput.state, failedID == messageID {
-            return "Read aloud (Previous error: \(msg))"
         }
         return "Read aloud"
     }

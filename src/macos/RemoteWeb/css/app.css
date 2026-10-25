@@ -287,6 +287,29 @@ details.history[open] > summary::before { content: "▾ "; }
 .sheet .buttons button { flex: 1; min-height: 48px; }
 .sheet .more { font-size: 13px; color: var(--text-2); margin-top: 8px; }
 
+/* Question card (ask_user_question): in the conversation above the composer, as on the Mac */
+.badge.question { color: var(--accent); }
+.question-slot { flex: none; }
+.question-slot:empty { display: none; }
+.question-card {
+  margin: 8px 10px 0; padding: 12px; display: flex; flex-direction: column; max-height: 45dvh;
+  background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius);
+}
+.question-card .questions { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.question-card h2 { font-size: 16px; margin: 0; }
+.question-card .q + .q { margin-top: 16px; }
+.question-card .q-header { display: inline-block; font-size: 12px; color: var(--text-2); background: var(--code-bg); border-radius: 6px; padding: 1px 6px; margin-bottom: 6px; max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.question-card .options { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-top: 8px; }
+.question-card .option { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; font-size: 15px; }
+.question-card .option + .option { border-top: 1px solid var(--border); }
+.question-card .option input { margin-top: 3px; flex: none; width: 18px; height: 18px; accent-color: var(--accent); }
+.question-card .option-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.question-card .option-detail { font-size: 13px; color: var(--text-2); }
+.question-card .options textarea { display: block; width: calc(100% - 24px); margin: 0 12px 12px; font: inherit; font-size: 15px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: inherit; resize: vertical; box-sizing: border-box; }
+.question-card .options textarea[hidden] { display: none; }
+.question-card .buttons { flex: none; display: flex; gap: 10px; margin-top: 12px; }
+.question-card .buttons button { flex: 1; min-height: 44px; }
+
 @media (min-width: 720px) {
   #app { max-width: 760px; margin: 0 auto; border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
   .sheet { max-width: 640px; margin: 0 auto; border-radius: 18px; margin-bottom: 24px; }

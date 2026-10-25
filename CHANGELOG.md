@@ -2,6 +2,27 @@
 
 All notable behavior and architecture changes to Limare are recorded here. Entries before the 2026-10-09 identity cleanup use the old names (Minis Mac, MinisMac, org.openminis.MinisMac) as they were at the time.
 
+## Unreleased
+
+## 0.1.5 — 2026-10-25
+
+### Voice output pause and long messages (2026-10-25)
+
+- **朗读可暂停**：朗读时喇叭按钮变成暂停/继续，旁边多一个停止按钮；暂停后继续从原处播放，不再重新请求。
+- **长消息先开口**：云端朗读先合成约 200 字的第一段就开始播放，后面的段落边播边在后台合成（段长逐段翻倍到服务商上限），长消息不再长时间转圈无反应。中途某段合成失败时，朗读停下，喇叭按钮旁出现和语音输入同款的橙色错误提示，写明停在第几段及原因（悬停看全文，✕ 关闭）。
+- **重播不再重复请求**：一条消息全部合成后，停止再播放直接用已合成的音频；更换朗读模型组后才重新合成。
+
+### Interactive question cards (2026-10-25)
+
+- **提问卡片**：AI 遇到需要你拍板的分叉时，用新工具 ask_user_question 在输入框上方弹出卡片（1–4 个问题，推荐项在前，可多选，可在「其他」里自己写），同一轮运行等你提交或跳过后继续。
+- **直接发消息也算回答**：卡片等待时在输入框发送消息，卡片按「未回答」结束，AI 接着按新消息做；排队发送不影响卡片。
+- **看得见在等你**：侧栏标记、其他对话顶部的提示、运行状态「Waiting for your answer」、后台通知「需要你的决定」；手机远程端也能看到并回答（协议 v7）。
+- **手机上同样放在输入框上方**：不加遮罩，待答时照样能滚动对话、回到列表、直接发消息；离开再回来，填到一半的选择还在。
+- **⌘↩**：点过卡片的选项、或焦点在卡片的「其他」输入框时提交卡片；焦点在输入框时照旧发送输入框的内容，发送按钮不再注册窗口级 ⌘↩。
+- 子 agent 和无人值守的定时任务拿不到这个工具。
+
+- **标题栏稳定性**：修复 Work Surface 菜单更新标题路径时可能引起窗口持续重绘的问题。
+
 ## 0.1.4 — 2026-10-23
 
 - **定时任务**：在侧栏「Schedules」中创建一次性、每天、工作日、每周、每隔几小时或每月运行的任务，Limare 开启时按时在新对话或指定对话中无人值守执行，可查看运行记录并接收完成通知；对话中的 AI 可通过 schedule_manage 创建和修改定时任务。
@@ -22,8 +43,6 @@ All notable behavior and architecture changes to Limare are recorded here. Entri
 - **工具可靠性**：Computer Use 在运行中的对话中保持可用，可重新打开无窗口应用；闲置浏览器标签及时释放。
 
 支持 Apple Silicon（arm64）、macOS 15.0 及以上。首次安装下载签名、公证并装订的 DMG；已安装正式版可通过 **Limare → 检查更新…** 手动更新。无后台更新检查或静默安装。
-
-## Unreleased
 
 ## 0.1.2 — 2026-10-18
 

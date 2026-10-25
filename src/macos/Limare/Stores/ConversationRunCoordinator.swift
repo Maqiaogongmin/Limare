@@ -3857,6 +3857,10 @@ No tools, shell, browser, or file system access are available for this turn. Res
             mcpToolDefs = []
         }
         var toolDefinitions = baseTools
+        // An unattended run has no one to answer a question card.
+        if let runID, isUnattended(runID: runID) {
+            toolDefinitions.removeAll { $0.function.name == "ask_user_question" }
+        }
         if mcpToolDefs.count > Self.mcpDeferralThreshold {
             // Claude Code's tool search: past a handful of MCP tools, only their names are listed
             // and tool_search loads the ones the task needs into the following requests.
@@ -3897,7 +3901,10 @@ No tools, shell, browser, or file system access are available for this turn. Res
             delegationAvailable: toolNames.contains("delegate_task"),
             modelUseAvailable: toolNames.contains("model_use"),
             mcpAvailable: toolNames.contains("mcp_manage"),
-            schedulingAvailable: toolNames.contains("schedule_manage")
+            schedulingAvailable: toolNames.contains("schedule_manage"),
+            // The subagent filter below runs after this section is written; apply the same check here.
+            askUserQuestionAvailable: toolNames.contains("ask_user_question")
+                && (runID.flatMap { subagentRuns[$0] }.map { SubagentCoordinator.allows("ask_user_question", role: $0.role, allowWeb: $0.allowWeb) } ?? true)
         ))
 
         // Hook projection (STRICT: only from validated hook contributions, zero legacy fallback)
@@ -3971,6 +3978,7 @@ No tools, shell, browser, or file system access are available for this turn. Res
         }
         tools.append(contentsOf: HarnessToolDefinitions.workspaceTools)
         tools.append(HarnessToolDefinitions.updatePlanDefinition)
+        tools.append(HarnessToolDefinitions.askUserQuestionDefinition)
         let targetModel = options.model ?? providers.providers.flatMap(\.models).first(where: { $0.id == modelID })
         let provider = providers.providers.first(where: { p in
             if let pid = options.providerID, p.id == pid { return true }

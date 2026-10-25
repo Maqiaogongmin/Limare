@@ -12,7 +12,7 @@ enum UndoRestorePlanner {
     static let nonProjectTools: Set<String> = [
         "file_read", "file_list", "file_search", "read_image", "tool_result_read", "model_use",
         "delegation_control", "delegation_result", "verification_handoff", "artifact_acquire",
-        "artifact_register", "resource_convert", "update_plan", "tool_search"
+        "artifact_register", "resource_convert", "update_plan", "ask_user_question", "tool_search"
     ]
     static let recordedFileTools: Set<String> = ["file_write", "file_edit", "attachment_copy"]
 

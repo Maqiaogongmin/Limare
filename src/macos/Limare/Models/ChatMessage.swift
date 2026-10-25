@@ -616,6 +616,49 @@ enum HarnessToolDefinitions {
             ],
             "required": ["plan"], "additionalProperties": false])))
 
+    /// ask_user_question: schema shape follows Claude Code's AskUserQuestion; three sentences adapted
+    /// from openai/codex (Apache-2.0) codex-rs/core/src/tools/handlers/request_user_input_spec.rs;
+    /// LICENSES/codex-Apache-2.0.txt, LICENSES/codex-NOTICE.txt.
+    static let askUserQuestionDefinition: ChatToolDefinition = ChatToolDefinition(function: .init(name: "ask_user_question",
+        description: "Ask the user 1–4 multiple-choice questions in a card and wait for the answers before you continue. Use it when you reach a fork that is the user's to decide — a preference or trade-off you cannot settle from the request, the files or the environment — and the choice materially changes what you do next. Usually ask one question. Explore first: never ask what you can find out with your tools. Do not use it to ask permission to run a tool (Limare asks the user for approval on its own), never to ask for secrets such as keys or passwords, and not when a reasonable default exists (take it and say so). Put the option you recommend first and add \" (Recommended)\" at the end of its label. Do not add an \"Other\" option; the user can always write their own answer or skip. Do not also write the questions as text in your reply. If the user skips, continue with your best judgment and do not ask the same questions again.",
+        rawParameters: AnyCodable.from(json: [
+            "type": "object",
+            "properties": [
+                "questions": [
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 4,
+                    "description": "Questions to show the user (1–4; usually 1).",
+                    "items": [
+                        "type": "object",
+                        "properties": [
+                            "question": ["type": "string", "description": "The complete question, ending with a question mark."],
+                            "header": ["type": "string", "description": "Very short label shown as a chip (at most 12 characters)."],
+                            "options": [
+                                "type": "array",
+                                "minItems": 2,
+                                "maxItems": 4,
+                                "description": "2–4 distinct choices. Put the recommended option first and add \" (Recommended)\" at the end of its label. Do not include an \"Other\" option; the client adds a free-form answer automatically.",
+                                "items": [
+                                    "type": "object",
+                                    "properties": [
+                                        "label": ["type": "string", "description": "User-facing label (1–5 words)."],
+                                        "description": ["type": "string", "description": "One short sentence explaining the impact or trade-off if selected."]
+                                    ],
+                                    "required": ["label", "description"],
+                                    "additionalProperties": false
+                                ]
+                            ],
+                            "multiSelect": ["type": "boolean", "description": "true lets the user select several options. Default false."]
+                        ],
+                        "required": ["question", "header", "options"],
+                        "additionalProperties": false
+                    ]
+                ]
+            ],
+            "required": ["questions"],
+            "additionalProperties": false])))
+
     static let toolSearchDefinition = definition(name: "tool_search",
         description: "Load deferred tools (listed by name under DEFERRED TOOLS) so you can call them. Query \"select:name1,name2\" loads those tools; other queries load the best keyword matches. Returns the loaded tools' definitions; call them from your next step.",
         properties: [

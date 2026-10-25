@@ -34,6 +34,7 @@ final class AppState {
     let providers: ProviderStore
     let workspace: WorkspaceStore
     let permissions: PermissionStore
+    let userQuestions: UserQuestionStore
     let backgroundNotifier = BackgroundActivityNotifier()
     let skills: SkillStore
     let mcp: MCPStore
@@ -81,6 +82,7 @@ final class AppState {
         let client = providers.networkClient
         let workspace = WorkspaceStore(storageRootURL: storageRootURL, logs: logs)
         let permissions = PermissionStore(logs: logs)
+        let userQuestions = UserQuestionStore(logs: logs, runtimeEvents: runtimeEvents)
         let computerUseActivation = ComputerUseActivationStore(
             authorizer: screenRecordingPermission,
             accessibilityAuthorizer: accessibilityPermission,
@@ -182,6 +184,7 @@ final class AppState {
         self.providers = providers
         self.workspace = workspace
         self.permissions = permissions
+        self.userQuestions = userQuestions
         self.skills = skills
         self.mcp = mcp
         self.memory = memory
@@ -209,6 +212,7 @@ final class AppState {
         let toolExecutor = ToolExecutor(
             workspace: workspace,
             permissions: permissions,
+            userQuestions: userQuestions,
             logs: logs,
             allowedReadDirectories: { [weak skills] in
                 skills?.enabledSkillDirectories ?? []
@@ -347,6 +351,9 @@ final class AppState {
         permissions.isUnattendedRun = { [weak coordinator = chat.runCoordinator] runID in
             coordinator?.isUnattended(runID: runID) == true
         }
+        userQuestions.isUnattendedRun = { [weak coordinator = chat.runCoordinator] runID in
+            coordinator?.isUnattended(runID: runID) == true
+        }
         mcp.isUnattendedRun = { [weak coordinator = chat.runCoordinator] runID in
             coordinator?.isUnattended(runID: runID) == true
         }
@@ -385,6 +392,7 @@ final class AppState {
             interaction: chat.interaction,
             permissions: permissions,
             appAuthorization: computerUseAppAuthorization,
+            userQuestions: userQuestions,
             runtimeEvents: runtimeEvents,
             providers: providers,
             modelGroups: modelGroups,
@@ -540,6 +548,11 @@ final class AppState {
             if let id, !ids.contains(id) { ids.append(id) }
         }
         return ids
+    }
+
+    /// Conversations whose run waits for the user's answer to a question card, oldest card first.
+    var conversationsAwaitingAnswer: [UUID] {
+        userQuestions.pending.values.sorted { $0.presentedAt < $1.presentedAt }.map(\.conversationID)
     }
 
     /// Brings a conversation in front of the user: the window already showing it, else the

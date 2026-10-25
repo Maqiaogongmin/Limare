@@ -8,6 +8,8 @@ import SwiftUI
 struct ConversationApprovalArea: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowSession.self) private var window
+    /// A question card's questions scroll past this height.
+    var questionMaximumHeight: CGFloat = 400
 
     var body: some View {
         VStack(spacing: AppSpacing.small) {
@@ -18,6 +20,10 @@ struct ConversationApprovalArea: View {
             } else if let approval = appState.permissions.pendingApproval,
                       let conversationID = approval.conversationID, conversationID == window.conversationID {
                 ToolApprovalDecisionCard(approval: approval)
+            } else if let conversationID = window.conversationID,
+                      let question = appState.userQuestions.pending[conversationID] {
+                UserQuestionCard(question: question, maximumHeight: questionMaximumHeight)
+                    .id(question.id)
             }
         }
         .frame(maxWidth: AppLayout.transcriptMaximumWidth)
@@ -26,7 +32,8 @@ struct ConversationApprovalArea: View {
     }
 }
 
-/// Names the conversations waiting on an approval, other than `excluded`, and leads to the first.
+/// Names the conversations waiting on an approval, and those waiting for an answer, other than
+/// `excluded`, and leads to the first of each.
 struct ApprovalElsewhereNotice: View {
     @Environment(AppState.self) private var appState
     let excluded: UUID?
@@ -36,6 +43,37 @@ struct ApprovalElsewhereNotice: View {
     }
 
     var body: some View {
+        VStack(spacing: AppSpacing.xSmall) {
+            approvalLine
+            questionLine
+        }
+    }
+
+    @ViewBuilder
+    private var questionLine: some View {
+        if let first = appState.conversationsAwaitingAnswer.first(where: { $0 != excluded }) {
+            HStack(spacing: AppSpacing.small) {
+                Image(systemName: "questionmark.bubble.fill")
+                    .foregroundStyle(Color.accentColor)
+                Text("“\(title(of: first))” is waiting for your answer.")
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: AppSpacing.small)
+                Button("Show") { appState.reveal(conversationID: first) }
+                    .controlSize(.small)
+                    .accessibilityIdentifier("question.elsewhere.show")
+            }
+            .padding(.horizontal, AppSpacing.medium)
+            .padding(.vertical, AppSpacing.xSmall)
+            .background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: AppRadius.card))
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("question.elsewhere")
+        }
+    }
+
+    @ViewBuilder
+    private var approvalLine: some View {
         let waiting = appState.conversationsAwaitingApproval.filter { $0 != excluded }
         if let first = waiting.first {
             HStack(spacing: AppSpacing.small) {
@@ -187,7 +225,7 @@ private struct AppControlDecisionCard: View {
     }
 }
 
-private struct ApprovalCardContainer<Content: View>: View {
+struct ApprovalCardContainer<Content: View>: View {
     let tint: Color
     @ViewBuilder let content: Content
 

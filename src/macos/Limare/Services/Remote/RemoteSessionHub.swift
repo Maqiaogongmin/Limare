@@ -30,6 +30,7 @@ final class RemoteSessionHub: RemoteSessionEndpoint {
         var sentRunState: RemoteRunState?
         var sentSummaries: [UUID: RemoteConversationSummary] = [:]
         var sentApprovals: [RemoteApproval] = []
+        var sentQuestions: [RemoteQuestion] = []
         var sentProjects: [RemoteProjectSummary] = []
         var sentModels: RemoteModelCatalog?
         var sentSettings: RemoteConversationSettings?
@@ -49,6 +50,7 @@ final class RemoteSessionHub: RemoteSessionEndpoint {
     private let interaction: ConversationInteractionService
     private let permissions: PermissionStore
     private let appAuthorization: ComputerUseAppAuthorizationStore
+    private let userQuestions: UserQuestionStore?
     private let runtimeEvents: RuntimeEventStore
     private let providers: ProviderStore
     private let modelGroups: ModelGroupStore?
@@ -81,6 +83,7 @@ final class RemoteSessionHub: RemoteSessionEndpoint {
         interaction: ConversationInteractionService,
         permissions: PermissionStore,
         appAuthorization: ComputerUseAppAuthorizationStore,
+        userQuestions: UserQuestionStore? = nil,
         runtimeEvents: RuntimeEventStore,
         providers: ProviderStore,
         modelGroups: ModelGroupStore?,
@@ -94,6 +97,7 @@ final class RemoteSessionHub: RemoteSessionEndpoint {
         self.interaction = interaction
         self.permissions = permissions
         self.appAuthorization = appAuthorization
+        self.userQuestions = userQuestions
         self.runtimeEvents = runtimeEvents
         self.providers = providers
         self.modelGroups = modelGroups
@@ -140,14 +144,16 @@ final class RemoteSessionHub: RemoteSessionEndpoint {
         clients[connection.id] = client
         let summaries = currentSummaries()
         let approvals = currentApprovals()
+        let questions = currentQuestions()
         let projects = currentProjects()
         let models = currentModels()
         client.sentSummaries = Dictionary(uniqueKeysWithValues: summaries.map { ($0.id, $0) })
         client.sentApprovals = approvals
+        client.sentQuestions = questions
         client.sentProjects = projects
         client.sentModels = models
         let bytes = send(.hello(connectionID: connection.id, conversations: summaries, projects: projects, models: models, approvals: approvals,
-                                commands: RemoteProjection.commands), to: client)
+                                questions: questions, commands: RemoteProjection.commands), to: client)
         logs.info("Remote", "Client connected (\(clients.count) open); sent the list of \(summaries.count) conversations, \(bytes / 1024) KB.")
     }
 
@@ -231,6 +237,21 @@ final class RemoteSessionHub: RemoteSessionEndpoint {
                 appAuthorization.resolvePendingApproval(id: id, approved: approved)
                 reply = (nil, nil, nil)
             }
+        case .answerQuestion(let id, let skip, let answers):
+            // The store checks the card and the answers, the same as for the Mac card.
+            do {
+                guard let userQuestions else { throw UserQuestionError.notPending }
+                if skip {
+                    try userQuestions.skip(id: id)
+                } else {
+                    try userQuestions.answer(id: id, answers: answers.map { UserQuestionAnswer(selectedLabels: $0.selectedLabels, otherText: $0.otherText) })
+                }
+                reply = (nil, nil, nil)
+            } catch UserQuestionError.notPending {
+                reply = ("questionNotPending", nil, nil)
+            } catch {
+                reply = ("invalidAnswer", nil, nil)
+            }
         }
         send(.commandResult(requestID: frame.requestID, ok: reply.error == nil, error: reply.error,
                             admission: reply.admission, conversationID: reply.conversationID), to: client)
@@ -257,6 +278,7 @@ final class RemoteSessionHub: RemoteSessionEndpoint {
         let summaries = currentSummaries()
         let summariesByID = Dictionary(uniqueKeysWithValues: summaries.map { ($0.id, $0) })
         let approvals = currentApprovals()
+        let questions = currentQuestions()
         let projects = currentProjects()
         let models = currentModels()
         for client in clients.values {
@@ -277,6 +299,10 @@ final class RemoteSessionHub: RemoteSessionEndpoint {
             if approvals != client.sentApprovals {
                 client.sentApprovals = approvals
                 send(.approvalsChanged(approvals: approvals), to: client)
+            }
+            if questions != client.sentQuestions {
+                client.sentQuestions = questions
+                send(.questionsChanged(questions: questions), to: client)
             }
             if let id = client.openConversationID {
                 guard let record = visibleRecord(id) else {
@@ -394,6 +420,7 @@ final class RemoteSessionHub: RemoteSessionEndpoint {
             for id in runs.activeRuns.keys { _ = runs.isPausing(conversationID: id) }
             _ = permissions.pendingApproval
             _ = appAuthorization.pendingApproval
+            _ = userQuestions?.pending
             _ = runtimeEvents.eventsByRun
             // Everything the project list and the model menu are computed from.
             _ = currentProjects()
@@ -637,7 +664,8 @@ final class RemoteSessionHub: RemoteSessionEndpoint {
             record,
             projectName: conversations.project(for: record)?.name,
             run: badge,
-            hasPendingApproval: waiting
+            hasPendingApproval: waiting,
+            hasPendingQuestion: userQuestions?.pending[record.id] != nil
         )
     }
 
@@ -650,6 +678,12 @@ final class RemoteSessionHub: RemoteSessionEndpoint {
             queuedCount: runs.queuedInputCount(for: conversationID),
             queueHeld: runs.isQueueHeld(for: conversationID)
         )
+    }
+
+    /// Every waiting question card, oldest first.
+    private func currentQuestions() -> [RemoteQuestion] {
+        guard let userQuestions else { return [] }
+        return userQuestions.pending.values.sorted { $0.presentedAt < $1.presentedAt }.map(RemoteProjection.question)
     }
 
     /// Both approval owners' presented requests, the Computer Use app first (as the Mac shows them).

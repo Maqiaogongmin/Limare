@@ -28,6 +28,8 @@ struct HookToolCompatibility {
             return "read_image"
         case "model_use":
             return "model_use"
+        case "ask_user_question":
+            return "AskUserQuestion"
         default:
             return nativeToolName
         }

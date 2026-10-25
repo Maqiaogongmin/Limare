@@ -238,37 +238,12 @@ struct ComposerView: View {
                     }
 
                     if appState.voiceInput.isTarget(window.chat), let errorMsg = appState.voiceInput.errorMessage, !appState.voiceInput.state.isActive {
-                        HStack(spacing: 6) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.system(size: 10))
-                                .foregroundStyle(.orange)
-                            Text(errorMsg)
-                                .font(.caption2)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                                .foregroundStyle(.secondary)
-                            if appState.voiceInput.isPermissionDenied {
-                                Button("Open Settings") {
-                                    PrivacySettingsOpener.openMicrophoneSettings()
-                                }
-                                .font(.caption2.bold())
-                                .buttonStyle(.plain)
-                                .foregroundStyle(Color.accentColor)
-                            }
-                            Button {
-                                appState.voiceInput.clearError()
-                            } label: {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 8, weight: .bold))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                            .help("Dismiss error")
-                        }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(AppColors.statusWarning.opacity(0.1))
-                        .clipShape(Capsule())
+                        VoiceErrorCapsule(
+                            message: errorMsg,
+                            actionTitle: appState.voiceInput.isPermissionDenied ? "Open Settings" : nil,
+                            onAction: { PrivacySettingsOpener.openMicrophoneSettings() },
+                            onDismiss: { appState.voiceInput.clearError() }
+                        )
                     }
 
                     ComposerSubagentControl()
@@ -482,6 +457,46 @@ struct ComposerView: View {
             get: { window.chat.draft },
             set: { window.chat.draft = $0 }
         )
+    }
+}
+
+/// A voice input or read-aloud failure, beside the control that failed: one line, the full text
+/// on hover, an optional fix action and a dismiss button.
+struct VoiceErrorCapsule: View {
+    let message: String
+    var actionTitle: String? = nil
+    var onAction: () -> Void = {}
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 10))
+                .foregroundStyle(.orange)
+            Text(message)
+                .font(.caption2)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .foregroundStyle(.secondary)
+                .help(message)
+            if let actionTitle {
+                Button(actionTitle, action: onAction)
+                    .font(.caption2.bold())
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+            }
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Dismiss error")
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(AppColors.statusWarning.opacity(0.1))
+        .clipShape(Capsule())
     }
 }
 
@@ -890,7 +905,8 @@ private struct ComposerRunControls: View {
                 .animation(AppMotion.resolved(AppMotion.quick), value: canSend)
         }
         .buttonStyle(.plain)
-        .keyboardShortcut(.return, modifiers: .command)
+        // No window-wide ⌘↩: the draft editor sends on ⌘↩ itself, and a question card's
+        // Other field takes ⌘↩ to submit the card instead of sending the composer's draft.
         .disabled(!canSend)
         .help(sendButtonHelpText)
         .accessibilityLabel(sendButtonAccessibilityLabel)

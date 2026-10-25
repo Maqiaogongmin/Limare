@@ -82,6 +82,10 @@ struct RunTraceProjection: Sendable {
            !events.contains(where: { $0.sequence > request.sequence && ["permission.approved", "permission.denied", "permission.cancelled"].contains($0.kind) && $0.metadata["toolCallID"] == request.metadata["toolCallID"] }) {
             return "Waiting for approval"
         }
+        if let question = events.last(where: { $0.kind == "question.presented" }),
+           !events.contains(where: { $0.sequence > question.sequence && ["question.answered", "question.skipped", "question.superseded", "question.cancelled"].contains($0.kind) && $0.metadata["toolCallID"] == question.metadata["toolCallID"] }) {
+            return "Waiting for your answer"
+        }
         if events.last(where: { $0.domain == .run })?.kind == "run.paused" { return "Paused" }
         if let started = events.last(where: { $0.kind == "tool.started" }),
            !events.contains(where: { $0.sequence > started.sequence && ["tool.completed", "tool.failed"].contains($0.kind) && $0.metadata["toolCallID"] == started.metadata["toolCallID"] }) {

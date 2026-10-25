@@ -211,6 +211,7 @@ final class ChatStore {
         self.runCoordinator = coordinator
         self.interaction = ConversationInteractionService(
             runs: coordinator,
+            userQuestions: toolExecutor.userQuestions,
             providers: providers,
             modelGroups: modelGroups,
             visionGroupResolver: resolver,

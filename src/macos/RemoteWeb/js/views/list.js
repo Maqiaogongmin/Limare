@@ -15,6 +15,7 @@ function row(c) {
   return h('button', { class: 'conv', onclick: () => { location.hash = `#/c/${c.id}`; } },
     h('span', { class: 'conv-title' }, c.title || '新对话'),
     c.hasPendingApproval ? h('span', { class: 'badge approval' }, '待批准') : null,
+    c.hasPendingQuestion ? h('span', { class: 'badge question' }, '待回答') : null,
     runBadge(c.run),
     h('span', { class: 'conv-time' }, c.isPinned ? '置顶' : relativeTime(c.updatedAt)));
 }

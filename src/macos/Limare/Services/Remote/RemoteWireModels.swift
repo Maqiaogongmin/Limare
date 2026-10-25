@@ -10,9 +10,11 @@ import UniformTypeIdentifiers
 // conversation carries its compaction lines.
 // v5: the files a message shows as cards (its attachments, a turn's deliverables, a file tool's
 // target) are `RemoteFile`s, read at `GET /files/<conversation>/<source>/<id>`.
+// v7: question cards (`ask_user_question`): `hello` and `questions.changed` carry the waiting
+// cards, `question.answer` answers or skips one, and a conversation summary says it waits.
 
 enum RemoteWire {
-    static let protocolVersion = 6
+    static let protocolVersion = 7
     /// The longest input text a client may submit.
     static let maxInputCharacters = 64 * 1024
     static let maxRequestIDLength = 64
@@ -43,6 +45,7 @@ struct RemoteConversationSummary: Codable, Equatable, Sendable {
     let isPinned: Bool
     let run: RunBadge?
     let hasPendingApproval: Bool
+    let hasPendingQuestion: Bool
 }
 
 struct RemoteProjectSummary: Codable, Equatable, Sendable {
@@ -303,6 +306,32 @@ struct RemoteApproval: Codable, Equatable, Sendable {
     let bundleID: String?
 }
 
+/// A question card a run waits on (`ask_user_question`).
+struct RemoteQuestion: Codable, Equatable, Sendable {
+    struct Item: Codable, Equatable, Sendable {
+        struct Option: Codable, Equatable, Sendable {
+            let label: String
+            let description: String
+        }
+
+        let header: String
+        let question: String
+        let multiSelect: Bool
+        let options: [Option]
+    }
+
+    let id: UUID
+    let conversationID: UUID
+    let conversationTitle: String?
+    let questions: [Item]
+}
+
+/// The answer to one question of a card: its selected labels and, when Other is chosen, the text.
+struct RemoteQuestionAnswer: Codable, Equatable, Sendable {
+    let selectedLabels: [String]
+    let otherText: String?
+}
+
 // MARK: - Client → server
 
 enum RemoteCommand: Equatable, Sendable {
@@ -326,6 +355,8 @@ enum RemoteCommand: Equatable, Sendable {
     case resumeQueue(UUID)
     case clearQueue(UUID)
     case resolveApproval(kind: RemoteApproval.Kind, id: UUID, approved: Bool)
+    /// `skip` ends the card unanswered; otherwise `answers` has one answer per question.
+    case answerQuestion(id: UUID, skip: Bool, answers: [RemoteQuestionAnswer])
 
     var name: String {
         switch self {
@@ -341,6 +372,7 @@ enum RemoteCommand: Equatable, Sendable {
         case .resumeQueue: "queue.resume"
         case .clearQueue: "queue.clear"
         case .resolveApproval: "approval.resolve"
+        case .answerQuestion: "question.answer"
         }
     }
 }
@@ -358,7 +390,7 @@ struct RemoteCommandFrame: Decodable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case type, requestID, conversationID, beforeMessageID, projectID, text, mode, kind, approvalID, approved
-        case attachmentIDs, model, thinking, level, attachmentID
+        case attachmentIDs, model, thinking, level, attachmentID, questionID, skip, answers
     }
 
     init(from decoder: Decoder) throws {
@@ -417,6 +449,16 @@ struct RemoteCommandFrame: Decodable, Equatable, Sendable {
                 id: try container.decode(UUID.self, forKey: .approvalID),
                 approved: try container.decode(Bool.self, forKey: .approved)
             )
+        case "question.answer":
+            let answers = try container.decodeIfPresent([RemoteQuestionAnswer].self, forKey: .answers) ?? []
+            guard answers.count <= 4, answers.allSatisfy({ $0.selectedLabels.count <= 4 && ($0.otherText?.count ?? 0) <= RemoteWire.maxInputCharacters }) else {
+                throw DecodingError.dataCorruptedError(forKey: .answers, in: container, debugDescription: "answers exceed the card's limits")
+            }
+            command = .answerQuestion(
+                id: try container.decode(UUID.self, forKey: .questionID),
+                skip: try container.decode(Bool.self, forKey: .skip),
+                answers: answers
+            )
         default:
             throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "unknown command '\(type)'")
         }
@@ -429,7 +471,7 @@ enum RemoteServerEvent: Encodable, Equatable, Sendable {
     /// Sent once when a connection opens: everything the list, the composer menus and the approval
     /// layer need. `connectionID` names this connection to `POST /attachments`.
     case hello(connectionID: UUID, conversations: [RemoteConversationSummary], projects: [RemoteProjectSummary],
-               models: RemoteModelCatalog, approvals: [RemoteApproval], commands: [RemoteComposerCommand])
+               models: RemoteModelCatalog, approvals: [RemoteApproval], questions: [RemoteQuestion], commands: [RemoteComposerCommand])
     /// The open conversation from its latest page on: on open, and whenever the messages the
     /// client has changed other than by appending. `hasEarlier` says older messages exist.
     case conversationSnapshot(conversation: RemoteConversationSummary, messages: [RemoteMessage], hasEarlier: Bool, runState: RemoteRunState,
@@ -444,10 +486,12 @@ enum RemoteServerEvent: Encodable, Equatable, Sendable {
     case messageUpsert(conversationID: UUID, message: RemoteMessage)
     case runChanged(conversationID: UUID, runState: RemoteRunState)
     case approvalsChanged(approvals: [RemoteApproval])
+    /// Every waiting question card, oldest first: sent when one appears or ends.
+    case questionsChanged(questions: [RemoteQuestion])
     case commandResult(requestID: String, ok: Bool, error: String?, admission: String?, conversationID: UUID?)
 
     private enum CodingKeys: String, CodingKey {
-        case type, protocolVersion, connectionID, conversations, projects, models, approvals, commands, conversation, messages, hasEarlier, runState, settings
+        case type, protocolVersion, connectionID, conversations, projects, models, approvals, questions, commands, conversation, messages, hasEarlier, runState, settings
         case compactions
         case upserts, removed, conversationID, message, requestID, ok, error, admission
     }
@@ -455,7 +499,7 @@ enum RemoteServerEvent: Encodable, Equatable, Sendable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         switch self {
-        case .hello(let connectionID, let conversations, let projects, let models, let approvals, let commands):
+        case .hello(let connectionID, let conversations, let projects, let models, let approvals, let questions, let commands):
             try container.encode("hello", forKey: .type)
             try container.encode(RemoteWire.protocolVersion, forKey: .protocolVersion)
             try container.encode(connectionID, forKey: .connectionID)
@@ -463,6 +507,7 @@ enum RemoteServerEvent: Encodable, Equatable, Sendable {
             try container.encode(projects, forKey: .projects)
             try container.encode(models, forKey: .models)
             try container.encode(approvals, forKey: .approvals)
+            try container.encode(questions, forKey: .questions)
             try container.encode(commands, forKey: .commands)
         case .conversationSnapshot(let conversation, let messages, let hasEarlier, let runState, let settings, let compactions):
             try container.encode("conversation.snapshot", forKey: .type)
@@ -506,6 +551,9 @@ enum RemoteServerEvent: Encodable, Equatable, Sendable {
         case .approvalsChanged(let approvals):
             try container.encode("approvals.changed", forKey: .type)
             try container.encode(approvals, forKey: .approvals)
+        case .questionsChanged(let questions):
+            try container.encode("questions.changed", forKey: .type)
+            try container.encode(questions, forKey: .questions)
         case .commandResult(let requestID, let ok, let error, let admission, let conversationID):
             try container.encode("command.result", forKey: .type)
             try container.encode(requestID, forKey: .requestID)

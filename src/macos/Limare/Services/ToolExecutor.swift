@@ -51,7 +51,7 @@ final class ToolExecutor {
     nonisolated static let builtInToolNames: Set<String> = [
         "delegation_result", "shell_execute", "file_read", "file_list", "file_search", "file_write", "file_edit",
         "read_image", "model_use", "browser_use", "delegate_task", "delegation_control", "update_plan",
-        "attachment_copy", "resource_convert", "artifact_acquire", "artifact_register", "tool_result_read", "computer_use",
+        "ask_user_question", "attachment_copy", "resource_convert", "artifact_acquire", "artifact_register", "tool_result_read", "computer_use",
         "mcp_manage", "schedule_manage"
     ]
 
@@ -104,6 +104,8 @@ final class ToolExecutor {
 
     private let workspace: WorkspaceStore
     private let permissions: PermissionStore
+    /// The question cards `ask_user_question` waits on; nil leaves the tool without anyone to ask.
+    let userQuestions: UserQuestionStore?
     private let logs: DebugLogStore
     private let shellRunner: ShellRunner
     private let files: FileToolService
@@ -148,6 +150,7 @@ final class ToolExecutor {
     init(
         workspace: WorkspaceStore,
         permissions: PermissionStore,
+        userQuestions: UserQuestionStore? = nil,
         logs: DebugLogStore,
         shellRunner: ShellRunner = ShellRunner(),
         files: FileToolService = FileToolService(),
@@ -172,6 +175,7 @@ final class ToolExecutor {
     ) {
         self.workspace = workspace
         self.permissions = permissions
+        self.userQuestions = userQuestions
         self.logs = logs
         self.shellRunner = shellRunner
         self.files = files
@@ -245,6 +249,7 @@ final class ToolExecutor {
         let scoped = ToolExecutor(
             workspace: workspace,
             permissions: permissions,
+            userQuestions: userQuestions,
             logs: logs,
             shellRunner: shellRunner,
             files: files,
@@ -392,6 +397,8 @@ final class ToolExecutor {
                     outcome = try await executeDelegationControl(call, onUpdate: trackedUpdate)
                 case "update_plan":
                     outcome = try executeUpdatePlan(call, onUpdate: trackedUpdate)
+                case "ask_user_question":
+                    outcome = try await executeAskUserQuestion(call, onUpdate: trackedUpdate)
                 case "attachment_copy":
                     outcome = try await executeAttachmentCopy(call, onUpdate: trackedUpdate)
                 case "resource_convert":
@@ -1203,6 +1210,47 @@ final class ToolExecutor {
         return .init(content: "Plan updated", isError: false, approvalState: .notRequired, durationMilliseconds: 0)
     }
 
+    private struct AskUserQuestionArguments: Decodable {
+        struct Question: Decodable {
+            struct Option: Decodable { let label: String; let description: String }
+            let question: String
+            let header: String
+            let options: [Option]
+            let multiSelect: Bool?
+        }
+        let questions: [Question]
+    }
+
+    /// ask_user_question as Claude Code's AskUserQuestion: a card this run waits on until the user
+    /// answers, skips or sends a new message. Only a conversation's own attended run has someone to ask.
+    private func executeAskUserQuestion(_ call: ProviderToolCall, onUpdate: @escaping UpdateHandler) async throws -> ToolExecutionOutcome {
+        let started = ContinuousClock.now
+        let args: AskUserQuestionArguments = try decode(call)
+        let questions = args.questions.map { question in
+            UserQuestion(question: question.question, header: question.header,
+                         options: question.options.map { UserQuestion.Option(label: $0.label, description: $0.description) },
+                         multiSelect: question.multiSelect ?? false)
+        }
+        if let problem = UserQuestion.validationProblem(questions) {
+            throw ToolExecutorError.invalidArguments(problem)
+        }
+        guard let userQuestions, let scope = hookExecutionScope, userQuestions.isUnattendedRun?(scope.runID) != true else {
+            onUpdate(.init(state: .failed, approvalState: .notRequired, output: UserQuestionText.refusal))
+            return .init(content: UserQuestionText.refusal, isError: true, approvalState: .notRequired, durationMilliseconds: milliseconds(since: started))
+        }
+        onUpdate(.init(state: .running, approvalState: .notRequired, output: UserQuestionText.pendingOutput(questions: questions)))
+        let resolution = await userQuestions.ask(PendingUserQuestion(
+            conversationID: scope.conversationID, runID: scope.runID, providerCallID: call.id,
+            conversationTitle: scope.conversationTitle, questions: questions))
+        // A stopped run takes the shared cancellation path.
+        guard let content = UserQuestionText.modelContent(questions: questions, resolution: resolution) else {
+            throw CancellationError()
+        }
+        // The record's output is what later requests send the model, so it holds the same text.
+        onUpdate(.init(state: .completed, approvalState: .notRequired, output: content))
+        return .init(content: content, isError: false, approvalState: .notRequired, durationMilliseconds: milliseconds(since: started))
+    }
+
     private struct NativeControlArguments: Decodable {
         let action: String
         let task_id: UUID?
@@ -2010,6 +2058,7 @@ final class ToolExecutor {
     func cancelPendingApprovalsForScope() {
         guard let scope = hookExecutionScope else { return }
         permissions.cancelQueuedApprovals(conversationID: scope.conversationID, runID: scope.runID)
+        userQuestions?.cancel(conversationID: scope.conversationID, runID: scope.runID)
     }
 
     private var lastDenialReason: String?

@@ -6,6 +6,9 @@ struct ChatView: View {
     @AppStorage("limare.worksurface.width") private var workSurfaceWidth: Double = Double(AppLayout.workSurfaceIdealWidth)
     /// The user message whose undo is being previewed.
     @State private var pendingUndo: UndoRequest?
+    /// Where the Work Surface sheet sits, for the breadcrumb to stop short of it. An object this
+    /// body never reads from, so a sheet that moves re-renders the breadcrumb, not the chat.
+    @State private var titleBar = TitleBarLayout()
     /// Read so toggling the experimental switch re-evaluates which message offers retraction.
 
     var body: some View {
@@ -36,6 +39,10 @@ struct ChatView: View {
                     let risesIntoTitleBar = !coversChat || geometry.frame(in: .global).minX > 1
 
                     WorkSurfaceView()
+                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { [titleBar] in
+                            titleBar.workSurfaceFrame = $0
+                        }
+                        .onDisappear { [titleBar] in titleBar.workSurfaceFrame = nil }
                         // A sheet inset on the canvas: clear of the window's edges, and of the
                         // chat's edge when it covers the chat.
                         .padding(.top, risesIntoTitleBar ? AppSpacing.workSurfaceTopInset : AppSpacing.workSurfaceInset)
@@ -105,10 +112,7 @@ struct ChatView: View {
             let title = Text(verbatim: conversation.title)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Color.primary)
-            Text("\(prefix)\(title)")
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .accessibilityAddTraits(.isHeader)
+            TitleBreadcrumb(text: Text("\(prefix)\(title)"), titleBar: titleBar)
         }
     }
 
@@ -162,7 +166,7 @@ struct ChatView: View {
 
                 UndoPlanBanner()
 
-                ConversationApprovalArea()
+                ConversationApprovalArea(questionMaximumHeight: proxy.size.height * 0.6)
 
                 if let child = window.conversation, child.isNativeDelegationChild {
                     NativeChildInteractionView(conversationID: child.id)
@@ -235,6 +239,51 @@ struct ChatView: View {
                     .frame(height: AppLayout.scrollEdgeFade)
             }
         )
+    }
+}
+
+/// The Work Surface sheet's frame in window coordinates, while it is shown.
+@MainActor
+@Observable
+private final class TitleBarLayout {
+    var workSurfaceFrame: CGRect?
+}
+
+/// The breadcrumb in the title bar, stopping short of the Work Surface sheet where the sheet
+/// shares the title bar's height with it, hidden where the sheet covers where it starts.
+///
+/// The full title, hidden, sets the toolbar item's width, and the shown title is truncated over
+/// it. The toolbar centres its item's content, so a breadcrumb that narrowed itself would move
+/// right by half of what it gave up, read less room from its new place and narrow again, never
+/// settling, and it would keep the whole window rendering.
+private struct TitleBreadcrumb: View {
+    let text: Text
+    let titleBar: TitleBarLayout
+    @State private var frame: CGRect?
+
+    var body: some View {
+        text
+            .lineLimit(1)
+            .hidden()
+            .overlay(alignment: .leading) {
+                let width = room
+                text
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .accessibilityAddTraits(.isHeader)
+                    .frame(maxWidth: width, alignment: .leading)
+                    .opacity(width == 0 ? 0 : 1)
+            }
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame = $0 }
+    }
+
+    /// Up to the sheet, less a margin; none when that leaves too little; unlimited when the
+    /// sheet is elsewhere.
+    private var room: CGFloat? {
+        guard let sheet = titleBar.workSurfaceFrame, let frame,
+              sheet.minY < frame.maxY, sheet.maxX > frame.minX else { return nil }
+        let room = sheet.minX - frame.minX - AppSpacing.medium
+        return room < AppSpacing.xLarge ? 0 : room
     }
 }
 

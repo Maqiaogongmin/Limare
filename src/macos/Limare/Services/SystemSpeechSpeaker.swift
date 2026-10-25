@@ -3,6 +3,8 @@ import AVFoundation
 
 public protocol SystemSpeechSpeaking: AnyObject, Sendable {
     func speak(text: String) async throws
+    func pause()
+    func resume()
     func stop()
 }
 
@@ -12,6 +14,7 @@ public final class SystemSpeechSpeaker: NSObject, SystemSpeechSpeaking, AVSpeech
     private var activeContinuation: CheckedContinuation<Void, Error>?
     private var activeUtteranceID: ObjectIdentifier?
     private var isCurrentlySpeaking = false
+    private var isPaused = false
 
     public override init() {
         super.init()
@@ -19,7 +22,7 @@ public final class SystemSpeechSpeaker: NSObject, SystemSpeechSpeaking, AVSpeech
     }
 
     public func speak(text: String) async throws {
-        stop()
+        stopCurrent()
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -36,13 +39,40 @@ public final class SystemSpeechSpeaker: NSObject, SystemSpeechSpeaking, AVSpeech
                 lock.unlock()
 
                 synthesizer.speak(utterance)
+                lock.lock()
+                let paused = self.isPaused
+                lock.unlock()
+                if paused {
+                    synthesizer.pauseSpeaking(at: .immediate)
+                }
             }
         } onCancel: {
             self.stop()
         }
     }
 
+    public func pause() {
+        lock.lock()
+        isPaused = true
+        lock.unlock()
+        synthesizer.pauseSpeaking(at: .immediate)
+    }
+
+    public func resume() {
+        lock.lock()
+        isPaused = false
+        lock.unlock()
+        synthesizer.continueSpeaking()
+    }
+
     public func stop() {
+        lock.lock()
+        isPaused = false
+        lock.unlock()
+        stopCurrent()
+    }
+
+    private func stopCurrent() {
         lock.lock()
         let continuation = activeContinuation
         activeContinuation = nil

@@ -124,6 +124,8 @@ final class ConversationInteractionService {
     }
 
     private(set) var runs: ConversationRunCoordinator
+    /// The question card a steered message answers in its place.
+    private let userQuestions: UserQuestionStore?
     private weak var conversationStore: ConversationStore?
     private let providers: ProviderStore
     private let modelGroups: ModelGroupStore?
@@ -132,12 +134,14 @@ final class ConversationInteractionService {
 
     init(
         runs: ConversationRunCoordinator,
+        userQuestions: UserQuestionStore? = nil,
         providers: ProviderStore,
         modelGroups: ModelGroupStore?,
         visionGroupResolver: VisionGroupResolver,
         logs: DebugLogStore
     ) {
         self.runs = runs
+        self.userQuestions = userQuestions
         self.providers = providers
         self.modelGroups = modelGroups
         self.visionGroupResolver = visionGroupResolver
@@ -270,6 +274,9 @@ final class ConversationInteractionService {
             case .steerOrSend:
                 let wasPausedOrPausing = runs.isPaused(conversationID: conversationID) || runs.isPausing(conversationID: conversationID)
                 if runs.steer(conversationID: conversationID, message: userMessage) {
+                    // Only once the message is saved: a card waiting in this run ends unanswered,
+                    // and the message reaches the model right after that tool result.
+                    userQuestions?.supersede(conversationID: conversationID)
                     adoptModelSource(modelSource, for: existing)
                     if wasPausedOrPausing {
                         runs.markResumingFromNewMessage(conversationID: conversationID)

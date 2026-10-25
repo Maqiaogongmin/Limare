@@ -60,3 +60,11 @@ website/public/download/
 
 # Generated Python bytecode from release tooling.
 __pycache__/
+
+# Promo videos are kept outside git; the site does not ship them, and website/ is exported
+# to the public repo.
+website/**/*.mp4
+website/**/*.mov
+
+# LLVM profile output from instrumented builds launched in the repo.
+*.profraw

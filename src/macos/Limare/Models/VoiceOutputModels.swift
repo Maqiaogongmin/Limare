@@ -4,6 +4,11 @@ public enum VoiceOutputDefaults {
     public static let cloudVoice = "alloy"
     public static let responseFormat = "mp3"
     public static let maxChunkCharacters = 3500
+    /// The first cloud chunk is kept short so audio starts after one quick request; each later
+    /// chunk may grow by `chunkGrowthFactor` (up to the provider limit) because it is
+    /// synthesized in the background while the previous one plays.
+    public static let firstChunkCharacters = 200
+    public static let chunkGrowthFactor = 2
     public static let maxSegmentBytes: Int64 = 25 * 1024 * 1024 // 25 MB
 }
 
@@ -15,6 +20,8 @@ public enum VoiceOutputError: LocalizedError, Equatable, Sendable {
     case synthesisFailed(String)
     case networkError(String)
     case playbackFailed(String)
+    /// A later chunk failed after earlier parts were already spoken.
+    case partFailed(part: Int, total: Int, reason: String)
     case cancelled
 
     public var errorDescription: String? {
@@ -31,6 +38,8 @@ public enum VoiceOutputError: LocalizedError, Equatable, Sendable {
             return "Network error during voice synthesis: \(reason)"
         case .playbackFailed(let reason):
             return "Audio playback failed: \(reason)"
+        case .partFailed(let part, let total, let reason):
+            return "Stopped reading at part \(part)/\(total): \(reason)"
         case .cancelled:
             return "Voice output was cancelled."
         }
@@ -42,6 +51,7 @@ public enum VoiceOutputState: Equatable, Sendable {
     case idle
     case preparing(messageID: UUID)
     case playing(messageID: UUID, engineLabel: String)
+    case paused(messageID: UUID, engineLabel: String)
     case failed(messageID: UUID, message: String)
 
     public var isPreparing: Bool {
@@ -54,9 +64,14 @@ public enum VoiceOutputState: Equatable, Sendable {
         return false
     }
 
+    public var isPaused: Bool {
+        if case .paused = self { return true }
+        return false
+    }
+
     public var activeMessageID: UUID? {
         switch self {
-        case .preparing(let id), .playing(let id, _):
+        case .preparing(let id), .playing(let id, _), .paused(let id, _):
             return id
         case .idle, .failed:
             return nil
@@ -64,14 +79,24 @@ public enum VoiceOutputState: Equatable, Sendable {
     }
 }
 
+/// A cloud candidate that synthesized the first chunk. The remaining chunks are synthesized
+/// with the same candidate while earlier audio plays, so a long message starts speaking after
+/// one short request instead of after the whole text.
+public struct CloudVoiceSynthesis: Sendable {
+    public let providerID: UUID
+    public let modelID: String
+    public let label: String
+    public let chunks: [String]
+    public let firstSegment: Data
+    /// Synthesizes and validates one chunk with this candidate.
+    public let synthesize: @Sendable (String) async throws -> Data
+
+    public var remainingChunks: ArraySlice<String> { chunks.dropFirst() }
+}
+
 /// Synthesis output prepared for playback.
 public enum PreparedVoiceOutput: Sendable {
-    case cloud(
-        segments: [Data],
-        providerID: UUID,
-        modelID: String,
-        label: String
-    )
+    case cloud(CloudVoiceSynthesis)
     case system(
         text: String,
         fallbackReason: String? = nil

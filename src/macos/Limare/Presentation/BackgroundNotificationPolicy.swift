@@ -5,6 +5,8 @@ import Foundation
 enum BackgroundNotificationPolicy {
     enum Event: Equatable {
         case approvalRequested
+        /// A run waits for the user's answer to a question card.
+        case questionRequested
         case runFinished(status: ConversationRunStatus, duration: TimeInterval)
         /// A scheduled run ended. Not held to `minimumRunDuration`: the user asked for this result.
         case scheduledRunFinished(taskName: String, status: ScheduledRun.Status, isCatchUp: Bool, notifyOn: ScheduledTask.NotifyOn)
@@ -23,7 +25,7 @@ enum BackgroundNotificationPolicy {
     ) -> Bool {
         guard isEnabled, !isAppActive else { return false }
         switch event {
-        case .approvalRequested:
+        case .approvalRequested, .questionRequested:
             return true
         case .runFinished(let status, let duration):
             switch status {
@@ -53,6 +55,8 @@ enum BackgroundNotificationPolicy {
         switch event {
         case .approvalRequested:
             return "需要你的批准"
+        case .questionRequested:
+            return "需要你的决定"
         case .runFinished(let status, _):
             switch status {
             case .failed: return "任务失败"

@@ -101,7 +101,8 @@ enum RemoteProjection {
         _ record: ConversationRecord,
         projectName: String?,
         run: RemoteConversationSummary.RunBadge?,
-        hasPendingApproval: Bool
+        hasPendingApproval: Bool,
+        hasPendingQuestion: Bool = false
     ) -> RemoteConversationSummary {
         RemoteConversationSummary(
             id: record.id,
@@ -111,7 +112,8 @@ enum RemoteProjection {
             projectName: projectName,
             isPinned: record.isPinned,
             run: run,
-            hasPendingApproval: hasPendingApproval
+            hasPendingApproval: hasPendingApproval,
+            hasPendingQuestion: hasPendingQuestion
         )
     }
 
@@ -129,6 +131,18 @@ enum RemoteProjection {
             },
             queuedCount: queuedCount,
             queueHeld: queueHeld
+        )
+    }
+
+    static func question(_ pending: PendingUserQuestion) -> RemoteQuestion {
+        RemoteQuestion(
+            id: pending.id,
+            conversationID: pending.conversationID,
+            conversationTitle: pending.conversationTitle,
+            questions: pending.questions.map { item in
+                RemoteQuestion.Item(header: item.header, question: item.question, multiSelect: item.multiSelect,
+                                    options: item.options.map { .init(label: $0.label, description: $0.description) })
+            }
         )
     }
 

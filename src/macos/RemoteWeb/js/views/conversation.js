@@ -32,6 +32,7 @@ export class ConversationView {
     this.messages = h('div', { class: 'messages' }, h('div', { class: 'loading' }, '正在载入…'));
     this.runbar = h('div', { class: 'runbar', hidden: true });
     this.queuebar = h('div', { class: 'runbar queue', hidden: true });
+    this.questionSlot = h('div', { class: 'question-slot' }); // filled by renderQuestion
     this.composer = new Composer({ store, connection, conversationID, isActive: () => isActive(this.store.open && this.store.open.runState) });
     this.earlier = h('button', { class: 'earlier', type: 'button', hidden: true, onclick: () => this.loadEarlier() }, '加载更早的消息');
     this.messages.addEventListener('scroll', () => { this.loadEarlierIfNearTop(); this.updateFreeze(); }, { passive: true });
@@ -40,7 +41,7 @@ export class ConversationView {
       h('header', { class: 'topbar' },
         h('button', { class: 'back', 'aria-label': '返回', onclick: () => { location.hash = '#/'; } }, '‹'),
         h('div', { class: 'topbar-titles' }, this.title, this.project), this.badge),
-      this.messages, this.runbar, this.queuebar, this.composer.element);
+      this.messages, this.runbar, this.queuebar, this.questionSlot, this.composer.element);
     this.updateSummary();
     this.updateRun();
     if (!isMarkdownReady()) {

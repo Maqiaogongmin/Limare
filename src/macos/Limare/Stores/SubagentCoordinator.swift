@@ -71,7 +71,7 @@ final class SubagentCoordinator {
     /// Claude Code's Explore and Codex's explorer investigate with the shell (git log, grep, builds)
     /// as well as file reads; the shell runs under the parent's permission rules.
     static let researchTools: Set<String> = ["file_read", "file_list", "file_search", "read_image", "tool_result_read", "shell_execute"]
-    static let excludedFromChildren: Set<String> = ["delegate_task", "delegation_control", "computer_use"]
+    static let excludedFromChildren: Set<String> = ["delegate_task", "delegation_control", "computer_use", "ask_user_question"]
 
     /// Research investigates (and browses when the task allows the web) without the file
     /// editing tools; coding gets the parent's tools. No child delegates further or drives the desktop.
