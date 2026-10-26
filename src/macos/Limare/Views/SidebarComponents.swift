@@ -1,5 +1,35 @@
 import SwiftUI
 
+// MARK: - Floating Panel
+
+/// On macOS 26 and later the sidebar is a glass panel floating on the canvas, inset from the
+/// window's edges, rather than a column ruled off at the edge. The system draws its sidebar
+/// column flush, with no way to turn its background off, so the canvas covers it and the
+/// panel is drawn on top; the split view still sizes, collapses and restores the column.
+/// Its 1pt divider stays visible in the gap beside the panel: the detail column cannot draw
+/// past its own edge to cover it. Earlier systems keep the system sidebar.
+struct FloatingSidebarPanel: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            let panel = RoundedRectangle(cornerRadius: AppRadius.sidebarPanel, style: .continuous)
+            content
+                .scrollContentBackground(.hidden)
+                .padding([.horizontal, .bottom], AppSpacing.sidebarPanelInset)
+                .background {
+                    Color.clear
+                        .glassEffect(.regular, in: panel)
+                        .padding(.horizontal, AppSpacing.sidebarPanelInset)
+                        .padding(.bottom, AppSpacing.sidebarPanelInset)
+                        .padding(.top, AppSpacing.sidebarPanelTopInset)
+                        .ignoresSafeArea()
+                }
+                .background(AppColors.canvas.ignoresSafeArea())
+        } else {
+            content
+        }
+    }
+}
+
 // MARK: - Sidebar Row Container
 
 struct SidebarRowContainer<Content: View, Actions: View>: View {

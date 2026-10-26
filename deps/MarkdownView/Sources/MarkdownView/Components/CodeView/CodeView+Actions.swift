@@ -46,6 +46,7 @@ extension CodeView {
     /// another tap restarts the wait.
     func showCopyFeedback() {
         setCopySymbol(Self.copiedSymbol)
+        isShowingCopyFeedback = true
         schedule(#selector(resetCopyFeedback), after: Self.copyFeedbackDuration)
     }
 
@@ -54,6 +55,11 @@ extension CodeView {
     @objc func resetCopyFeedback() {
         cancelScheduled(#selector(resetCopyFeedback))
         setCopySymbol(Self.copySymbol)
+        // The controls stayed up for the checkmark; now they follow the pointer again.
+        if isShowingCopyFeedback {
+            isShowingCopyFeedback = false
+            updateControlsVisibility(animated: true)
+        }
     }
 
     /// Asks the provider for this block's buttons and rebuilds them.

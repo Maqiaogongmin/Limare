@@ -32,7 +32,7 @@ function build(card, connection) {
   const showHeaders = card.questions.length > 1; // as the Mac: one question needs no chip
   const states = card.questions.map((q, index) => buildQuestion(q, index, card.id, showHeaders, () => refresh()));
 
-  const skip = h('button', {}, '跳过');
+  const skip = h('button', { title: '不回答，结束这一轮，等你发消息' }, '跳过');
   const submit = h('button', { class: 'primary' }, '提交');
 
   const send = async (payload) => {

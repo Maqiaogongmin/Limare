@@ -78,6 +78,9 @@ struct LimareMarkdownRepresentable: NSViewRepresentable {
     /// Two tracks share one body: a conversation keeps its headings within a few points of the
     /// text, so they never crowd a narrow column; a document (a README in the Work Surface)
     /// gives them a wider ladder and more room above.
+    ///
+    /// Replies and documents are read in the bundled serif (`ReadingFont`); what a person typed
+    /// stays in the system font, so the two voices differ. Code is monospaced in all three.
     static func makeTheme(
         conversationPointSize: CGFloat,
         codePointSize: CGFloat,
@@ -85,29 +88,31 @@ struct LimareMarkdownRepresentable: NSViewRepresentable {
     ) -> MarkdownTheme {
         let size = conversationPointSize
         let isDocument = profile == .document
+        let isTyped = profile == .typed
         var theme = MarkdownTheme.default
-        theme.softBreaksAreLineBreaks = profile == .typed
+        theme.softBreaksAreLineBreaks = isTyped
 
-        theme.fonts.body = NSFont.systemFont(ofSize: size)
-        theme.fonts.bold = NSFont.boldSystemFont(ofSize: size)
-        theme.fonts.italic = theme.fonts.italic.withSize(size)
         // Inline code a step under the body, on a faint tint.
         theme.fonts.codeInline = NSFont.monospacedSystemFont(ofSize: size - 1.5, weight: .regular)
         theme.fonts.code = NSFont.monospacedSystemFont(ofSize: codePointSize, weight: .regular)
         theme.fonts.codeBlockLabel = NSFont.monospacedSystemFont(ofSize: codePointSize - 1.5, weight: .regular)
-        theme.headings = isDocument
-            ? [
-                .init(font: .systemFont(ofSize: size + 8, weight: .semibold), kern: -0.3),
-                .init(font: .systemFont(ofSize: size + 3.5, weight: .semibold)),
-                .init(font: .systemFont(ofSize: size + 1, weight: .semibold)),
-                .init(font: .systemFont(ofSize: size, weight: .semibold)),
-            ]
-            : [
-                .init(font: .systemFont(ofSize: size + 3, weight: .semibold)),
-                .init(font: .systemFont(ofSize: size + 1.5, weight: .semibold)),
-                .init(font: .systemFont(ofSize: size + 0.5, weight: .semibold)),
-                .init(font: .systemFont(ofSize: size, weight: .medium)),
-            ]
+        // The heading ladders, as offsets from the text size.
+        let headingSizes: [CGFloat] = isDocument ? [8, 3.5, 1, 0] : [3, 1.5, 0.5, 0]
+        if isTyped {
+            theme.fonts.body = NSFont.systemFont(ofSize: size)
+            theme.fonts.bold = NSFont.boldSystemFont(ofSize: size)
+            theme.fonts.italic = theme.fonts.italic.withSize(size)
+            theme.headings = headingSizes.enumerated().map { level, offset in
+                .init(font: .systemFont(ofSize: size + offset, weight: level == 3 ? .medium : .semibold))
+            }
+        } else {
+            theme.fonts.body = ReadingFont.regular(size: size)
+            theme.fonts.bold = ReadingFont.semibold(size: size)
+            // Upright: Chinese has no italic, and emphasis keeps its underline.
+            theme.fonts.italic = ReadingFont.regular(size: size)
+            // No tightened letter spacing: serif CJK crowds when kerned in.
+            theme.headings = headingSizes.map { .init(font: ReadingFont.semibold(size: size + $0)) }
+        }
         theme.fonts.title = theme.headings[0].font
         theme.fonts.largeTitle = theme.headings[0].font
 
@@ -121,10 +126,11 @@ struct LimareMarkdownRepresentable: NSViewRepresentable {
         theme.colors.emphasis = .tertiaryLabelColor
         theme.colors.code = Self.codeInk
         theme.colors.codeBackground = Self.inlineCodeInk
-        theme.colors.codeBlockBackground = Self.codeBlockFill
-        theme.colors.codeBlockBarBackground = Self.codeBlockBarFill
-        theme.colors.codeBlockBorder = Self.hairlineInk
-        theme.sizes.codeBlockCornerRadius = 10
+        // Code blocks are quiet on the paper: no fill, edge or bar, only a faint rule down the
+        // left; the language and the buttons appear while the pointer is over the block.
+        theme.codeBlockStyle = .rule
+        theme.showsCodeLineNumbers = false
+        theme.colors.codeBlockRule = Self.codeBlockRuleInk
         theme.sizes.bullet = 5
 
         theme.table.cornerRadius = 8
@@ -133,11 +139,40 @@ struct LimareMarkdownRepresentable: NSViewRepresentable {
         theme.table.headerBackgroundColor = Self.tableHeaderInk
         theme.table.stripeCellBackgroundColor = Self.tableStripeInk
 
-        theme.spacings.line = 5
-        theme.spacings.list = 4
-        theme.spacings.paragraph = 10
-        theme.spacings.headingBefore = isDocument ? 20 : 14
+        let rhythm = Rhythm.of(profile)
+        theme.spacings.line = rhythm.lineSpacing(for: theme.fonts.body)
+        theme.spacings.paragraph = (size * rhythm.paragraph).rounded()
+        theme.spacings.list = (size * rhythm.list).rounded()
+        theme.spacings.headingBefore = (size * rhythm.headingBefore).rounded()
         return theme
+    }
+
+    /// How loosely a profile is set, in multiples of the text size, so the spacing follows the
+    /// font and its size instead of fixed points. CJK reads best with lines about 1.7 times the
+    /// size apart; a typed bubble is a little tighter.
+    struct Rhythm {
+        /// The line height the leading makes up to.
+        let lineHeight: CGFloat
+        let paragraph: CGFloat
+        let list: CGFloat
+        let headingBefore: CGFloat
+
+        static func of(_ profile: LimareMarkdownView.Profile) -> Rhythm {
+            switch profile {
+            case .chat: Rhythm(lineHeight: 1.70, paragraph: 0.9, list: 0.45, headingBefore: 1.3)
+            case .document: Rhythm(lineHeight: 1.70, paragraph: 1.0, list: 0.45, headingBefore: 1.6)
+            case .typed: Rhythm(lineHeight: 1.50, paragraph: 0.9, list: 0.45, headingBefore: 1.3)
+            }
+        }
+
+        /// The leading that brings `font`'s own line height up to `lineHeight` times its size.
+        func lineSpacing(for font: NSFont) -> CGFloat {
+            max(0, (font.pointSize * lineHeight - Self.naturalLineHeight(of: font)).rounded())
+        }
+
+        static func naturalLineHeight(of font: NSFont) -> CGFloat {
+            font.ascender + abs(font.descender) + font.leading
+        }
     }
 
     // Made once. A colour that follows the appearance is equal only to itself: made afresh on
@@ -146,18 +181,16 @@ struct LimareMarkdownRepresentable: NSViewRepresentable {
     /// Soft charcoal rather than pure black (and soft white in dark), easier on a long read.
     private static let bodyInk = AppColors.dynamicNSColor(light: 0x1F2024, dark: 0xECECEF)
     private static let codeInk = AppColors.dynamicNSColor(light: 0x27272A, dark: 0xE4E4E7)
-    /// Code blocks are a warm shade under the paper (a deep slate in dark); the bar one step
-    /// further.
-    private static let codeBlockFill = AppColors.dynamicNSColor(light: 0xF4F3EF, dark: 0x18191E)
-    private static let codeBlockBarFill = AppColors.dynamicNSColor(light: 0xEDECE7, dark: 0x1F2026)
     // Not `labelColor.withAlphaComponent(_:)`: kept in a constant, that colour stays in the
     // appearance it was made in, and links went black on a dark page.
     private static let linkInk = ink(light: 0.88, dark: 0.88)
     private static let linkUnderlineInk = ink(light: 0.28, dark: 0.28)
-    private static let inlineCodeInk = ink(light: 0.055, dark: 0.08)
+    private static let inlineCodeInk = ink(light: 0.04, dark: 0.07)
     /// Selected text is shaded in the text's own ink, not the accent blue.
     private static let selectionInk = ink(light: 0.12, dark: 0.12)
     private static let hairlineInk = ink(light: 0.08, dark: 0.08)
+    /// Fainter than a quote's bar (18%), so a code block does not read as a quote.
+    private static let codeBlockRuleInk = ink(light: 0.12, dark: 0.16)
     private static let tableHeaderInk = ink(light: 0.035, dark: 0.035)
     private static let tableStripeInk = ink(light: 0.015, dark: 0.015)
 

@@ -146,6 +146,11 @@ struct LimareApp: App {
                     appState.focusedWindow.workSurface.togglePresented()
                 }
                 .keyboardShortcut("b", modifiers: [.command, .shift])
+                Button("Run Details…") {
+                    appState.focusedWindow.screen = .chat
+                    appState.focusedWindow.showsRunDetails = true
+                }
+                .disabled(appState.focusedWindow.conversationID.flatMap { appState.conversationRuns.run(for: $0) } == nil)
             }
         }
     }

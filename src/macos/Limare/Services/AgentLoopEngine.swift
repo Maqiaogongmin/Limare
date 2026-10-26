@@ -444,6 +444,19 @@ final class AgentLoopEngine {
 
                 conversation.append(.tool(callID: call.id, content: outcome.content, resultParts: outcome.resultParts))
 
+                // The user ended the turn here: the calls after this one do not run, and the run
+                // finishes without another request.
+                if outcome.endsTurn {
+                    let remaining = orderedToolCalls.dropFirst(index + 1).map(\.1)
+                    if !remaining.isEmpty {
+                        try await toolCallCanceller?(remaining)
+                        for remCall in remaining {
+                            conversation.append(.tool(callID: remCall.id, content: "Not executed: superseded by user instruction."))
+                        }
+                    }
+                    return AgentLoopResult(finalText: currentContent, conversation: conversation)
+                }
+
                 try Task.checkCancellation()
                 try await safeBoundary?()
                 try Task.checkCancellation()

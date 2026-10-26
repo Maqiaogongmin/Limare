@@ -5,6 +5,7 @@ struct ToolCallCard: View {
     let toolCall: ToolCallRecord
     @Environment(AppState.self) private var appState
     @Environment(WindowSession.self) private var window
+    @Environment(\.isInExecutionFold) private var isInExecutionFold
     @State private var isManuallyExpanded: Bool
 
     @State private var pendingUndo: UndoRequest?
@@ -18,8 +19,13 @@ struct ToolCallCard: View {
         isManuallyExpanded
     }
 
+    /// The call is the question card this conversation waits on.
+    private var isAwaitingAnswer: Bool {
+        appState.userQuestions.isAwaitingAnswer(conversationID: window.conversationID, providerCallID: toolCall.providerCallID)
+    }
+
     private var presentation: ToolCallPresentationModel {
-        ToolCallPresentationResolver.resolve(toolCall: toolCall)
+        ToolCallPresentationResolver.resolve(toolCall: toolCall, awaitingAnswer: isAwaitingAnswer)
     }
 
     private var statusColor: Color {
@@ -119,6 +125,13 @@ struct ToolCallCard: View {
 
                     Spacer()
 
+                    if let digest = presentation.resultDigest {
+                        Text(digest)
+                            .font(AppTypography.interfaceCaption)
+                            .foregroundStyle(.tertiary)
+                            .fixedSize()
+                    }
+
                     if let duration = ToolCallDurationFormat.compact(milliseconds: toolCall.durationMilliseconds) {
                         Text(duration)
                             .font(AppTypography.interfaceCaption.monospacedDigit())
@@ -127,7 +140,7 @@ struct ToolCallCard: View {
                     }
 
                     if toolCall.state != .completed,
-                       let status = ToolCallPresentationResolver.statusLabel(for: toolCall.state) {
+                       let status = ToolCallPresentationResolver.statusLabel(for: toolCall.state, awaitingAnswer: isAwaitingAnswer) {
                         Text(status)
                             .font(AppTypography.interfaceCaption.weight(.medium))
                             .foregroundStyle(statusColor)
@@ -160,6 +173,13 @@ struct ToolCallCard: View {
                 .help(notice.paths.joined(separator: "\n"))
             }
 
+            // A fold shows its answered questions outside it; inside, only an open row repeats them.
+            if toolCall.questionResolution != nil, !isInExecutionFold || isExpanded {
+                AnsweredQuestionsView(toolCall: toolCall)
+                    .padding(.leading, Self.contentIndent)
+                    .padding(.vertical, AppSpacing.xxSmall)
+            }
+
             if let targetURL = resolvedFileTargetURL {
                 FileArtifactCard(fileURL: targetURL)
                     .padding(.leading, Self.contentIndent)
@@ -183,6 +203,7 @@ private struct ToolCallDetails: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowSession.self) private var window
     let toolCall: ToolCallRecord
+    @State private var showsRawData = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.small) {
@@ -207,6 +228,57 @@ private struct ToolCallDetails: View {
                 .padding(.bottom, AppSpacing.xxSmall)
             }
 
+            // Resolved only here, once the row is open.
+            let detail = ToolCallDetail.resolve(toolCall)
+            if detail == .raw {
+                ToolCallRawData(toolCall: toolCall)
+            } else {
+                ToolCallDetailView(detail: detail)
+                // The recorded input and output stay one step down, for when something is off.
+                Button {
+                    withAnimation(AppMotion.resolved(AppMotion.standard)) { showsRawData.toggle() }
+                } label: {
+                    HStack(spacing: AppSpacing.xxSmall) {
+                        Text("原始数据")
+                        Image(systemName: showsRawData ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 8, weight: .bold))
+                    }
+                }
+                .buttonStyle(QuietLinkButtonStyle())
+                .accessibilityIdentifier("toolcard.rawData")
+                if showsRawData {
+                    ToolCallRawData(toolCall: toolCall)
+                }
+            }
+
+            HStack(spacing: AppSpacing.medium) {
+                if let approval = ToolCallPresentationResolver.approvalLabel(for: toolCall.approvalState) {
+                    Label(approval, systemImage: "hand.raised")
+                }
+                if let milliseconds = toolCall.durationMilliseconds {
+                    Label(ToolCallDurationFormat.detail(milliseconds: milliseconds), systemImage: "clock")
+                        .help("\(milliseconds.formatted()) ms")
+                }
+                if let error = toolCall.errorMessage, !error.isEmpty {
+                    Text(error)
+                        .foregroundStyle(AppColors.statusError)
+                        .lineLimit(2)
+                        .textSelection(.enabled)
+                        .help(error)
+                }
+            }
+            .font(AppTypography.interfaceCaption)
+            .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// A call's input and output exactly as recorded.
+private struct ToolCallRawData: View {
+    let toolCall: ToolCallRecord
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.small) {
             if !toolCall.input.isEmpty {
                 VStack(alignment: .leading, spacing: AppSpacing.xxSmall) {
                     HStack {
@@ -231,9 +303,7 @@ private struct ToolCallDetails: View {
                     }
                     .frame(maxHeight: AppLayout.toolInputMaximumHeight)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(AppSpacing.small)
-                    .background(AppColors.surfaceInteractive)
-                    .clipShape(RoundedRectangle(cornerRadius: AppRadius.small))
+                    .contentRule()
                 }
             }
 
@@ -250,30 +320,9 @@ private struct ToolCallDetails: View {
                     }
                     .frame(maxHeight: AppLayout.toolOutputMaximumHeight)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(AppSpacing.small)
-                    .background(AppColors.surfaceInteractive)
-                    .clipShape(RoundedRectangle(cornerRadius: AppRadius.small))
+                    .contentRule()
                 }
             }
-
-            HStack(spacing: AppSpacing.medium) {
-                if let approval = ToolCallPresentationResolver.approvalLabel(for: toolCall.approvalState) {
-                    Label(approval, systemImage: "hand.raised")
-                }
-                if let milliseconds = toolCall.durationMilliseconds {
-                    Label(ToolCallDurationFormat.detail(milliseconds: milliseconds), systemImage: "clock")
-                        .help("\(milliseconds.formatted()) ms")
-                }
-                if let error = toolCall.errorMessage, !error.isEmpty {
-                    Text(error)
-                        .foregroundStyle(AppColors.statusError)
-                        .lineLimit(2)
-                        .textSelection(.enabled)
-                        .help(error)
-                }
-            }
-            .font(AppTypography.interfaceCaption)
-            .foregroundStyle(.secondary)
         }
     }
 }

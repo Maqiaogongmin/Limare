@@ -14,6 +14,8 @@ struct ToolCallPresentationModel: Sendable, Equatable {
     let summary: String?
     /// The command behind a shell call's description, shown on hover.
     let summaryHelp: String?
+    /// A finished call's result in a few words ("+3 −1", "12 项"), before its duration.
+    let resultDigest: String?
     let tone: ToolCallTone
     let symbolName: String
 
@@ -22,6 +24,7 @@ struct ToolCallPresentationModel: Sendable, Equatable {
         namespaceLabel: String? = nil,
         summary: String? = nil,
         summaryHelp: String? = nil,
+        resultDigest: String? = nil,
         tone: ToolCallTone,
         symbolName: String
     ) {
@@ -29,6 +32,7 @@ struct ToolCallPresentationModel: Sendable, Equatable {
         self.namespaceLabel = namespaceLabel
         self.summary = summary
         self.summaryHelp = summaryHelp
+        self.resultDigest = resultDigest
         self.tone = tone
         self.symbolName = symbolName
     }
@@ -71,9 +75,12 @@ public struct DelegatedRunPresentation: Identifiable, Sendable, Equatable {
 
 enum ToolCallPresentationResolver {
 
+    /// `awaitingAnswer`: the call is the question card its conversation now waits on, so while
+    /// it runs it waits for the user rather than working.
     static func resolve(
         toolCall: ToolCallRecord,
-        runs: [DelegatedRunPresentation]? = nil
+        runs: [DelegatedRunPresentation]? = nil,
+        awaitingAnswer: Bool = false
     ) -> ToolCallPresentationModel {
         let (displayToolName, namespaceLabel) = resolveToolNames(name: toolCall.name)
         let summary = resolveSummary(name: toolCall.name, input: toolCall.input)
@@ -81,7 +88,9 @@ enum ToolCallPresentationResolver {
         let tone: ToolCallTone
         let symbolName: String
 
-        if toolCall.name == "delegate_task" || toolCall.name.hasSuffix("delegate_task") {
+        if awaitingAnswer, toolCall.state == .running {
+            (tone, symbolName) = (.neutral, "questionmark.bubble")
+        } else if toolCall.name == "delegate_task" || toolCall.name.hasSuffix("delegate_task") {
             let effectiveRuns = runs ?? extractDelegatedRuns(from: toolCall.output)
             (tone, symbolName) = resolveDelegatedToneAndSymbol(
                 state: toolCall.state,
@@ -97,6 +106,7 @@ enum ToolCallPresentationResolver {
             namespaceLabel: namespaceLabel,
             summary: summary,
             summaryHelp: resolveSummaryHelp(name: toolCall.name, input: toolCall.input),
+            resultDigest: ToolCallDetail.resultDigest(toolCall),
             tone: tone,
             symbolName: symbolName
         )
@@ -184,8 +194,10 @@ enum ToolCallPresentationResolver {
     }
 
     /// The words a row shows for its state. A completed call shows none: success needs no mark.
-    static func statusLabel(for state: ToolExecutionState) -> String? {
-        switch state {
+    /// A running call whose question card waits (`awaitingAnswer`) waits for the user.
+    static func statusLabel(for state: ToolExecutionState, awaitingAnswer: Bool = false) -> String? {
+        if awaitingAnswer, state == .running { return "Waiting for your answer" }
+        return switch state {
         case .queued: "Queued"
         case .awaitingApproval: "Waiting for approval"
         case .running: "Running"

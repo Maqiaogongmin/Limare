@@ -62,6 +62,21 @@ Every change from upstream is listed here; `git log -- deps/MarkdownView` holds 
     image's whole source URL out as body text. It is now an inline-code label of its alternative
     text (its file name when it has none), linked to the source. A link's underline skips
     inline code, whose pill already marks it. File: `Supplements/InlineNode+Render.swift`.
+11. **Code blocks can be drawn as a rule, and without line numbers.** `MarkdownTheme.codeBlockStyle`
+    is `.card` (upstream's tinted card with a bar; the default) or `.rule`: no fill, edge or bar, a
+    `sizes.codeBlockRuleWidth` (default 2) rule down the left in `colors.codeBlockRule` (default 12%
+    of `body`), the code 14 pt from the rule and 2 pt from the top and bottom. The language (none
+    when the fence names none, instead of `</>`) and the buttons sit on a small `.popover` material
+    panel at the top right, faded in while the pointer is over the block and while Copy shows its
+    checkmark; hidden, they take no clicks. `showsCodeLineNumbers` (default true) hides the gutter,
+    which then takes no width. Measurement and layout read the same insets
+    (`CodeViewConfiguration.insets`). UIKit draws `.rule` as `.card`. Files:
+    `MarkdownTheme/MarkdownTheme.swift`, `Components/CodeView/CodeView.swift`,
+    `Components/CodeView/CodeViewConfiguration.swift`, `Components/CodeView/CodeView+Actions.swift`.
+12. **Fences without a language are left uncoloured.** `SyntaxLanguage.named` returns nil (plain
+    text) when the info string names no language, so a directory tree or a request log is not
+    coloured as code. A name the catalog does not know still gets the shared `.generic` rules,
+    as upstream gives every block. File: `Components/CodeView/Syntax/SyntaxLanguage.swift`.
 
 ## Updating
 

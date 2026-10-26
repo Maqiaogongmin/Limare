@@ -100,6 +100,42 @@ struct RunTraceProjection: Sendable {
     }
 }
 
+/// The one line the top of a conversation shows about its run, when there is news.
+struct RunStatusStripLine: Equatable, Sendable {
+    enum Tone: Equatable, Sendable { case error, warning, secondary }
+    let text: String
+    let symbolName: String
+    let tone: Tone
+}
+
+/// When the run status line shows, and what it says. Most of a run's states are already in the
+/// transcript (the working row, the approval, the question card, the reply's notice), so the
+/// line shows only what nothing else does: a failure, a pause, a retry, a backup model.
+enum RunStatusStripPolicy {
+    static let retryingKinds: Set<String> = ["model.retrying", "providerRequest.retrying"]
+
+    static func line(status: ConversationRunStatus, trace: RunTraceProjection) -> RunStatusStripLine? {
+        if status == .failed {
+            return RunStatusStripLine(text: trace.currentStatus, symbolName: "exclamationmark.triangle", tone: .error)
+        }
+        if status == .paused {
+            return RunStatusStripLine(text: "Paused", symbolName: "pause.circle", tone: .warning)
+        }
+        // A model group retrying its member and a provider retrying its own request both wait to
+        // send again; the line clears once the request goes out.
+        if status == .running || status == .queued,
+           let routing = trace.events.last(where: { $0.domain == .modelRouting }), retryingKinds.contains(routing.kind) {
+            return RunStatusStripLine(text: routing.summary, symbolName: "arrow.clockwise", tone: .secondary)
+        }
+        // Kept once the run ends, so the reply's source stays known until the next turn.
+        if let fallback = trace.events.last(where: { $0.kind == "model.fallback" }) {
+            let text = fallback.metadata["toModel"].map { "Switched to a backup model: \($0)" } ?? "Switched to a backup model"
+            return RunStatusStripLine(text: text, symbolName: "arrow.triangle.branch", tone: .secondary)
+        }
+        return nil
+    }
+}
+
 @MainActor
 @Observable
 final class RuntimeEventStore {

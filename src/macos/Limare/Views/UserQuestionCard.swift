@@ -26,7 +26,7 @@ struct UserQuestionCard: View {
     }
 
     var body: some View {
-        ApprovalCardContainer(tint: Color.accentColor) {
+        VStack(alignment: .leading, spacing: AppSpacing.small) {
             ScrollView {
                 VStack(alignment: .leading, spacing: AppSpacing.standard) {
                     ForEach(Array(question.questions.enumerated()), id: \.offset) { index, item in
@@ -42,20 +42,30 @@ struct UserQuestionCard: View {
             HStack(spacing: AppSpacing.small) {
                 Spacer()
                 Button("跳过", action: skip)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(GhostTextButtonStyle())
                     .disabled(isResolving)
+                    .help("不回答，结束这一轮，等你发消息")
                     .accessibilityIdentifier("question.skip")
                 Button(action: submit) {
                     HStack(spacing: AppSpacing.xSmall) {
                         Text("提交")
-                        Text("⌘↩").foregroundStyle(.secondary)
+                        Text("⌘↩").opacity(0.6)
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.charcoalProminent)
                 .disabled(isResolving || !canSubmit)
                 .accessibilityIdentifier("question.submit")
             }
         }
+        // The rows reach 8pt from the card's edge; the text in them, and the question above
+        // them, start 16pt in, level with the composer's draft below.
+        .padding(.horizontal, AppSpacing.small)
+        .padding(.top, AppSpacing.medium)
+        .padding(.bottom, AppSpacing.small)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // The composer's own material: the card reads as a drawer above it, not an alert.
+        .raisedCardSurface()
+        .accessibilityElement(children: .contain)
         // ⌘↩ submits only while the key focus is inside the card; the composer keeps its own.
         .background(CommandReturnCatcher(focus: focus, otherFieldIsFocused: focusedOther != nil, action: submit))
         .accessibilityIdentifier("question.card")
@@ -73,61 +83,48 @@ struct UserQuestionCard: View {
                     .padding(.horizontal, AppSpacing.xSmall)
                     .padding(.vertical, AppSpacing.xxxSmall)
                     .background(AppColors.quietLinkFill, in: RoundedRectangle(cornerRadius: AppRadius.small))
+                    .padding(.horizontal, AppSpacing.small)
             }
             Text(item.question)
                 .font(AppTypography.interfaceSemibold)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
+                .padding(.horizontal, AppSpacing.small)
 
-            VStack(spacing: 0) {
+            VStack(spacing: AppSpacing.xxxSmall) {
                 ForEach(Array(item.options.enumerated()), id: \.offset) { optionIndex, option in
                     optionRow(index: index, optionIndex: optionIndex, option: option, item: item,
                               isSelected: answer.selectedLabels.contains(option.label))
-                    Divider().overlay(AppColors.separator)
                 }
                 otherRow(index: index, item: item, answer: answer)
             }
-            .background(AppColors.raisedSurface, in: RoundedRectangle(cornerRadius: AppRadius.card))
-            .overlay(RoundedRectangle(cornerRadius: AppRadius.card).strokeBorder(AppColors.hairline))
         }
     }
 
     private func optionRow(index: Int, optionIndex: Int, option: UserQuestion.Option, item: UserQuestion, isSelected: Bool) -> some View {
         Button {
-            update(index) { answer in
-                if item.multiSelect {
-                    if let at = answer.selectedLabels.firstIndex(of: option.label) {
-                        answer.selectedLabels.remove(at: at)
-                    } else {
-                        answer.selectedLabels.append(option.label)
-                    }
-                } else {
-                    answer.selectedLabels = [option.label]
-                    answer.otherText = nil
-                }
-            }
+            update(index) { $0.toggle(option.label, multiSelect: item.multiSelect) }
             // A multiple choice keeps the Other field it is typed in; otherwise the card takes the focus.
             if item.multiSelect, focusedOther != nil { return }
             focus.take()
         } label: {
-            HStack(alignment: .firstTextBaseline, spacing: AppSpacing.small) {
-                selectionMark(isSelected: isSelected, multiSelect: item.multiSelect)
-                VStack(alignment: .leading, spacing: AppSpacing.xxxSmall) {
-                    Text(option.label)
-                        .font(AppTypography.interface)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if !option.description.isEmpty {
-                        Text(option.description)
-                            .font(AppTypography.interfaceSubheadline)
-                            .foregroundStyle(.secondary)
+            QuestionChoiceRow(isSelected: isSelected, isEnabled: !isResolving) {
+                HStack(alignment: .firstTextBaseline, spacing: AppSpacing.small) {
+                    selectionMark(isSelected: isSelected, multiSelect: item.multiSelect)
+                    VStack(alignment: .leading, spacing: AppSpacing.xxxSmall) {
+                        Text(option.label)
+                            .font(AppTypography.interface)
                             .fixedSize(horizontal: false, vertical: true)
+                        if !option.description.isEmpty {
+                            Text(option.description)
+                                .font(AppTypography.interfaceSubheadline)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
             }
-            .padding(.horizontal, AppSpacing.medium)
-            .padding(.vertical, AppSpacing.small)
-            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(isResolving)
@@ -135,60 +132,50 @@ struct UserQuestionCard: View {
         .accessibilityIdentifier("question.option.\(index + 1).\(optionIndex + 1)")
     }
 
+    /// Other is a field always in the row: typing selects it, emptying it deselects it. A click
+    /// on its mark or the row only puts the caret in the field.
     private func otherRow(index: Int, item: UserQuestion, answer: UserQuestionAnswer) -> some View {
         let isSelected = answer.otherText != nil
-        return VStack(alignment: .leading, spacing: AppSpacing.xSmall) {
-            Button {
-                update(index) { answer in
-                    if item.multiSelect {
-                        answer.otherText = answer.otherText == nil ? "" : nil
-                    } else {
-                        answer.selectedLabels = []
-                        if answer.otherText == nil { answer.otherText = "" }
-                    }
-                }
-                if draft[safe: index]?.otherText != nil {
+        return QuestionChoiceRow(isSelected: isSelected, isEnabled: !isResolving) {
+            HStack(alignment: .firstTextBaseline, spacing: AppSpacing.small) {
+                Button {
                     focusedOther = index
-                } else {
-                    focus.take()
-                }
-            } label: {
-                HStack(alignment: .firstTextBaseline, spacing: AppSpacing.small) {
+                } label: {
                     selectionMark(isSelected: isSelected, multiSelect: item.multiSelect)
-                    Text("其他")
-                        .font(AppTypography.interface)
-                    Spacer(minLength: 0)
                 }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(isResolving)
-            .accessibilityAddTraits(isSelected ? .isSelected : [])
-            .accessibilityIdentifier("question.other.\(index + 1)")
+                .buttonStyle(.plain)
+                .disabled(isResolving)
+                .accessibilityLabel("其他")
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+                .accessibilityIdentifier("question.other.\(index + 1)")
 
-            if isSelected {
-                TextField("写下你的回答", text: Binding(
+                TextField("其他回答…", text: Binding(
                     get: { draft[safe: index]?.otherText ?? "" },
-                    set: { text in update(index) { $0.otherText = text } }
+                    set: { text in update(index) { $0.setOtherText(text, multiSelect: item.multiSelect) } }
                 ), axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(AppTypography.interface)
                 .lineLimit(1...6)
-                .textFieldStyle(.roundedBorder)
                 .focused($focusedOther, equals: index)
                 .disabled(isResolving)
-                .padding(.leading, AppSpacing.large)
                 .accessibilityIdentifier("question.other.\(index + 1).text")
             }
         }
-        .padding(.horizontal, AppSpacing.medium)
-        .padding(.vertical, AppSpacing.small)
+        .onTapGesture {
+            guard !isResolving else { return }
+            focusedOther = index
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func selectionMark(isSelected: Bool, multiSelect: Bool) -> some View {
         let symbol = multiSelect
             ? (isSelected ? "checkmark.square.fill" : "square")
             : (isSelected ? "largecircle.fill.circle" : "circle")
+        // Charcoal, like the composer's send button and Submit: no system blue in the card.
         return Image(systemName: symbol)
-            .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+            .foregroundStyle(isSelected ? AppColors.sendFill : Color.primary.opacity(0.35))
             .accessibilityHidden(true)
     }
 
@@ -224,6 +211,33 @@ struct UserQuestionCard: View {
     /// A header longer than a chip holds ends in an ellipsis.
     static func chipText(_ header: String) -> String {
         header.count > 12 ? String(header.prefix(12)) + "…" : header
+    }
+}
+
+/// One row of a question, an option or the Other field: a rounded tint marks the selection, a
+/// fainter one the pointer. Each row tracks its own hover.
+private struct QuestionChoiceRow<Content: View>: View {
+    let isSelected: Bool
+    let isEnabled: Bool
+    @ViewBuilder let content: Content
+    @State private var isHovering = false
+
+    private var fill: Color {
+        if isSelected { return AppColors.choiceSelected }
+        return isHovering && isEnabled ? AppColors.choiceHover : .clear
+    }
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous)
+        content
+            .padding(AppSpacing.small)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                shape.fill(fill)
+                    .animation(AppMotion.resolved(AppMotion.quick), value: fill)
+            }
+            .contentShape(shape)
+            .onHover { isHovering = $0 }
     }
 }
 

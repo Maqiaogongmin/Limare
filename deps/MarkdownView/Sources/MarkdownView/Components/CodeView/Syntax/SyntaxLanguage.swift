@@ -112,14 +112,19 @@ extension UInt16 {
 }
 
 extension SyntaxLanguage {
-    /// The language a fence's info string names, or nil when it names plain
-    /// text, which is left uncoloured. A fence that names no language, or one
-    /// the catalog does not know, still gets the rules most languages share.
+    /// The language a fence's info string names, or nil for plain text, which
+    /// is left uncoloured. A fence that names no language is plain text (a
+    /// directory tree or a log should not have its words coloured); one that
+    /// names a language the catalog does not know gets the rules most
+    /// languages share.
     static func named(_ info: String?) -> SyntaxLanguage? {
         let name = (info ?? "")
             .split(whereSeparator: { $0.isWhitespace || $0 == "{" || $0 == "," })
             .first
             .map { $0.lowercased() } ?? ""
+        if name.isEmpty {
+            return nil
+        }
         if let language = catalog[name] {
             return language
         }

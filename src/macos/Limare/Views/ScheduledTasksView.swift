@@ -383,39 +383,6 @@ extension View {
     }
 }
 
-/// A compact text action without chrome at rest, a faint tint under the pointer: the detail's
-/// Edit, Duplicate and Delete.
-struct ScheduledGhostButtonStyle: ButtonStyle {
-    var isDestructive = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        StyleBody(configuration: configuration, isDestructive: isDestructive)
-    }
-
-    private struct StyleBody: View {
-        let configuration: ButtonStyleConfiguration
-        let isDestructive: Bool
-        @Environment(\.isEnabled) private var isEnabled
-        @State private var isHovering = false
-
-        var body: some View {
-            configuration.label
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(isDestructive && isHovering ? AppColors.dangerText : Color.primary.opacity(isHovering ? 0.9 : 0.65))
-                .padding(.horizontal, AppSpacing.small)
-                .frame(height: 26)
-                .background(
-                    RoundedRectangle(cornerRadius: AppRadius.control, style: .continuous)
-                        .fill(isHovering || configuration.isPressed ? AppColors.ghostHover : .clear)
-                )
-                .contentShape(RoundedRectangle(cornerRadius: AppRadius.control, style: .continuous))
-                .opacity(isEnabled ? 1 : 0.45)
-                .onHover { isHovering = $0 }
-                .animation(AppMotion.resolved(AppMotion.quick), value: isHovering)
-        }
-    }
-}
-
 /// The detail's main action: white with a hairline edge, charcoal text.
 struct ScheduledOutlineButtonStyle: ButtonStyle {
     var radius: CGFloat = AppRadius.control
@@ -562,13 +529,13 @@ struct ScheduledTaskDetail: View {
     @ViewBuilder
     private var actions: some View {
         Button("编辑", action: onEdit)
-            .buttonStyle(ScheduledGhostButtonStyle())
+            .buttonStyle(GhostTextButtonStyle())
         Button("复制") {
             do { _ = try scheduler.duplicate(taskID: task.id, name: task.name + " 副本") } catch { onError(error.localizedDescription) }
         }
-        .buttonStyle(ScheduledGhostButtonStyle())
+        .buttonStyle(GhostTextButtonStyle())
         Button("删除", action: onDelete)
-            .buttonStyle(ScheduledGhostButtonStyle(isDestructive: true))
+            .buttonStyle(GhostTextButtonStyle(isDestructive: true))
         Button {
             do { try scheduler.runNow(taskID: task.id) } catch { onError(String(describing: error)) }
         } label: {

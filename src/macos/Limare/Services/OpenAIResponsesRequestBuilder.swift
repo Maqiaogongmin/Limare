@@ -191,10 +191,11 @@ enum OpenAIResponsesRequestBuilder {
                     }
                 }
 
+                // Responses only accepts output_text/refusal parts on assistant-role input.
                 if let text = msg.content?.textValue, !text.isEmpty {
                     inputItems.append([
                         "role": "assistant",
-                        "content": [["type": "input_text", "text": text]]
+                        "content": [["type": "output_text", "text": text]]
                     ])
                 }
 

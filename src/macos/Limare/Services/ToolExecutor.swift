@@ -1183,12 +1183,6 @@ final class ToolExecutor {
         return .init(content: content, isError: false, approvalState: .notRequired, durationMilliseconds: milliseconds(since: started))
     }
 
-    private struct PlanArguments: Decodable {
-        struct Item: Decodable { let step: String; let status: String }
-        let explanation: String?
-        let plan: [Item]
-    }
-
     /// update_plan as Codex has it: the plan is shown to the user; the model gets "Plan updated".
     private func executeUpdatePlan(_ call: ProviderToolCall, onUpdate: @escaping UpdateHandler) throws -> ToolExecutionOutcome {
         let args: PlanArguments = try decode(call)
@@ -1210,27 +1204,12 @@ final class ToolExecutor {
         return .init(content: "Plan updated", isError: false, approvalState: .notRequired, durationMilliseconds: 0)
     }
 
-    private struct AskUserQuestionArguments: Decodable {
-        struct Question: Decodable {
-            struct Option: Decodable { let label: String; let description: String }
-            let question: String
-            let header: String
-            let options: [Option]
-            let multiSelect: Bool?
-        }
-        let questions: [Question]
-    }
-
     /// ask_user_question as Claude Code's AskUserQuestion: a card this run waits on until the user
     /// answers, skips or sends a new message. Only a conversation's own attended run has someone to ask.
     private func executeAskUserQuestion(_ call: ProviderToolCall, onUpdate: @escaping UpdateHandler) async throws -> ToolExecutionOutcome {
         let started = ContinuousClock.now
-        let args: AskUserQuestionArguments = try decode(call)
-        let questions = args.questions.map { question in
-            UserQuestion(question: question.question, header: question.header,
-                         options: question.options.map { UserQuestion.Option(label: $0.label, description: $0.description) },
-                         multiSelect: question.multiSelect ?? false)
-        }
+        let args: UserQuestionArguments = try decode(call)
+        let questions = args.userQuestions
         if let problem = UserQuestion.validationProblem(questions) {
             throw ToolExecutorError.invalidArguments(problem)
         }
@@ -1248,7 +1227,9 @@ final class ToolExecutor {
         }
         // The record's output is what later requests send the model, so it holds the same text.
         onUpdate(.init(state: .completed, approvalState: .notRequired, output: content))
-        return .init(content: content, isError: false, approvalState: .notRequired, durationMilliseconds: milliseconds(since: started))
+        // Skipping ends the turn, as dismissing the question does in Claude Code and Codex.
+        return .init(content: content, isError: false, approvalState: .notRequired, durationMilliseconds: milliseconds(since: started),
+                     endsTurn: resolution == .skipped, questionResolution: RecordedQuestionResolution(resolution))
     }
 
     private struct NativeControlArguments: Decodable {
@@ -3133,27 +3114,6 @@ final class ToolExecutor {
         return result
     }
 
-    private struct ShellArguments: Decodable {
-        let command: String
-        let cwd: String?
-        let environment: [String: String]?
-        let timeoutSeconds: TimeInterval?
-        let sandboxPermissions: String?
-        let justification: String?
-
-        /// Codex's escalation request: write outside the working folder and temp, once approved.
-        var requiresEscalation: Bool { sandboxPermissions == "require_escalated" }
-
-        enum CodingKeys: String, CodingKey {
-            case command
-            case cwd
-            case environment
-            case timeoutSeconds = "timeout_seconds"
-            case sandboxPermissions = "sandbox_permissions"
-            case justification
-        }
-    }
-
     private struct AttachmentCopyArguments: Decodable {
         let source: String
         let destination: String?
@@ -3179,36 +3139,6 @@ final class ToolExecutor {
     }
 
     private struct PathArguments: Decodable { let path: String }
-    /// Numbers decode as `Double`, so a model's `10.0` reads as 10; `FileReadWindow` checks them.
-    private struct ReadArguments: Decodable { let path: String; let offset: Double?; let limit: Double? }
-    private struct WriteArguments: Decodable { let path: String; let content: String }
-    private struct EditArguments: Decodable {
-        let path: String
-        let oldText: String
-        let newText: String
-
-        enum CodingKeys: String, CodingKey {
-            case path
-            case oldText = "old_text"
-            case newText = "new_text"
-        }
-    }
-
-    private struct FileListArguments: Decodable {
-        let path: String?
-        let recursive: Bool?
-        let max_depth: Int?
-        let max_entries: Int?
-    }
-
-    private struct FileSearchArguments: Decodable {
-        let query: String
-        let path: String?
-        let mode: String?
-        let regex: Bool?
-        let max_results: Int?
-    }
-
     private struct DelegateTaskArguments: Decodable {
         let tasks: [RawTaskItem]
         let background: Bool?

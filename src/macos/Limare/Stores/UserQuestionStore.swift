@@ -39,6 +39,13 @@ final class UserQuestionStore {
         pending.values.first { $0.id == id }
     }
 
+    /// Whether call `providerCallID` is the card conversation `conversationID` waits on: its tool
+    /// row then shows it waiting for the user, not running.
+    func isAwaitingAnswer(conversationID: UUID?, providerCallID: String) -> Bool {
+        guard let conversationID else { return false }
+        return pending[conversationID]?.providerCallID == providerCallID
+    }
+
     /// Shows `question` and waits until the user answers, skips, sends a new message, or the run stops.
     func ask(_ question: PendingUserQuestion) async -> UserQuestionResolution {
         await withTaskCancellationHandler {

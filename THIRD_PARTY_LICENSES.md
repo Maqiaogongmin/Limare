@@ -38,6 +38,12 @@ on those tools; no text is copied there.
 | [cua-driver](https://github.com/trycua/cua) | 0.28.2, `Contents/Helpers/cua-driver` | `script/package_cua_driver.sh` (pinned, SHA-256 verified); license shipped as `Contents/Resources/CUA_DRIVER_LICENSE.txt` | **MIT** |
 | [cloudflared](https://github.com/cloudflare/cloudflared) | 2026.10.0, `Contents/Helpers/cloudflared` | `script/package_cloudflared.sh` (pinned, SHA-256 verified); license shipped as `Contents/Resources/CLOUDFLARED_LICENSE.txt` | **Apache-2.0** |
 
+## Bundled fonts
+
+| Font | Version / Location | License |
+|---|---|---|
+| [Noto Serif SC](https://github.com/google/fonts/tree/main/ofl/notoserifsc) (Google), the variable font `NotoSerifSC[wght].ttf`, renamed only | `google/fonts` at `2e61f4355afd22b801791b0df176065082423b87`, shipped as `Contents/Resources/NotoSerifSC-VF.ttf` (reading text in replies and document previews) | **OFL-1.1** — [`LICENSES/NotoSerifSC-OFL.txt`](LICENSES/NotoSerifSC-OFL.txt) (`ofl/notoserifsc/OFL.txt` at the same commit) |
+
 ## Swift packages
 
 Locked by `src/macos/Limare.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`.

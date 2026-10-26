@@ -101,6 +101,9 @@ private struct NativeDraftTextViewRepresentable: NSViewRepresentable {
         textView.onSend = onSend
         textView.onFocusChange = onFocusChange
         textView.onMenuKey = onMenuKey
+        textView.onMarkedTextChange = { [weak coordinator = context.coordinator] in
+            coordinator?.markedTextDidChange()
+        }
         textView.placeholder = placeholder
         textView.delegate = context.coordinator
         textView.drawsBackground = false
@@ -221,6 +224,15 @@ private struct NativeDraftTextViewRepresentable: NSViewRepresentable {
             textView.scrollRangeToVisible(textView.selectedRange())
         }
 
+        /// Marked text is laid out like typed text but sends no `textDidChange`, so a
+        /// composition that wraps to a new line must grow the composer here, or the clip view
+        /// scrolls the first line out of sight.
+        func markedTextDidChange() {
+            guard let textView else { return }
+            measureAndReportHeight()
+            textView.scrollRangeToVisible(textView.selectedRange())
+        }
+
         func textViewDidChangeSelection(_ notification: Notification) {
             guard let textView else { return }
             textView.scrollRangeToVisible(textView.selectedRange())
@@ -314,6 +326,7 @@ final class NativeAppKitDraftTextView: NSTextView {
     var onSend: (() -> Void)?
     var onFocusChange: ((Bool) -> Void)?
     var onMenuKey: ((ComposerMenuKey) -> Bool)?
+    var onMarkedTextChange: (() -> Void)?
     static let placeholderMaximumPointSize: CGFloat = 14.5
     var placeholder = "" {
         didSet {
@@ -352,11 +365,13 @@ final class NativeAppKitDraftTextView: NSTextView {
     override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
         super.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
         needsDisplay = true
+        onMarkedTextChange?()
     }
 
     override func unmarkText() {
         super.unmarkText()
         needsDisplay = true
+        onMarkedTextChange?()
     }
 
     override func becomeFirstResponder() -> Bool {

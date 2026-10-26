@@ -15,7 +15,7 @@ final class CodeView: PlatformView {
         didSet {
             languageLabel.font = CodeViewConfiguration.barFont(theme: theme)
             languageLabel.textColor = theme.colors.body.withAlphaComponent(0.5)
-            applyCornerRadius()
+            applyStyle()
             applyBackgroundColors()
             textView.selectionBackgroundColor = theme.colors.selectionBackground
             updateLineNumberView()
@@ -30,7 +30,7 @@ final class CodeView: PlatformView {
 
     var language: String = "" {
         didSet {
-            languageLabel.text = language.isEmpty ? "</>" : language.lowercased()
+            updateLanguageLabel()
             // The label is sized in layout.
             if oldValue != language {
                 resetCopyFeedback()
@@ -120,6 +120,15 @@ final class CodeView: PlatformView {
     var actions: [CodeBlockAction] = []
 
     lazy var barView: PlatformView = .init()
+    /// A `.rule` block's rule down its left edge.
+    lazy var ruleView: PlatformView = .init()
+
+    /// Whether the pointer is over a `.rule` block, which then shows its controls.
+    var isPointerInside = false
+    /// Whether Copy is showing its checkmark, which keeps the controls up.
+    var isShowingCopyFeedback = false
+    /// Whether the controls are shown, or fading in; a card's always are.
+    var controlsShown = true
     #if canImport(UIKit)
         lazy var scrollView: HorizontalClippingScrollView = .init()
         lazy var copyButton: UIButton = .init()
@@ -139,6 +148,9 @@ final class CodeView: PlatformView {
         lazy var expandButton: NSButton = .init(title: "", target: nil, action: nil)
         lazy var previewButton: NSButton = .init(title: "", target: nil, action: nil)
         var actionButtons: [NSButton] = []
+        /// The panel under a `.rule` block's controls: they float over the code.
+        lazy var barMaterialView: NSVisualEffectView = .init()
+        private var hoverTrackingArea: NSTrackingArea?
     #endif
 
     lazy var languageLabel: BarTextLabel = .init()
@@ -183,11 +195,77 @@ final class CodeView: PlatformView {
             performLayout()
             updateLineNumberView()
         }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            if hoverTrackingArea == nil {
+                let area = NSTrackingArea(
+                    rect: .zero,
+                    options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                    owner: self,
+                    userInfo: nil,
+                )
+                addTrackingArea(area)
+                hoverTrackingArea = area
+            }
+            // Moved, resized or reused for another block: no enter or exit may come, so
+            // read where the pointer is now.
+            guard let window, window.isKeyWindow else { return }
+            let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+            setPointerInside(bounds.contains(point))
+        }
+
+        override func mouseEntered(with event: NSEvent) {
+            super.mouseEntered(with: event)
+            setPointerInside(true)
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            super.mouseExited(with: event)
+            setPointerInside(false)
+        }
+
+        private func setPointerInside(_ inside: Bool) {
+            guard isPointerInside != inside else { return }
+            isPointerInside = inside
+            updateControlsVisibility(animated: true)
+        }
     #endif
+
+    /// Shows a `.rule` block's controls while the pointer is over it or Copy shows its
+    /// checkmark, fading them in and out; hidden, they take no clicks.
+    func updateControlsVisibility(animated: Bool) {
+        let shown = !CodeViewConfiguration.drawsRule(theme) || isPointerInside || isShowingCopyFeedback
+        guard shown != controlsShown || !animated else { return }
+        controlsShown = shown
+        #if canImport(UIKit)
+            barView.alpha = shown ? 1 : 0
+            barView.isHidden = !shown
+        #elseif canImport(AppKit)
+            if shown {
+                barView.isHidden = false
+            }
+            guard animated else {
+                barView.alphaValue = shown ? 1 : 0
+                barView.isHidden = !shown
+                return
+            }
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.12
+                barView.animator().alphaValue = shown ? 1 : 0
+            } completionHandler: { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, !self.controlsShown else { return }
+                    self.barView.isHidden = true
+                }
+            }
+        #endif
+    }
 
     #if canImport(UIKit)
         func interactionTarget(at point: CGPoint, event: UIEvent? = nil) -> UIView? {
-            for button in barButtons where !button.isHidden {
+            // Hidden controls (a `.rule` block's, away from the pointer) take no taps.
+            for button in barButtons where !barView.isHidden && !button.isHidden {
                 let buttonPoint = button.convert(point, from: self)
                 guard button.bounds.contains(buttonPoint) else { continue }
                 return button.hitTest(buttonPoint, with: event) ?? button
@@ -221,7 +299,8 @@ final class CodeView: PlatformView {
         }
     #elseif canImport(AppKit)
         func interactionTarget(at point: CGPoint) -> NSView? {
-            for button in barButtons where !button.isHidden {
+            // Hidden controls (a `.rule` block's, away from the pointer) take no clicks.
+            for button in barButtons where !barView.isHidden && !button.isHidden {
                 let buttonPoint = button.convert(point, from: self)
                 guard button.bounds.contains(buttonPoint) else { continue }
                 return button.hitTest(buttonPoint) ?? button
@@ -254,19 +333,22 @@ final class CodeView: PlatformView {
 
     override var intrinsicContentSize: CGSize {
         let labelSize = languageLabel.intrinsicContentSize
-        let barHeight = labelSize.height + CodeViewConfiguration.barPadding * 2
+        let insets = CodeViewConfiguration.insets(
+            theme: theme,
+            barHeight: labelSize.height + CodeViewConfiguration.barPadding * 2,
+        )
         let textSize = textView.intrinsicContentSize
         let supposedHeight = CodeViewConfiguration.intrinsicHeight(lineCount: cachedLineCount, theme: theme)
-
-        let lineNumberWidth = lineNumberView.intrinsicContentSize.width
+        // A `.rule` block's label floats over the code and does not widen it.
+        let barWidth = CodeViewConfiguration.drawsRule(theme) ? 0 : labelSize.width + CodeViewConfiguration.barPadding * 2
 
         return CGSize(
             width: max(
-                labelSize.width + CodeViewConfiguration.barPadding * 2,
-                lineNumberWidth + textSize.width + CodeViewConfiguration.codePadding * 2,
+                barWidth,
+                insets.gutterLeading + lineNumberWidth + textSize.width + insets.codeLeading + insets.codeTrailing,
             ),
             height: max(
-                barHeight + textSize.height + CodeViewConfiguration.codePadding * 2,
+                insets.bar + textSize.height + insets.codeTop + insets.codeBottom,
                 supposedHeight,
             ),
         )

@@ -88,6 +88,7 @@ struct RootView: View {
                     SidebarView()
                 }
             }
+            .modifier(FloatingSidebarPanel())
             .navigationSplitViewColumnWidth(
                 min: AppLayout.sidebarMinimumWidth,
                 ideal: AppLayout.sidebarIdealWidth,

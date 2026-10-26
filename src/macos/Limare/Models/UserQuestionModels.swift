@@ -52,7 +52,8 @@ struct UserQuestion: Codable, Equatable, Sendable {
 }
 
 /// The user's answer to one question: the options they selected and, when they chose Other,
-/// their own words. `otherText` is non-nil while Other is selected, even before they type.
+/// their own words. `otherText` is non-nil exactly while Other is selected; the card selects it
+/// by typing in its field and deselects it by emptying the field.
 struct UserQuestionAnswer: Codable, Equatable, Sendable {
     var selectedLabels: [String]
     var otherText: String?
@@ -84,6 +85,32 @@ struct UserQuestionAnswer: Codable, Equatable, Sendable {
         case (1, nil), (0, .some): return nil
         case (0, nil): return "\"\(question.question)\" has no answer."
         default: return "\"\(question.question)\" takes one answer: one option or the user's own words."
+        }
+    }
+
+    /// Writes the Other field: text selects Other (a single choice then drops its option), an
+    /// empty field deselects it. Whitespace alone selects Other but does not answer.
+    mutating func setOtherText(_ text: String, multiSelect: Bool) {
+        guard !text.isEmpty else {
+            otherText = nil
+            return
+        }
+        otherText = text
+        if !multiSelect { selectedLabels = [] }
+    }
+
+    /// A click on option `label`: a single choice selects it alone and clears Other; a multiple
+    /// choice toggles it and leaves Other as it is.
+    mutating func toggle(_ label: String, multiSelect: Bool) {
+        if multiSelect {
+            if let at = selectedLabels.firstIndex(of: label) {
+                selectedLabels.remove(at: at)
+            } else {
+                selectedLabels.append(label)
+            }
+        } else {
+            selectedLabels = [label]
+            otherText = nil
         }
     }
 
@@ -129,6 +156,49 @@ enum UserQuestionResolution: Equatable, Sendable {
     case cancelled
 }
 
+/// How a card ended, as the question's record keeps it. A stopped run is not recorded: its call
+/// is cancelled and has no answer to show.
+enum RecordedQuestionResolution: Codable, Equatable, Sendable {
+    case answered([UserQuestionAnswer])
+    case skipped
+    case superseded
+
+    init?(_ resolution: UserQuestionResolution) {
+        switch resolution {
+        case .answered(let answers): self = .answered(answers)
+        case .skipped: self = .skipped
+        case .superseded: self = .superseded
+        case .cancelled: return nil
+        }
+    }
+}
+
+/// `ask_user_question`'s arguments: the executor and the transcript decode the call's input
+/// with this one type.
+struct UserQuestionArguments: Decodable {
+    struct Question: Decodable {
+        struct Option: Decodable { let label: String; let description: String }
+        let question: String
+        let header: String
+        let options: [Option]
+        let multiSelect: Bool?
+    }
+    let questions: [Question]
+
+    var userQuestions: [UserQuestion] {
+        questions.map { question in
+            UserQuestion(question: question.question, header: question.header,
+                         options: question.options.map { UserQuestion.Option(label: $0.label, description: $0.description) },
+                         multiSelect: question.multiSelect ?? false)
+        }
+    }
+
+    /// The questions of a call's input, or nil when it does not decode.
+    static func questions(from input: String) -> [UserQuestion]? {
+        (try? JSONDecoder().decode(UserQuestionArguments.self, from: Data(input.utf8)))?.userQuestions
+    }
+}
+
 enum UserQuestionError: LocalizedError, Equatable {
     /// The card is not (or no longer) waiting for an answer.
     case notPending
@@ -158,7 +228,7 @@ enum UserQuestionText {
             lines.append("Continue with these answers.")
             return lines.joined(separator: "\n")
         case .skipped:
-            return "The user skipped these questions without answering. Continue with your best judgment, state the assumptions you make, and do not ask the same questions again."
+            return "The user skipped these questions without answering and ended your turn here. Do not act on them or assume answers; wait for the user to tell you how to proceed."
         case .superseded:
             return "The user did not answer these questions and sent a new message instead, which follows. Treat the questions as unanswered and follow the new message."
         case .cancelled:

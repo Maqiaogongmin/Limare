@@ -44,14 +44,9 @@ public struct SettingsColumn<Content: View>: View {
 
 extension View {
     /// Content scrolled under the transparent title bar fades out instead of running under it.
+    /// Apply it directly to the `ScrollView`, so it receives the scroll geometry.
     func settingsScrollEdgeFade() -> some View {
-        mask(
-            VStack(spacing: 0) {
-                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                    .frame(height: AppLayout.scrollEdgeFade)
-                Color.black
-            }
-        )
+        modifier(SettingsScrollEdgeFade())
     }
 
     /// A white card on the canvas: settings sections, master lists' selected rows, the log table.
@@ -65,6 +60,36 @@ extension View {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .strokeBorder(AppColors.hairline, lineWidth: 1)
         )
+    }
+}
+
+/// The fade appears only once content has scrolled past the top edge; at rest it masks nothing,
+/// so a page whose first row sits right at the top (the archive list) is not covered.
+struct SettingsScrollEdgeFade: ViewModifier {
+    @State private var isScrolled = false
+
+    /// Whether the content's top edge has moved above the visible area.
+    static func isScrolled(contentOffsetY: CGFloat, contentInsetTop: CGFloat) -> Bool {
+        contentOffsetY + contentInsetTop > 0.5
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                Self.isScrolled(contentOffsetY: geometry.contentOffset.y,
+                                contentInsetTop: geometry.contentInsets.top)
+            } action: { _, scrolled in
+                isScrolled = scrolled
+            }
+            .mask(
+                VStack(spacing: 0) {
+                    LinearGradient(colors: [isScrolled ? .clear : .black, .black],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: AppLayout.scrollEdgeFade)
+                    Color.black
+                }
+                .animation(.easeOut(duration: 0.15), value: isScrolled)
+            )
     }
 }
 

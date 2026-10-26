@@ -311,11 +311,16 @@ private struct TranscriptEntryView: View, Equatable {
                                 .equatable()
                         }
                     }
+                    .environment(\.isInExecutionFold, true)
                 } label: {
                     ExecutionHistoryLabel(count: history.count, unsuccessfulCount: entry.unsuccessfulCount)
                 }
                 if !entry.pinnedToolCalls.isEmpty {
                     FoldedChangeNotices(toolCalls: entry.pinnedToolCalls)
+                }
+                // What the user answered is their own words, so it stays out of the fold.
+                ForEach(entry.answeredQuestionCalls) { toolCall in
+                    AnsweredQuestionsView(toolCall: toolCall)
                 }
             }
             MessageRow(
@@ -684,7 +689,7 @@ private struct UserMessageTextView: View {
                                 .font(.system(size: 9, weight: .semibold))
                         }
                         .font(AppTypography.interfaceCaption2.weight(.medium))
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(AppColors.textSecondary)
                     }
                     .buttonStyle(.plain)
 
@@ -1107,6 +1112,9 @@ enum TranscriptTurnGrouping {
         let unsuccessfulCount: Int
         /// Folded tool calls whose failure may have left file changes, shown outside the fold.
         let pinnedToolCalls: [ToolCallRecord]
+        /// Folded question calls the user resolved, in order; their questions and answers show
+        /// outside the fold.
+        let answeredQuestionCalls: [ToolCallRecord]
         var message: ChatMessage { row.message }
     }
 
@@ -1126,7 +1134,8 @@ enum TranscriptTurnGrouping {
                 history: nil,
                 startsAssistantTurn: startsTurn,
                 unsuccessfulCount: 0,
-                pinnedToolCalls: []
+                pinnedToolCalls: [],
+                answeredQuestionCalls: []
             )
         }
         /// The turn's first `rowIndex` messages folded above the message at `rowIndex`, which
@@ -1145,7 +1154,8 @@ enum TranscriptTurnGrouping {
                 history: history.map { TranscriptRow(message: $0, in: messages, deliveredArtifactIDs: []) },
                 startsAssistantTurn: true,
                 unsuccessfulCount: calls.filter { isUnsuccessful($0.state) }.count,
-                pinnedToolCalls: calls.filter { mayHaveLeftChanges($0.state) }
+                pinnedToolCalls: calls.filter { mayHaveLeftChanges($0.state) },
+                answeredQuestionCalls: calls.filter { $0.questionResolution != nil }
             )
         }
         func flush(isLast: Bool, endsAtSteer: Bool) {

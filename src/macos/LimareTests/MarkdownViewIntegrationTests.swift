@@ -2,7 +2,7 @@ import XCTest
 import AppKit
 import SwiftUI
 @testable import Limare
-import MarkdownView
+@testable import MarkdownView
 import MarkdownParser
 import Litext
 
@@ -497,8 +497,8 @@ final class MarkdownViewIntegrationTests: XCTestCase {
         )
 
         // 4. Compare layout bounding size convergence
-        let streamedSize = coordinator.sizeThatFits(ProposedViewSize(width: 600, height: nil), for: streamedView)
-        let staticSize = coordinator.sizeThatFits(ProposedViewSize(width: 600, height: nil), for: staticView)
+        let streamedSize = coordinator.sizeThatFits(ProposedViewSize(width: 600, height: nil), for: streamedView, hugsText: false)
+        let staticSize = coordinator.sizeThatFits(ProposedViewSize(width: 600, height: nil), for: staticView, hugsText: false)
 
         XCTAssertNotNil(streamedSize)
         XCTAssertNotNil(staticSize)
@@ -760,6 +760,178 @@ final class MarkdownViewIntegrationTests: XCTestCase {
 
         // The view on screen was updated in place, not replaced.
         XCTAssertTrue(findStreamView(in: hostingView) === streamView, "The existing hosted Markdown view must be the one updated")
+    }
+
+    // MARK: - 17b. Reading Typography
+
+    func testReadingProfilesUseTheSerifAndTypedStaysSystem() {
+        let chat = LimareMarkdownRepresentable.makeTheme(conversationPointSize: 14, codePointSize: 12, profile: .chat(isStreaming: false, messageId: "a"))
+        let document = LimareMarkdownRepresentable.makeTheme(conversationPointSize: 14, codePointSize: 12, profile: .document)
+        let typed = LimareMarkdownRepresentable.makeTheme(conversationPointSize: 14, codePointSize: 12, profile: .typed)
+
+        for theme in [chat, document] {
+            XCTAssertEqual(theme.fonts.body.familyName, "Noto Serif SC")
+            XCTAssertTrue(theme.fonts.bold === ReadingFont.semibold(size: 14), "Bold is the 600 instance, not a derived trait")
+            XCTAssertTrue(theme.fonts.italic === ReadingFont.regular(size: 14), "Italic is set upright")
+            for heading in theme.headings {
+                XCTAssertEqual(heading.font.familyName, "Noto Serif SC")
+                XCTAssertEqual(heading.kern, 0)
+            }
+        }
+        XCTAssertNotEqual(typed.fonts.body.familyName, "Noto Serif SC")
+        XCTAssertTrue(typed.headings.allSatisfy { $0.font.familyName != "Noto Serif SC" && $0.kern == 0 })
+        for theme in [chat, document, typed] {
+            XCTAssertTrue(theme.fonts.code.isFixedPitch)
+            XCTAssertTrue(theme.fonts.codeInline.isFixedPitch)
+        }
+    }
+
+    func testLeadingFollowsTheFontAndSize() {
+        for size in [14.0, 16.0, 18.0] as [CGFloat] {
+            for (profile, multiple) in [(LimareMarkdownView.Profile.chat(isStreaming: false, messageId: "a"), 1.70),
+                                        (.document, 1.70), (.typed, 1.50)] as [(LimareMarkdownView.Profile, CGFloat)] {
+                let theme = LimareMarkdownRepresentable.makeTheme(conversationPointSize: size, codePointSize: 12, profile: profile)
+                let natural = LimareMarkdownRepresentable.Rhythm.naturalLineHeight(of: theme.fonts.body)
+                XCTAssertEqual((natural + theme.spacings.line).rounded(), (size * multiple).rounded(), accuracy: 1,
+                               "\(profile) at \(size) pt")
+            }
+        }
+        let chat = LimareMarkdownRepresentable.makeTheme(conversationPointSize: 14, codePointSize: 12, profile: .chat(isStreaming: false, messageId: "a"))
+        let document = LimareMarkdownRepresentable.makeTheme(conversationPointSize: 14, codePointSize: 12, profile: .document)
+        XCTAssertEqual([chat.spacings.paragraph, chat.spacings.list, chat.spacings.headingBefore], [13, 6, 18])
+        XCTAssertEqual([document.spacings.paragraph, document.spacings.list, document.spacings.headingBefore], [14, 6, 22])
+        print("[reading-typography] 14 pt natural \(LimareMarkdownRepresentable.Rhythm.naturalLineHeight(of: chat.fonts.body)) line \(chat.spacings.line)")
+    }
+
+    func testSameInputsMakeEqualThemes() {
+        for profile in [LimareMarkdownView.Profile.chat(isStreaming: true, messageId: "a"), .document, .typed] {
+            let first = LimareMarkdownRepresentable.makeTheme(conversationPointSize: 15, codePointSize: 12, profile: profile)
+            let second = LimareMarkdownRepresentable.makeTheme(conversationPointSize: 15, codePointSize: 12, profile: profile)
+            XCTAssertEqual(first, second, "\(profile): an update with the same sizes must not rebuild the text")
+        }
+    }
+
+    // MARK: - 18. Fences Without a Language
+
+    func testFencesWithoutALanguageAreLeftUncoloured() {
+        XCTAssertNil(SyntaxLanguage.named(nil))
+        XCTAssertNil(SyntaxLanguage.named(""))
+        XCTAssertNil(SyntaxLanguage.named("   "))
+        XCTAssertEqual(SyntaxLanguage.named("unknown-syntax-xyz-123")?.keywords, SyntaxLanguage.generic.keywords,
+                       "A language the catalog does not know still gets the shared rules")
+        XCTAssertNotNil(SyntaxLanguage.named("swift"))
+        XCTAssertNotEqual(SyntaxLanguage.named("swift")?.keywords, SyntaxLanguage.generic.keywords)
+
+        let map = CodeHighlighter.current.highlight(key: nil, content: "The app and from", language: "")
+        XCTAssertTrue(map.isEmpty, "An unlabelled fence must not be coloured")
+    }
+
+    // MARK: - 19. Rule-Style Code Blocks
+
+    private func makeCodeView(lines: Int, theme: MarkdownTheme, language: String = "swift") -> CodeView {
+        let content = (1 ... lines).map { "let line\($0) = \($0)" }.joined(separator: "\n")
+        let view = CodeView(frame: .zero)
+        view.theme = theme
+        view.language = language
+        view.setContent(content, highlightMap: nil)
+        // Sized as the text view sizes it: to its intrinsic height, at the column's width.
+        view.frame = CGRect(x: 0, y: 0, width: 500, height: view.intrinsicContentSize.height)
+        view.layoutSubtreeIfNeeded()
+        return view
+    }
+
+    /// The text reserves `intrinsicContentSize`, whose floor is `intrinsicHeight` from the font's
+    /// metrics. The text engine's lines run a little taller than those metrics (about 0.5 pt a
+    /// line, in either style), so the two agree for a few lines and the floor is under it after.
+    private func assertReservedHeightIsLaidOut(_ view: CodeView, lines: Int, theme: MarkdownTheme,
+                                               file: StaticString = #filePath, line: UInt = #line) {
+        let reserved = ContextViewAttachment.Appearance.of(view).size.height
+        XCTAssertEqual(reserved, view.bounds.height, "\(lines) lines", file: file, line: line)
+        let floor = CodeViewConfiguration.intrinsicHeight(lineCount: lines, theme: theme)
+        XCTAssertLessThanOrEqual(floor, reserved + 0.5, "\(lines) lines", file: file, line: line)
+        if lines <= 3 {
+            XCTAssertEqual(floor, reserved, accuracy: 1, "\(lines) lines", file: file, line: line)
+        }
+    }
+
+    func testRuleCodeBlockMeasuresAsItLaysOut() {
+        let theme = LimareMarkdownRepresentable.makeThemeFromPreferences()
+        XCTAssertEqual(theme.codeBlockStyle, .rule)
+        XCTAssertFalse(theme.showsCodeLineNumbers)
+        for lines in [1, 3, 20] {
+            let view = makeCodeView(lines: lines, theme: theme)
+            assertReservedHeightIsLaidOut(view, lines: lines, theme: theme)
+            let text = view.convert(view.textView.bounds, from: view.textView)
+            XCTAssertEqual(text.minX, theme.sizes.codeBlockRuleWidth + 14, accuracy: 0.5)
+            XCTAssertEqual(text.minY, 2, accuracy: 0.5)
+            XCTAssertEqual(view.bounds.height - text.maxY, 2, accuracy: 1, "\(lines) lines: no clipping and no blank below the code")
+            XCTAssertTrue(view.lineNumberView.isHidden)
+            XCTAssertFalse(view.ruleView.isHidden)
+            XCTAssertEqual(view.ruleView.frame.width, theme.sizes.codeBlockRuleWidth)
+        }
+    }
+
+    func testCardCodeBlockLayoutIsUnchanged() {
+        var theme = LimareMarkdownRepresentable.makeThemeFromPreferences()
+        theme.codeBlockStyle = .card
+        theme.showsCodeLineNumbers = true
+        for lines in [1, 3, 20] {
+            let view = makeCodeView(lines: lines, theme: theme)
+            assertReservedHeightIsLaidOut(view, lines: lines, theme: theme)
+            XCTAssertEqual(view.bounds.height - view.convert(view.textView.bounds, from: view.textView).maxY,
+                           CodeViewConfiguration.codePadding, accuracy: 1)
+            let text = view.convert(view.textView.bounds, from: view.textView)
+            XCTAssertEqual(text.minX, view.lineNumberView.intrinsicContentSize.width + CodeViewConfiguration.codePadding, accuracy: 0.5)
+            XCTAssertGreaterThan(view.barView.frame.height, 0)
+            XCTAssertFalse(view.barView.isHidden)
+            XCTAssertFalse(view.lineNumberView.isHidden)
+            XCTAssertTrue(view.ruleView.isHidden)
+            XCTAssertEqual(view.languageLabel.text, "swift")
+        }
+        XCTAssertEqual(makeCodeView(lines: 1, theme: theme, language: "").languageLabel.text, "</>")
+        XCTAssertEqual(MarkdownTheme().codeBlockStyle, .card, "The package default stays upstream's card")
+        XCTAssertTrue(MarkdownTheme().showsCodeLineNumbers)
+    }
+
+    func testRuleCodeBlockControlsFollowThePointer() {
+        let theme = LimareMarkdownRepresentable.makeThemeFromPreferences()
+        let view = makeCodeView(lines: 3, theme: theme, language: "")
+        let event = NSEvent.enterExitEvent(with: .mouseEntered, location: .zero, modifierFlags: [], timestamp: 0,
+                                           windowNumber: 0, context: nil, eventNumber: 0, trackingNumber: 0, userData: nil)!
+        func settle() { RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.3)) }
+
+        XCTAssertTrue(view.languageLabel.isHidden, "No language: no label, and no </>")
+        XCTAssertTrue(view.barView.isHidden)
+        XCTAssertEqual(view.barView.alphaValue, 0, accuracy: 0.01)
+        let copyPoint = view.convert(CGPoint(x: view.copyButton.bounds.midX, y: view.copyButton.bounds.midY), from: view.copyButton)
+        XCTAssertFalse(view.interactionTarget(at: copyPoint) === view.copyButton, "Hidden controls take no clicks")
+
+        view.mouseEntered(with: event)
+        settle()
+        XCTAssertFalse(view.barView.isHidden)
+        XCTAssertEqual(view.barView.alphaValue, 1, accuracy: 0.01)
+        XCTAssertTrue(view.interactionTarget(at: copyPoint) === view.copyButton)
+        XCTAssertEqual(view.barView.frame.maxX, view.bounds.width, accuracy: 0.5, "The controls sit at the top right")
+
+        view.mouseExited(with: event)
+        settle()
+        XCTAssertTrue(view.barView.isHidden)
+        XCTAssertEqual(view.barView.alphaValue, 0, accuracy: 0.01)
+
+        // Copied: the checkmark keeps the controls up after the pointer leaves.
+        view.mouseEntered(with: event)
+        view.showCopyFeedback()
+        view.mouseExited(with: event)
+        settle()
+        XCTAssertFalse(view.barView.isHidden)
+        XCTAssertEqual(view.barView.alphaValue, 1, accuracy: 0.01)
+        view.resetCopyFeedback()
+        settle()
+        XCTAssertTrue(view.barView.isHidden)
+
+        view.language = "swift"
+        XCTAssertFalse(view.languageLabel.isHidden)
+        XCTAssertEqual(view.languageLabel.text, "swift")
     }
 }
 

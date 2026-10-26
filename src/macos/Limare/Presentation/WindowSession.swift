@@ -19,6 +19,8 @@ final class WindowSession: Identifiable {
     let scheduledPanel = ScheduledPanelState()
     /// Bumped by the Focus Composer command; the composer makes its editor first responder.
     var composerFocusRequest = 0
+    /// The Run Details sheet of the shown conversation's latest run is open.
+    var showsRunDetails = false
     /// The last request a composer acted on. A request made from Settings is acted on when the
     /// chat's composer appears.
     @ObservationIgnored var composerFocusServed = 0

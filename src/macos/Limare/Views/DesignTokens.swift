@@ -27,6 +27,9 @@ enum AppSpacing {
     static let workSurfaceInset: CGFloat = 8
     /// The sheet's top in the title bar, level with the sidebar's.
     static let workSurfaceTopInset: CGFloat = 10
+    /// The sidebar's glass panel: inset like the Work Surface sheet, its top level with it.
+    static let sidebarPanelInset: CGFloat = 8
+    static let sidebarPanelTopInset: CGFloat = 10
 }
 
 enum AppRadius {
@@ -48,6 +51,8 @@ enum AppRadius {
     static let badge: CGFloat = 10
     /// The inset Work Surface sheet.
     static let workSurfaceSheet: CGFloat = 14
+    /// The sidebar's glass panel, in step with the Work Surface sheet.
+    static let sidebarPanel: CGFloat = 14
     /// Settings cards and the log table.
     static let settingsCard: CGFloat = 12
     static let full: CGFloat = 9999
@@ -244,8 +249,17 @@ enum AppColors {
     static var quietLinkText: Color { Color.primary.opacity(0.78) }
     static var quietLinkFill: Color { Color.primary.opacity(0.05) }
     static var quietLinkHover: Color { Color.primary.opacity(0.09) }
+    /// The question card's choice rows: a faint tint under the pointer, a step deeper once
+    /// selected.
+    static var choiceHover: Color { Color.primary.opacity(0.035) }
+    static var choiceSelected: Color { Color.primary.opacity(0.06) }
     /// A reply the runtime wrote (a failed request, a stop): a small tinted status line.
     static var noticeFill: Color { Color.primary.opacity(0.04) }
+    /// The left rule of a content block (a tool's details, an answered question): the same ink
+    /// as a code block's rule (`LimareMarkdownView.codeBlockRuleInk`), so they read as one.
+    static let contentRule = Color(nsColor: NSColor(name: nil) { appearance in
+        isDark(appearance) ? NSColor.white.withAlphaComponent(0.16) : NSColor.black.withAlphaComponent(0.12)
+    })
     /// A white piece lying on the canvas (a launcher row, a settings card): its hairline edge.
     static let hairline = Color(nsColor: NSColor(name: nil) { appearance in
         isDark(appearance) ? NSColor.white.withAlphaComponent(0.08) : NSColor.black.withAlphaComponent(0.07)
@@ -351,7 +365,55 @@ struct QuietLinkButtonStyle: ButtonStyle {
     }
 }
 
+/// A compact text action without chrome at rest, a faint tint under the pointer: the scheduled
+/// task detail's Edit, Duplicate and Delete, and the question card's Skip.
+struct GhostTextButtonStyle: ButtonStyle {
+    var isDestructive = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        StyleBody(configuration: configuration, isDestructive: isDestructive)
+    }
+
+    private struct StyleBody: View {
+        let configuration: ButtonStyleConfiguration
+        let isDestructive: Bool
+        @Environment(\.isEnabled) private var isEnabled
+        @State private var isHovering = false
+
+        var body: some View {
+            configuration.label
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(isDestructive && isHovering ? AppColors.dangerText : Color.primary.opacity(isHovering ? 0.9 : 0.65))
+                .padding(.horizontal, AppSpacing.small)
+                .frame(height: 26)
+                .background(
+                    RoundedRectangle(cornerRadius: AppRadius.control, style: .continuous)
+                        .fill(isHovering || configuration.isPressed ? AppColors.ghostHover : .clear)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: AppRadius.control, style: .continuous))
+                .opacity(isEnabled ? 1 : 0.45)
+                .onHover { isHovering = $0 }
+                .animation(AppMotion.resolved(AppMotion.quick), value: isHovering)
+        }
+    }
+}
+
 extension View {
+    /// The composer's material, shared with the question card above it: a matte white card on
+    /// the canvas (a slate in dark), a crisp 1pt edge, and only a tight shadow where it meets
+    /// the page, no diffuse halo.
+    func raisedCardSurface(stroke: Color = AppColors.composerStroke, lineWidth: CGFloat = 1) -> some View {
+        background(
+            RoundedRectangle(cornerRadius: AppRadius.composerCard, style: .continuous)
+                .fill(AppColors.raisedSurface)
+                .shadow(color: .black.opacity(0.025), radius: 2, x: 0, y: 1)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppRadius.composerCard, style: .continuous)
+                .strokeBorder(stroke, lineWidth: lineWidth)
+        )
+    }
+
     /// The composer's thinking and model menus: quiet bare text, a faint rounded tint under the
     /// pointer.
     func composerPill() -> some View {

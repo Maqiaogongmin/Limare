@@ -96,6 +96,8 @@ public struct MarkdownTheme: Equatable, @unchecked Sendable {
             public var codeBlockBarBackground = CodeBlockDefaults.barBackground
             /// Outlines a code block in this colour; without it the block has no edge.
             public var codeBlockBorder: UIColor?
+            /// The left rule of a `.rule` code block; without it, 12% of `body`.
+            public var codeBlockRule: UIColor?
             public var selectionBackground: UIColor? =
                 (UIColor(named: "AccentColor")
                         ?? UIColor(named: "accentColor")
@@ -119,6 +121,8 @@ public struct MarkdownTheme: Equatable, @unchecked Sendable {
             public var codeBlockBarBackground = CodeBlockDefaults.barBackground
             /// Outlines a code block in this colour; without it the block has no edge.
             public var codeBlockBorder: NSColor?
+            /// The left rule of a `.rule` code block; without it, 12% of `body`.
+            public var codeBlockRule: NSColor?
             public var selectionBackground: NSColor? =
                 (NSColor(named: "AccentColor")
                         ?? NSColor(named: "accentColor")
@@ -149,6 +153,8 @@ public struct MarkdownTheme: Equatable, @unchecked Sendable {
         /// Diameter of a list bullet.
         public var bullet: CGFloat = 6
         public var codeBlockCornerRadius: CGFloat = 8
+        /// The width of a `.rule` code block's left rule.
+        public var codeBlockRuleWidth: CGFloat = 2
     }
 
     public var sizes: Sizes = .init()
@@ -178,6 +184,21 @@ public struct MarkdownTheme: Equatable, @unchecked Sendable {
     /// type, where Return means "new line". A line separator, not a newline,
     /// so the lines keep the paragraph's line spacing.
     public var softBreaksAreLineBreaks = false
+
+    /// How a code block is drawn.
+    public enum CodeBlockStyle: Equatable, Sendable {
+        /// A tinted card with a bar holding the language and the buttons (upstream).
+        case card
+        /// No fill, edge or bar: a thin rule down the left, with the language and the
+        /// buttons shown over the top right only while the pointer is over the block.
+        /// macOS only; UIKit draws it as `.card`.
+        case rule
+    }
+
+    public var codeBlockStyle: CodeBlockStyle = .card
+
+    /// Numbers a code block's lines in a gutter. When off, the gutter takes no width.
+    public var showsCodeLineNumbers = true
 
     public init() {}
 }

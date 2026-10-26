@@ -84,6 +84,17 @@ struct ChatView: View {
             UndoMessageSheet(messageID: request.messageID)
                 .environment(appState)
         }
+        // Opened from the status line or Conversation → Run Details…, for the shown conversation's
+        // latest run. On the whole view, so it opens while the Work Surface covers the chat too.
+        .sheet(isPresented: Binding(
+            get: { window.showsRunDetails && latestRun != nil },
+            set: { window.showsRunDetails = $0 }
+        )) {
+            if let run = latestRun {
+                RunTraceDetailSheet(run: run, trace: appState.runtimeEvents.trace(for: run.id))
+                    .environment(appState)
+            }
+        }
     }
 
     /// Toolbar buttons are bare icons, without the system's round backing.
@@ -185,6 +196,10 @@ struct ChatView: View {
         }
         .background(AppColors.canvas.ignoresSafeArea())
         .animation(AppMotion.resolved(AppMotion.composerSettle), value: isEmpty)
+    }
+
+    private var latestRun: ConversationRun? {
+        window.conversationID.flatMap { appState.conversationRuns.run(for: $0) }
     }
 
     private var activeTitle: String {

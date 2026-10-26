@@ -267,17 +267,8 @@ struct ComposerView: View {
             .padding(.horizontal, AppSpacing.standard)
             // A new conversation's composer is the page's centre: a fuller card.
             .frame(minHeight: isEmptyState ? AppLayout.emptyStateComposerMinimumHeight : nil, alignment: .top)
-            // A matte white card on the canvas: a crisp 1pt edge marks it, and only a tight
-            // shadow where it meets the page, no diffuse halo.
-            .background(
-                RoundedRectangle(cornerRadius: AppRadius.composerCard, style: .continuous)
-                    .fill(AppColors.raisedSurface)
-                    .shadow(color: .black.opacity(0.025), radius: 2, x: 0, y: 1)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: AppRadius.composerCard, style: .continuous)
-                    .strokeBorder(isFileTargeted ? Color.accentColor : AppColors.composerStroke, lineWidth: isFileTargeted ? 2 : 1)
-            )
+            .raisedCardSurface(stroke: isFileTargeted ? .accentColor : AppColors.composerStroke,
+                               lineWidth: isFileTargeted ? 2 : 1)
             .dropDestination(for: URL.self) { urls, _ in
                 importFiles(urls.map { HostFileSelection.droppedByUser(url: $0) })
                 return !urls.isEmpty

@@ -3,20 +3,22 @@ import SwiftUI
 struct ChatRunStatusView: View {
     let conversationID: UUID
     @Environment(AppState.self) private var appState
-    @State private var showsDetails = false
+    @Environment(WindowSession.self) private var window
 
-    private var run: ConversationRun? { appState.conversationRuns.run(for: conversationID) }
-    private var trace: RunTraceProjection? { run.map { appState.runtimeEvents.trace(for: $0.id) } }
+    private var line: RunStatusStripLine? {
+        guard let run = appState.conversationRuns.run(for: conversationID) else { return nil }
+        return RunStatusStripPolicy.line(status: run.status, trace: appState.runtimeEvents.trace(for: run.id))
+    }
 
     var body: some View {
-        if let run, let trace {
+        if let line {
             HStack(spacing: AppSpacing.small) {
-                Image(systemName: icon(for: run.status))
-                    .foregroundStyle(color(for: run.status))
-                Text(trace.currentStatus)
+                Image(systemName: line.symbolName)
+                    .foregroundStyle(color(for: line.tone))
+                Text(line.text)
                     .font(AppTypography.interfaceSubheadline)
                 Spacer()
-                Button("View run details") { showsDetails = true }
+                Button("View run details") { window.showsRunDetails = true }
                     .buttonStyle(QuietLinkButtonStyle())
             }
             .padding(.leading, AppSpacing.medium)
@@ -29,29 +31,14 @@ struct ChatRunStatusView: View {
             )
             .padding(.horizontal, AppSpacing.standard)
             .padding(.top, AppSpacing.xSmall)
-            .sheet(isPresented: $showsDetails) {
-                RunTraceDetailSheet(run: run, trace: trace)
-                    .environment(appState)
-            }
         }
     }
 
-    private func icon(for status: ConversationRunStatus) -> String {
-        switch status {
-        case .running, .queued: "circle.dotted"
-        case .paused: "pause.circle"
-        case .completed: "checkmark.circle"
-        case .failed: "exclamationmark.triangle"
-        case .cancelled: "stop.circle"
-        case .interrupted: "bolt.slash"
-        }
-    }
-    private func color(for status: ConversationRunStatus) -> Color {
-        switch status {
-        case .failed: AppColors.statusError
-        case .completed: AppColors.statusSuccess
-        case .paused: AppColors.statusWarning
-        case .running, .queued, .cancelled, .interrupted: AppColors.textSecondary
+    private func color(for tone: RunStatusStripLine.Tone) -> Color {
+        switch tone {
+        case .error: AppColors.statusError
+        case .warning: AppColors.statusWarning
+        case .secondary: AppColors.textSecondary
         }
     }
 }

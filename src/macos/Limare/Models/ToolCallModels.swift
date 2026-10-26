@@ -86,6 +86,9 @@ struct ToolCallRecord: Identifiable, Codable, Sendable, Equatable {
     var mechanicalTerminalFact: ToolMechanicalTerminalFact?
     /// Kernel-owned durable attribution. Older records have no proven run owner.
     var owningRunID: UUID? = nil
+    /// How the user resolved an `ask_user_question` card, for the transcript. The model reads
+    /// `output`; this is never sent to it.
+    var questionResolution: RecordedQuestionResolution? = nil
 
     init(
         id: UUID = UUID(),
@@ -115,6 +118,7 @@ struct ToolCallRecord: Identifiable, Codable, Sendable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case id, providerCallID, name, input, state, output, durationMilliseconds, errorMessage, approvalState, resultParts, mechanicalTerminalFact, owningRunID
+        case questionResolution
     }
 
     init(from decoder: Decoder) throws {
@@ -131,6 +135,7 @@ struct ToolCallRecord: Identifiable, Codable, Sendable, Equatable {
         self.resultParts = try container.decodeIfPresent([ToolResultPart].self, forKey: .resultParts)
         self.mechanicalTerminalFact = try container.decodeIfPresent(ToolMechanicalTerminalFact.self, forKey: .mechanicalTerminalFact)
         self.owningRunID = try container.decodeIfPresent(UUID.self, forKey: .owningRunID)
+        self.questionResolution = try container.decodeIfPresent(RecordedQuestionResolution.self, forKey: .questionResolution)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -147,6 +152,7 @@ struct ToolCallRecord: Identifiable, Codable, Sendable, Equatable {
         try container.encodeIfPresent(resultParts, forKey: .resultParts)
         try container.encodeIfPresent(mechanicalTerminalFact, forKey: .mechanicalTerminalFact)
         try container.encodeIfPresent(owningRunID, forKey: .owningRunID)
+        try container.encodeIfPresent(questionResolution, forKey: .questionResolution)
     }
 }
 
@@ -226,6 +232,11 @@ struct ToolExecutionOutcome: Sendable {
     let resultParts: [ToolResultPart]
     /// Minimal typed propagation of the canonical terminal fact when the producing tool owns one.
     let mechanicalTerminalFact: ToolMechanicalTerminalFact?
+    /// The user ended the turn with this call (skipping a question card): the run finishes after
+    /// this result instead of sending the model another request.
+    let endsTurn: Bool
+    /// How the user resolved a question card, kept on the record for the transcript.
+    let questionResolution: RecordedQuestionResolution?
 
     init(
         content: String,
@@ -234,7 +245,9 @@ struct ToolExecutionOutcome: Sendable {
         durationMilliseconds: Int,
         attachments: [ChatAttachment] = [],
         resultParts: [ToolResultPart]? = nil,
-        mechanicalTerminalFact: ToolMechanicalTerminalFact? = nil
+        mechanicalTerminalFact: ToolMechanicalTerminalFact? = nil,
+        endsTurn: Bool = false,
+        questionResolution: RecordedQuestionResolution? = nil
     ) {
         self.content = content
         self.isError = isError
@@ -242,6 +255,8 @@ struct ToolExecutionOutcome: Sendable {
         self.durationMilliseconds = durationMilliseconds
         self.attachments = attachments
         self.mechanicalTerminalFact = mechanicalTerminalFact
+        self.endsTurn = endsTurn
+        self.questionResolution = questionResolution
         if let resultParts {
             self.resultParts = resultParts
         } else if isError {
@@ -259,7 +274,8 @@ extension ToolExecutionOutcome {
         if parts.count == 1, case .text = parts[0] { parts = [.text(content + text)] } else { parts.append(.text(text)) }
         return ToolExecutionOutcome(content: content + text, isError: isError, approvalState: approvalState,
                                     durationMilliseconds: durationMilliseconds, attachments: attachments,
-                                    resultParts: parts, mechanicalTerminalFact: mechanicalTerminalFact)
+                                    resultParts: parts, mechanicalTerminalFact: mechanicalTerminalFact, endsTurn: endsTurn,
+                                    questionResolution: questionResolution)
     }
 }
 
@@ -369,6 +385,11 @@ extension ToolCallRecord {
         // presentation truth and is never parsed; `content` is never copied into the durable record.
         if state.isTerminal, let fact = outcome.mechanicalTerminalFact {
             mechanicalTerminalFact = fact
+        }
+        // ask_user_question reaches a terminal state through its own update first, so this sits
+        // after both branches.
+        if state.isTerminal, questionResolution == nil, let resolution = outcome.questionResolution {
+            questionResolution = resolution
         }
     }
 }
