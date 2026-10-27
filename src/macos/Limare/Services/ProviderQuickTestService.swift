@@ -9,9 +9,9 @@ public enum QuickTestKind: String, CaseIterable, Identifiable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .text: return "Text"
-        case .vision: return "Vision"
-        case .voiceOutput: return "Voice Output"
+        case .text: return String(localized: "Text")
+        case .vision: return String(localized: "Vision")
+        case .voiceOutput: return String(localized: "Voice Output")
         }
     }
 
@@ -116,9 +116,9 @@ public enum QuickTestError: LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case .unsupported(let msg): return msg
-        case .missingCredential(let msg): return "Provider credential unavailable: \(msg)"
-        case .emptyResponse: return "The provider returned an empty response."
-        case .timeout(let seconds): return "Request timed out after \(seconds)s."
+        case .missingCredential(let msg): return String(localized: "Provider credential unavailable: \(msg)")
+        case .emptyResponse: return String(localized: "The provider returned an empty response.")
+        case .timeout(let seconds): return String(localized: "Request timed out after \(seconds)s.")
         }
     }
 }
@@ -272,7 +272,7 @@ final class ProviderQuickTestService: ObservableObject {
             )
         } else if observation.reasoningCharacters > 0 {
             // Case B: No text, but reasoning observed
-            let diag = "Response received, but no displayable text was produced. Observed reasoning content (\(observation.reasoningCharacters) chars)."
+            let diag = String(localized: "Response received, but no displayable text was produced. Observed reasoning content (\(observation.reasoningCharacters) chars).")
             return QuickTestResult(
                 kind: kind,
                 status: .inconclusive(duration: duration, diagnostic: diag),
@@ -283,7 +283,7 @@ final class ProviderQuickTestService: ObservableObject {
             )
         } else if observation.toolCallEvents > 0 {
             // Case C: Tool call observed instead of text
-            let diag = "Provider responded with a tool call (\(observation.toolCallEvents) events) instead of text."
+            let diag = String(localized: "Provider responded with a tool call (\(observation.toolCallEvents) events) instead of text.")
             return QuickTestResult(
                 kind: kind,
                 status: .inconclusive(duration: duration, diagnostic: diag),
@@ -294,7 +294,7 @@ final class ProviderQuickTestService: ObservableObject {
             )
         } else if observation.streamOpened && observation.unrecognizedEventCount > 0 {
             // Case E: Stream opened, but unrecognized payloads
-            let diag = "Provider responded, but Limare could not fully interpret the stream (\(observation.unrecognizedEventCount) unrecognized event(s))."
+            let diag = String(localized: "Provider responded, but Limare could not fully interpret the stream (\(observation.unrecognizedEventCount) unrecognized event(s)).")
             return QuickTestResult(
                 kind: kind,
                 status: .inconclusive(duration: duration, diagnostic: diag),
@@ -305,7 +305,7 @@ final class ProviderQuickTestService: ObservableObject {
             )
         } else if observation.completedReceived && observation.unrecognizedEventCount == 0 {
             // Case D: Completed successfully but returned no content
-            let diag = "Provider completed successfully but returned no content."
+            let diag = String(localized: "Provider completed successfully but returned no content.")
             return QuickTestResult(
                 kind: kind,
                 status: .inconclusive(duration: duration, diagnostic: diag),
@@ -315,7 +315,7 @@ final class ProviderQuickTestService: ObservableObject {
                 isProbe: isProbe
             )
         } else {
-            let diag = "The provider completed without returning usable content."
+            let diag = String(localized: "The provider completed without returning usable content.")
             return QuickTestResult(
                 kind: kind,
                 status: .inconclusive(duration: duration, diagnostic: diag),
@@ -343,7 +343,7 @@ final class ProviderQuickTestService: ObservableObject {
                 results[kind] = QuickTestResult(
                     kind: kind,
                     status: .cancelled(duration: dur),
-                    errorMessage: "Test was cancelled.",
+                    errorMessage: String(localized: "Test was cancelled."),
                     observation: current.observation,
                     duration: dur,
                     isProbe: current.isProbe
@@ -428,7 +428,7 @@ final class ProviderQuickTestService: ObservableObject {
         // 1. Guard against unsupported test kind for this model (Zero Network Call)
         let applicable = Self.applicableKinds(for: model, in: provider)
         guard applicable.contains(kind) else {
-            let err = QuickTestError.unsupported("The model '\(model.displayName)' does not support \(kind.displayName) testing.").localizedDescription
+            let err = QuickTestError.unsupported(String(localized: "The model '\(model.displayName)' does not support \(kind.displayName) testing.")).localizedDescription
             return QuickTestResult(
                 kind: kind,
                 status: .failed(duration: 0, error: err),
@@ -448,7 +448,7 @@ final class ProviderQuickTestService: ObservableObject {
         }()
 
         if provider.authenticationMode != .none && effectiveKey == nil {
-            let err = "API key is required for \(provider.authenticationMode.displayName)."
+            let err = String(localized: "API key is required for \(provider.authenticationMode.displayName).")
             return QuickTestResult(
                 kind: kind,
                 status: .failed(duration: 0, error: err),
@@ -493,7 +493,7 @@ final class ProviderQuickTestService: ObservableObject {
             return QuickTestResult(
                 kind: kind,
                 status: .cancelled(duration: dur),
-                errorMessage: "Test was cancelled.",
+                errorMessage: String(localized: "Test was cancelled."),
                 observation: QuickTestObservation(isProbe: isProbe),
                 duration: dur,
                 isProbe: isProbe
@@ -503,7 +503,7 @@ final class ProviderQuickTestService: ObservableObject {
             return QuickTestResult(
                 kind: kind,
                 status: .cancelled(duration: dur),
-                errorMessage: "Test was cancelled.",
+                errorMessage: String(localized: "Test was cancelled."),
                 observation: QuickTestObservation(isProbe: isProbe),
                 duration: dur,
                 isProbe: isProbe
@@ -541,7 +541,7 @@ final class ProviderQuickTestService: ObservableObject {
     ) async -> QuickTestResult {
         if provider.authenticationMode == .oauth {
             let dur = Self.seconds(since: startTime)
-            let reason = "OAuth does not authorize speech synthesis (API Key required)"
+            let reason = String(localized: "OAuth does not authorize speech synthesis (API Key required)")
             return QuickTestResult(
                 kind: .voiceOutput,
                 status: .failed(duration: dur, error: reason),
@@ -584,17 +584,17 @@ final class ProviderQuickTestService: ObservableObject {
                     text: testPrompt
                 )
             case .protocolUnsupported:
-                throw VoiceOutputError.synthesisFailed("Protocol unsupported")
+                throw VoiceOutputError.synthesisFailed(String(localized: "Protocol unsupported"))
             }
 
             guard !audioData.isEmpty else {
-                throw VoiceOutputError.synthesisFailed("Empty audio response")
+                throw VoiceOutputError.synthesisFailed(String(localized: "Empty audio response"))
             }
 
             try audioValidator.validate(audioData)
 
             let dur = Self.seconds(since: startTime)
-            let out = "Speech synthesis succeeded (\(audioData.count) bytes)."
+            let out = String(localized: "Speech synthesis succeeded (\(audioData.count) bytes).")
             return QuickTestResult(
                 kind: .voiceOutput,
                 status: .passed(duration: dur, output: out),
@@ -657,7 +657,7 @@ final class ProviderQuickTestService: ObservableObject {
             ]
             attachmentResolver = { _ in Self.samplePNGData }
         case .voiceOutput:
-            throw QuickTestError.unsupported("Voice output does not support stream chat.")
+            throw QuickTestError.unsupported(String(localized: "Voice output does not support stream chat."))
         }
 
         let options = ChatInferenceOptions(

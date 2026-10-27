@@ -1,0 +1,60 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "NSMicrophoneUsageDescription" : {
+      "comment" : "Privacy - usage description",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limare requires microphone access for voice input."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limare 需要麦克风权限以进行语音输入。"
+          }
+        }
+      }
+    },
+    "NSScreenCaptureUsageDescription" : {
+      "comment" : "Privacy - usage description",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limare requires screen recording access to observe the primary display for Computer Use."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limare 需要屏幕录制权限，以便在使用 Computer Use 时观察主显示器。"
+          }
+        }
+      }
+    },
+    "NSSpeechRecognitionUsageDescription" : {
+      "comment" : "Privacy - usage description",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limare requires speech recognition access for system voice transcription."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limare 需要语音识别权限以进行系统语音转写。"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

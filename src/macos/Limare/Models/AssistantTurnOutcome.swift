@@ -27,11 +27,11 @@ struct AssistantTurnError: LocalizedError, Sendable {
     let finishReason: String?
     var errorDescription: String? {
         switch outcome {
-        case .noOutput: return "The model returned no answer. Retry the request."
-        case .reasoningOnly: return "The model returned reasoning without an answer. Retry the request."
-        case .outputLimited: return "The model reached its output limit. The partial response was preserved."
-        case .contentFiltered: return "The provider filtered the response. The request was stopped."
-        case .streamIncomplete: return "The provider stream ended without a terminal marker. The partial response was preserved."
+        case .noOutput: return String(localized: "The model returned no answer. Retry the request.")
+        case .reasoningOnly: return String(localized: "The model returned reasoning without an answer. Retry the request.")
+        case .outputLimited: return String(localized: "The model reached its output limit. The partial response was preserved.")
+        case .contentFiltered: return String(localized: "The provider filtered the response. The request was stopped.")
+        case .streamIncomplete: return String(localized: "The provider stream ended without a terminal marker. The partial response was preserved.")
         case .answer, .toolCalls: return "Invalid assistant turn rejection."
         }
     }

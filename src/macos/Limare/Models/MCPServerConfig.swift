@@ -34,14 +34,14 @@ enum MCPServerStatus: Sendable, Equatable {
 
     var displayText: String {
         switch self {
-        case .configSaved: return "Config saved"
-        case .credentialRequired: return "Credential required"
-        case .signInRequired: return "Sign-in required"
-        case .signingIn: return "Waiting for browser sign-in…"
-        case .connecting: return "Connecting…"
-        case .connected(let count): return "Connected (\(count) tool\(count == 1 ? "" : "s"))"
-        case .failed(let msg, _): return "Failed: \(msg)"
-        case .disconnected: return "Disconnected"
+        case .configSaved: return String(localized: "Config saved")
+        case .credentialRequired: return String(localized: "Credential required")
+        case .signInRequired: return String(localized: "Sign-in required")
+        case .signingIn: return String(localized: "Waiting for browser sign-in…")
+        case .connecting: return String(localized: "Connecting…")
+        case .connected(let count): return String(localized: "Connected (\(count) tools)")
+        case .failed(let msg, _): return String(localized: "Failed: \(msg)")
+        case .disconnected: return String(localized: "Disconnected")
         }
     }
 }
@@ -79,7 +79,7 @@ enum MCPServerProfile: String, Codable, Sendable, CaseIterable {
         switch self {
         case .githubRemote:
             return Contract(
-                displayName: "GitHub (own GitHub App)",
+                displayName: String(localized: "GitHub (own GitHub App)"),
                 endpoint: "https://api.githubcopilot.com/mcp/",
                 headers: ["X-MCP-Readonly": "true", "X-MCP-Toolsets": "repos,issues,pull_requests,users,projects"],
                 authorizationIssuer: "https://github.com/login/oauth",
@@ -98,7 +98,7 @@ enum MCPServerProfile: String, Codable, Sendable, CaseIterable {
     func validate(_ config: MCPServerConfig) throws {
         guard config.url == contract.endpoint, config.command == nil, config.args == nil, config.env == nil,
               (config.headers ?? [:]) == contract.headers else {
-            throw MCPTransportError.configurationError("The \(contract.displayName) profile fixes its endpoint and headers; static tokens are not supported.")
+            throw MCPTransportError.configurationError(String(localized: "The \(contract.displayName) profile fixes its endpoint and headers; static tokens are not supported."))
         }
     }
 }
@@ -226,7 +226,7 @@ struct MCPServerConfig: Codable, Identifiable, Hashable, Sendable {
             let argStr = (args ?? []).joined(separator: " ")
             return argStr.isEmpty ? (command ?? "") : "\(command ?? "") \(argStr)"
         }
-        return "Not configured"
+        return String(localized: "Not configured")
     }
 
     /// A deterministic revision token of non-sensitive configuration parameters.

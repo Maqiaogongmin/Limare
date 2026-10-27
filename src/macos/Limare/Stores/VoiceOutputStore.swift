@@ -83,9 +83,9 @@ final class VoiceOutputStore {
                 store.lastFallbackReason = fallbackReason
                 let engineLabel: String = {
                     if let fallbackReason, !fallbackReason.isEmpty {
-                        return "System Voice (Fallback: \(fallbackReason))"
+                        return String(localized: "System Voice (Fallback: \(fallbackReason))")
                     } else {
-                        return "System Voice"
+                        return String(localized: "System Voice")
                     }
                 }()
                 store.state = .playing(messageID: messageID, engineLabel: engineLabel)

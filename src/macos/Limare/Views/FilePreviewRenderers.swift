@@ -86,7 +86,7 @@ public struct FilePreviewToolbar: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(AppColors.textSecondary)
-                .help("在浏览器中打开（会启用脚本并读取文件所在文件夹）")
+                .help("Open in Browser (runs scripts and can read the file's folder)")
                 .accessibilityLabel("Open in Browser")
                 .accessibilityIdentifier("files.preview.openInBrowser")
             }

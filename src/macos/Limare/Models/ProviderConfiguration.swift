@@ -6,7 +6,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Sendable {
     public var displayName: String {
         switch self {
         case .openAICompatible:
-            "OpenAI-compatible"
+            String(localized: "OpenAI-compatible")
         }
     }
 }
@@ -20,6 +20,22 @@ public enum ModelMetadataSource: String, Codable, Hashable, Sendable {
     case inferred = "Inferred"
     case custom = "Custom"
     case unknown = "Unknown"
+}
+
+extension ModelMetadataSource {
+    /// The raw value is stored; this is what Settings shows.
+    public var displayName: String {
+        switch self {
+        case .userOverride: String(localized: "User Override")
+        case .providerDeclaration: String(localized: "Provider Declaration")
+        case .modelsDevAuthoritative: String(localized: "models.dev (Authoritative)")
+        case .builtIn: String(localized: "Built-in Catalog")
+        case .modelsDevFallback: String(localized: "models.dev (Fallback)")
+        case .inferred: String(localized: "Inferred")
+        case .custom: String(localized: "Custom")
+        case .unknown: String(localized: "Unknown")
+        }
+    }
 }
 
 public struct ModelCapabilityProvenance: Codable, Hashable, Sendable {
@@ -323,13 +339,13 @@ public enum ProviderAuthenticationMode: String, Codable, CaseIterable, Sendable 
     public var displayName: String {
         switch self {
         case .bearer:
-            "Bearer API Key"
+            String(localized: "Bearer API Key")
         case .azureAPIKey:
-            "Azure OpenAI (api-key)"
+            String(localized: "Azure OpenAI (api-key)")
         case .oauth:
-            "ChatGPT OAuth"
+            String(localized: "ChatGPT OAuth")
         case .none:
-            "None"
+            String(localized: "None")
         }
     }
 }
@@ -343,13 +359,13 @@ public enum ProviderAPIFormat: String, Codable, CaseIterable, Sendable {
     public var displayName: String {
         switch self {
         case .chatCompletions:
-            "Chat Completions"
+            String(localized: "Chat Completions")
         case .responses:
-            "Responses API"
+            String(localized: "Responses API")
         case .anthropicMessages:
-            "Anthropic Messages"
+            String(localized: "Anthropic Messages")
         case .geminiNative:
-            "Gemini Native"
+            String(localized: "Gemini Native")
         }
     }
 }

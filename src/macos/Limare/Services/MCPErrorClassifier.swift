@@ -24,13 +24,13 @@ enum MCPErrorClassifier {
 
         if lower.contains("401") || lower.contains("unauthorized") || lower.contains("authentication required") || lower.contains("missing or invalid token") {
             return .authenticationRequired(
-                message: "Authentication failed (401): the server rejected the request's credentials (\(desc))."
+                message: String(localized: "Authentication failed (401): the server rejected the request's credentials (\(desc)).")
             )
         }
 
         if lower.contains("403") || lower.contains("forbidden") || lower.contains("access forbidden") || lower.contains("policy") {
             return .accessForbidden(
-                message: "Access forbidden (403): the server refused this request (\(desc))."
+                message: String(localized: "Access forbidden (403): the server refused this request (\(desc)).")
             )
         }
 
@@ -39,13 +39,13 @@ enum MCPErrorClassifier {
             case .timedOut:
                 return .timeout(seconds: httpRequestTimeoutSeconds)
             case .cannotFindHost, .dnsLookupFailed:
-                return .networkUnreachable("DNS resolution failed: Host could not be found for \(url ?? "endpoint").")
+                return .networkUnreachable(String(localized: "DNS resolution failed: Host could not be found for \(url ?? "endpoint")."))
             case .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet:
-                return .networkUnreachable("Network unreachable: Could not establish connection to \(url ?? "endpoint").")
+                return .networkUnreachable(String(localized: "Network unreachable: Could not establish connection to \(url ?? "endpoint")."))
             case .secureConnectionFailed, .serverCertificateHasBadDate, .serverCertificateUntrusted:
-                return .networkUnreachable("TLS/SSL security handshake failed with \(url ?? "endpoint").")
+                return .networkUnreachable(String(localized: "TLS/SSL security handshake failed with \(url ?? "endpoint")."))
             default:
-                return .networkUnreachable("Network error (\(urlError.code.rawValue)): \(urlError.localizedDescription)")
+                return .networkUnreachable(String(localized: "Network error (\(urlError.code.rawValue)): \(urlError.localizedDescription)"))
             }
         }
 
@@ -54,7 +54,7 @@ enum MCPErrorClassifier {
         }
 
         if lower.contains("cannot connect") || lower.contains("connection refused") || lower.contains("could not resolve host") {
-            return .networkUnreachable("Could not reach endpoint: \(desc)")
+            return .networkUnreachable(String(localized: "Could not reach endpoint: \(desc)"))
         }
 
         if lower.contains("500") || lower.contains("502") || lower.contains("503") || lower.contains("504") || lower.contains("server error:") {
@@ -72,23 +72,23 @@ enum MCPErrorClassifier {
     static func details(for kind: MCPFailureKind, message: String) -> ClassifiedDetails {
         let (explanation, action): (String, String) = switch kind {
         case .authentication:
-            ("Authentication failed", "Sign in again, or replace the token this connection sends.")
+            (String(localized: "Authentication failed"), String(localized: "Sign in again, or replace the token this connection sends."))
         case .forbidden:
-            ("Access forbidden (403)", "The account is signed in but not allowed to do this. Check its permissions with the server's provider.")
+            (String(localized: "Access forbidden (403)"), String(localized: "The account is signed in but not allowed to do this. Check its permissions with the server's provider."))
         case .network:
-            ("Network unreachable", "Check that the endpoint is running, the URL is correct, and your network is connected.")
+            (String(localized: "Network unreachable"), String(localized: "Check that the endpoint is running, the URL is correct, and your network is connected."))
         case .timeout:
-            ("Request timed out", "Check that the endpoint or process is responding within the expected time limit.")
+            (String(localized: "Request timed out"), String(localized: "Check that the endpoint or process is responding within the expected time limit."))
         case .serverError:
-            ("Remote server error", "The remote service encountered an error. Please try again later.")
+            (String(localized: "Remote server error"), String(localized: "The remote service encountered an error. Please try again later."))
         case .protocolError:
-            ("MCP protocol error", "Verify server compatibility and protocol implementation.")
+            (String(localized: "MCP protocol error"), String(localized: "Verify server compatibility and protocol implementation."))
         case .processExited:
-            ("Server process terminated", "Check command arguments, executable path, and required environment dependencies.")
+            (String(localized: "Server process terminated"), String(localized: "Check command arguments, executable path, and required environment dependencies."))
         case .credentialStorage:
-            ("Credential could not be saved", "Limare could not write to the Keychain. Try again, or check Keychain Access.")
+            (String(localized: "Credential could not be saved"), String(localized: "Limare could not write to the Keychain. Try again, or check Keychain Access."))
         case .other:
-            ("Connection failed", "Review the technical details and update the connection settings if needed.")
+            (String(localized: "Connection failed"), String(localized: "Review the technical details and update the connection settings if needed."))
         }
         return ClassifiedDetails(explanation: explanation, recommendedAction: action, technicalDetails: message)
     }

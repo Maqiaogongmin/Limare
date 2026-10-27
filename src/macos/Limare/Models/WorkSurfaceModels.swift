@@ -10,9 +10,9 @@ public enum WorkSurfaceKind: String, Codable, Sendable, CaseIterable, Identifiab
     public var defaultTitle: String {
         switch self {
         case .browser:
-            return "Browser"
+            return String(localized: "Browser")
         case .files:
-            return "Files"
+            return String(localized: "Files")
         }
     }
 
@@ -85,16 +85,16 @@ public enum WorkSurfaceRegistry {
     public static let builtInDefinitions: [WorkSurfaceDefinition] = [
         WorkSurfaceDefinition(
             kind: .browser,
-            title: "Browser",
+            title: String(localized: "Browser"),
             systemImage: "globe",
-            description: "Open the Agent web surface",
+            description: String(localized: "Open the Agent web surface"),
             order: 0
         ),
         WorkSurfaceDefinition(
             kind: .files,
-            title: "Files",
+            title: String(localized: "Files"),
             systemImage: "folder",
-            description: "Browse workspace files and documents",
+            description: String(localized: "Browse workspace files and documents"),
             order: 1
         )
     ]

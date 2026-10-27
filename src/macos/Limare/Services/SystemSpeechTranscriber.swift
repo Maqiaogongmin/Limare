@@ -26,14 +26,14 @@ public final class SystemSpeechTranscriber: SystemSpeechTranscribing, @unchecked
             case .notDetermined:
                 throw VoiceInputError.systemSpeechPermissionDenied
             @unknown default:
-                throw VoiceInputError.systemSpeechUnavailable("Unknown authorization status")
+                throw VoiceInputError.systemSpeechUnavailable(String(localized: "Unknown authorization status"))
             }
             throw VoiceInputError.systemSpeechPermissionDenied
         }
 
         let locale = Locale.current
         guard let recognizer = SFSpeechRecognizer(locale: locale) ?? SFSpeechRecognizer(locale: Locale(identifier: "en-US")), recognizer.isAvailable else {
-            throw VoiceInputError.systemSpeechUnavailable("Speech recognizer unavailable for locale \(locale.identifier)")
+            throw VoiceInputError.systemSpeechUnavailable(String(localized: "Speech recognizer unavailable for locale \(locale.identifier)"))
         }
 
         let request = SFSpeechURLRecognitionRequest(url: audioFileURL)

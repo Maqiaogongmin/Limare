@@ -51,9 +51,9 @@ final class UndoCoordinator {
     func admissionHoldReason(conversationID: UUID) -> String? {
         guard let plan = journal.openPlan(for: conversationID) else { return nil }
         switch plan.phase {
-        case .partiallyFailed: return "上一次撤销有文件未能恢复，请先处理（继续、保留已恢复的文件，或取消）。"
-        case .filesRestored: return "上一次撤销的文件已恢复，但消息尚未撤回，请先完成撤销。"
-        default: return "上一次撤销尚未完成。"
+        case .partiallyFailed: return String(localized: "Some files from the last undo couldn't be restored. Resolve that first: continue, keep the restored files, or cancel.")
+        case .filesRestored: return String(localized: "The last undo restored its files but hasn't retracted the message yet. Finish that undo first.")
+        default: return String(localized: "The last undo isn't finished.")
         }
     }
 
@@ -63,7 +63,7 @@ final class UndoCoordinator {
     /// optional ones) and runs it. Refuses a blocked preview; throws without writing anything
     /// when the plan cannot be saved, and stops writing as soon as progress cannot be saved.
     func restore(_ preview: UndoPreview, selectedOptionalPaths: Set<String> = [], retractsMessage: Bool = true) throws -> UndoRestorePlan {
-        guard !preview.isBlocked else { throw UndoFileSystemError.restoreFailed("", "存在冲突，不能恢复文件") }
+        guard !preview.isBlocked else { throw UndoFileSystemError.restoreFailed("", String(localized: "There are conflicts, so files can't be restored")) }
         let items = preview.willRestore + preview.optional.filter { selectedOptionalPaths.contains($0.path) }
         let now = Date()
         let plan = UndoRestorePlan(
@@ -111,14 +111,14 @@ final class UndoCoordinator {
                     step.state = .done
                 } else {
                     step.state = .failed
-                    step.failure = "文件在撤销开始后被修改过"
+                    step.failure = String(localized: "The file was modified after the undo started")
                 }
                 step.failure = step.state == .done ? nil : step.failure
             } catch let error as UndoPersistenceError {
                 throw error
             } catch AnchoredFileError.redirected(_), AnchoredFileError.rootMoved(_) {
                 step.state = .failed
-                step.failure = "冲突：上级目录被替换成了符号链接或文件，恢复会写到别处"
+                step.failure = String(localized: "Conflict: a parent folder was replaced by a symbolic link or file, so restoring would write elsewhere")
             } catch {
                 step.state = .failed
                 step.failure = error.localizedDescription
@@ -244,8 +244,8 @@ enum UndoPersistenceError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .plan(let reason): "无法保存撤销进度：\(reason)"
-        case .journal(let reason): "无法保存撤销记录：\(reason)"
+        case .plan(let reason): String(localized: "Couldn't save the undo progress: \(reason)")
+        case .journal(let reason): String(localized: "Couldn't save the undo record: \(reason)")
         }
     }
 }

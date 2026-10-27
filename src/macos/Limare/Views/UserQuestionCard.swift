@@ -41,14 +41,14 @@ struct UserQuestionCard: View {
 
             HStack(spacing: AppSpacing.small) {
                 Spacer()
-                Button("跳过", action: skip)
+                Button("Skip", action: skip)
                     .buttonStyle(GhostTextButtonStyle())
                     .disabled(isResolving)
-                    .help("不回答，结束这一轮，等你发消息")
+                    .help("Don't answer; end this turn and wait for your message")
                     .accessibilityIdentifier("question.skip")
                 Button(action: submit) {
                     HStack(spacing: AppSpacing.xSmall) {
-                        Text("提交")
+                        Text("Submit")
                         Text("⌘↩").opacity(0.6)
                     }
                 }
@@ -145,11 +145,11 @@ struct UserQuestionCard: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(isResolving)
-                .accessibilityLabel("其他")
+                .accessibilityLabel("Other")
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
                 .accessibilityIdentifier("question.other.\(index + 1)")
 
-                TextField("其他回答…", text: Binding(
+                TextField("Other answer…", text: Binding(
                     get: { draft[safe: index]?.otherText ?? "" },
                     set: { text in update(index) { $0.setOtherText(text, multiSelect: item.multiSelect) } }
                 ), axis: .vertical)

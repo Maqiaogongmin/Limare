@@ -9,11 +9,11 @@ struct HookConfigLoader {
         var errorDescription: String? {
             switch self {
             case .fileNotFound(let url):
-                return "Hooks config not found at: \(url.path)"
+                return String(localized: "Hooks config not found at: \(url.path)")
             case .invalidDirectoryStructure(let url):
-                return "No hooks.json or hooks/hooks.json found in: \(url.path)"
+                return String(localized: "No hooks.json or hooks/hooks.json found in: \(url.path)")
             case .parseError(let message):
-                return "Failed to parse hooks configuration: \(message)"
+                return String(localized: "Failed to parse hooks configuration: \(message)")
             }
         }
     }
@@ -111,7 +111,7 @@ struct HookConfigLoader {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let userHooks = home.appendingPathComponent(".codex").appendingPathComponent("hooks.json")
         if FileManager.default.fileExists(atPath: userHooks.path) {
-            return try? loadSource(from: userHooks, sourceKind: .codexUser, nameOverride: "Codex User Config")
+            return try? loadSource(from: userHooks, sourceKind: .codexUser, nameOverride: String(localized: "Codex User Config"))
         }
         return nil
     }
@@ -119,7 +119,7 @@ struct HookConfigLoader {
     static func discoverCodexProjectHooks(workspaceURL: URL) -> HookSource? {
         let projectHooks = workspaceURL.appendingPathComponent(".codex").appendingPathComponent("hooks.json")
         if FileManager.default.fileExists(atPath: projectHooks.path) {
-            return try? loadSource(from: projectHooks, sourceKind: .codexProject, nameOverride: "Codex Project Config")
+            return try? loadSource(from: projectHooks, sourceKind: .codexProject, nameOverride: String(localized: "Codex Project Config"))
         }
         return nil
     }

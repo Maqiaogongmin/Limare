@@ -9,9 +9,9 @@ enum UndoFileSystemError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case let .backupFailed(path, reason): "无法备份 \(path)：\(reason)"
-        case let .restoreFailed(path, reason): "无法恢复 \(path)：\(reason)"
-        case let .missingBlob(name): "备份内容 \(name) 已不存在"
+        case let .backupFailed(path, reason): String(localized: "Couldn't back up \(path): \(reason)")
+        case let .restoreFailed(path, reason): String(localized: "Couldn't restore \(path): \(reason)")
+        case let .missingBlob(name): String(localized: "The backup content \(name) no longer exists")
         }
     }
 }
@@ -130,7 +130,7 @@ final class UndoBlobStore: @unchecked Sendable {
         case let .symlink(destination):
             return try AnchoredFileSystem.makeSymlink(destination, at: location, replaceNonDirectories: replaceNonDirectories)
         case .other(let kind):
-            throw UndoFileSystemError.restoreFailed(location.path, "不支持恢复的类型：\(kind)")
+            throw UndoFileSystemError.restoreFailed(location.path, String(localized: "Restoring this kind of item isn't supported: \(kind)"))
         }
     }
 
@@ -166,7 +166,7 @@ final class UndoBlobStore: @unchecked Sendable {
 
     static func sha256(ofFileAt path: String) throws -> String {
         let descriptor = open(path, O_RDONLY | O_CLOEXEC)
-        guard descriptor >= 0 else { throw UndoFileSystemError.backupFailed(path, "无法读取") }
+        guard descriptor >= 0 else { throw UndoFileSystemError.backupFailed(path, String(localized: "It can't be read")) }
         defer { close(descriptor) }
         return try sha256(descriptor: descriptor, path: path)
     }

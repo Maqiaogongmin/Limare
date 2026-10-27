@@ -58,9 +58,9 @@ public struct FileArtifactCard: View {
         case .markdown:
             typeName = "Markdown"
         case .code(let lang):
-            typeName = lang.isEmpty ? "Code" : lang.capitalized
+            typeName = lang.isEmpty ? String(localized: "Code") : lang.capitalized
         case .text:
-            typeName = ext.isEmpty ? "Plain Text" : ext.uppercased()
+            typeName = ext.isEmpty ? String(localized: "Plain Text") : ext.uppercased()
         case .html:
             typeName = "HTML"
         case .image:
@@ -68,7 +68,7 @@ public struct FileArtifactCard: View {
         case .pdf:
             typeName = "PDF"
         case .unsupported:
-            typeName = ext.isEmpty ? "File" : "\(ext.uppercased()) File"
+            typeName = ext.isEmpty ? String(localized: "File") : String(localized: "\(ext.uppercased()) File")
         }
 
         if let size = byteCount, size > 0 {

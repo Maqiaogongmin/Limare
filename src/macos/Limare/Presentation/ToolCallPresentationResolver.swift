@@ -14,7 +14,7 @@ struct ToolCallPresentationModel: Sendable, Equatable {
     let summary: String?
     /// The command behind a shell call's description, shown on hover.
     let summaryHelp: String?
-    /// A finished call's result in a few words ("+3 −1", "12 项"), before its duration.
+    /// A finished call's result in a few words ("+3 −1", "12 items"), before its duration.
     let resultDigest: String?
     let tone: ToolCallTone
     let symbolName: String
@@ -138,7 +138,7 @@ enum ToolCallPresentationResolver {
         if name == "ask_user_question",
            let questions = json["questions"] as? [[String: Any]],
            let header = questions.first?["header"] as? String {
-            return questions.count > 1 ? "\(header) 等 \(questions.count) 题" : header
+            return questions.count > 1 ? String(localized: "\(header) and \(questions.count - 1) more questions") : header
         }
 
         if name.contains("file_") {
@@ -168,6 +168,10 @@ enum ToolCallPresentationResolver {
                 return "click: \(sel)"
             } else if action == "type", let sel = json["selector"] as? String {
                 return "type: \(sel)"
+            } else if action == "new_tab", let url = json["url"] as? String {
+                return "new_tab: \(url)"
+            } else if action == "switch_tab" || action == "close_tab", let tab = json["tab_id"] {
+                return "\(action): \(tab)"
             } else if !action.isEmpty {
                 return action
             }
@@ -196,17 +200,17 @@ enum ToolCallPresentationResolver {
     /// The words a row shows for its state. A completed call shows none: success needs no mark.
     /// A running call whose question card waits (`awaitingAnswer`) waits for the user.
     static func statusLabel(for state: ToolExecutionState, awaitingAnswer: Bool = false) -> String? {
-        if awaitingAnswer, state == .running { return "Waiting for your answer" }
+        if awaitingAnswer, state == .running { return String(localized: "Waiting for your answer") }
         return switch state {
-        case .queued: "Queued"
-        case .awaitingApproval: "Waiting for approval"
-        case .running: "Running"
+        case .queued: String(localized: "Queued")
+        case .awaitingApproval: String(localized: "Waiting for approval")
+        case .running: String(localized: "Running")
         case .completed: nil
-        case .failed: "Failed"
-        case .timedOut: "Timed out"
-        case .cancelled: "Cancelled"
-        case .denied: "Denied"
-        case .interrupted: "Interrupted"
+        case .failed: String(localized: "Failed")
+        case .timedOut: String(localized: "Timed out")
+        case .cancelled: String(localized: "Cancelled")
+        case .denied: String(localized: "Denied")
+        case .interrupted: String(localized: "Interrupted")
         }
     }
 
@@ -214,9 +218,9 @@ enum ToolCallPresentationResolver {
     static func approvalLabel(for state: ToolApprovalState) -> String? {
         switch state {
         case .notRequired: nil
-        case .awaitingApproval: "Waiting for approval"
-        case .approved: "Approved"
-        case .denied: "Denied"
+        case .awaitingApproval: String(localized: "Waiting for approval")
+        case .approved: String(localized: "Approved")
+        case .denied: String(localized: "Denied")
         }
     }
 

@@ -56,10 +56,10 @@ struct RemoteAccessConfiguration: Equatable, Sendable {
     var missingSettings: [String] {
         var missing: [String] = []
         if !(1024...65535).contains(port) { missing.append("port") }
-        if normalizedHostname.isEmpty { missing.append("public hostname") }
-        if teamDomain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { missing.append("team domain") }
-        if audienceTag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { missing.append("AUD tag") }
-        if ownerEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { missing.append("owner email") }
+        if normalizedHostname.isEmpty { missing.append(String(localized: "public hostname")) }
+        if teamDomain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { missing.append(String(localized: "team domain")) }
+        if audienceTag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { missing.append(String(localized: "AUD tag")) }
+        if ownerEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { missing.append(String(localized: "owner email")) }
         return missing
     }
 

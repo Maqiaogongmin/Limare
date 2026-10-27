@@ -112,7 +112,7 @@ public struct ModelQuickTestSheet: View {
                     .textSelection(.enabled)
 
                 HStack(spacing: 8) {
-                    Label(provider.name.isEmpty ? "Untitled Provider" : provider.name, systemImage: "server.rack")
+                    Label(provider.name.isEmpty ? String(localized: "Untitled Provider") : provider.name, systemImage: "server.rack")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
 
@@ -150,7 +150,7 @@ public struct ModelQuickTestSheet: View {
                 diagnosticRow(label: "Endpoint", value: snapshot.endpointSummary)
                 diagnosticRow(
                     label: "Configuration",
-                    value: snapshot.isConfigured ? "Ready" : "Incomplete",
+                    value: snapshot.isConfigured ? String(localized: "Ready") : String(localized: "Incomplete"),
                     valueColor: snapshot.isConfigured ? Color.green : Color.orange
                 )
 
@@ -172,10 +172,10 @@ public struct ModelQuickTestSheet: View {
                 }
 
                 if let ctx = snapshot.contextWindow {
-                    diagnosticRow(label: "Context Window", value: "\(ctx) tokens")
+                    diagnosticRow(label: "Context Window", value: String(localized: "\(ctx) tokens"))
                 }
                 if let maxTokens = snapshot.maxOutputTokens {
-                    diagnosticRow(label: "Max Output", value: "\(maxTokens) tokens")
+                    diagnosticRow(label: "Max Output", value: String(localized: "\(maxTokens) tokens"))
                 }
             }
             .padding(AppSpacing.medium)
@@ -184,7 +184,7 @@ public struct ModelQuickTestSheet: View {
         }
     }
 
-    private func diagnosticRow(label: String, value: String, valueColor: Color = .primary) -> some View {
+    private func diagnosticRow(label: LocalizedStringKey, value: String, valueColor: Color = .primary) -> some View {
         HStack(alignment: .top) {
             Text(label)
                 .font(.caption)
@@ -267,7 +267,7 @@ private struct QuickTestCard: View {
     }
 
     private var cardTitle: String {
-        effectiveProbe ? "\(kind.displayName) Probe" : kind.displayName
+        effectiveProbe ? String(localized: "\(kind.displayName) Probe") : kind.displayName
     }
 
     var body: some View {

@@ -417,14 +417,14 @@ struct ComposerView: View {
     private func isChatEligible(providerID: UUID, modelID: String) -> Bool {
         let entryID = ModelGroup.makeEntryId(providerID: providerID, modelID: modelID)
         let eligibility = ModelGroupStore.evaluateMemberEligibility(entryId: entryID, providers: appState.providers.providers)
-        return eligibility.isChatEligible || eligibility.unavailableReason == "Removed by provider"
+        return eligibility.isChatEligible || eligibility.unavailability == .removedByProvider
     }
 
     private var placeholderText: String {
         if !hasValidModelSource {
-            return "Choose an available chat model below…"
+            return String(localized: "Choose an available chat model below…")
         }
-        return "Ask anything, @ to mention files or tools…"
+        return String(localized: "Ask anything, @ to mention files or tools…")
     }
 
     private var canSend: Bool {
@@ -455,7 +455,7 @@ struct ComposerView: View {
 /// on hover, an optional fix action and a dismiss button.
 struct VoiceErrorCapsule: View {
     let message: String
-    var actionTitle: String? = nil
+    var actionTitle: LocalizedStringKey? = nil
     var onAction: () -> Void = {}
     let onDismiss: () -> Void
 
@@ -566,8 +566,8 @@ private struct ComposerDraftHistoryButton: View {
                 Image(systemName: "clock.arrow.circlepath")
             }
             .buttonStyle(GhostIconButtonStyle())
-            .help("找回草稿")
-            .accessibilityLabel("找回草稿")
+            .help("Recover Draft")
+            .accessibilityLabel("Recover Draft")
             .accessibilityIdentifier("composer.draftHistory")
             .popover(isPresented: $isPresented, arrowEdge: .top) {
                 ComposerDraftHistoryList(
@@ -593,7 +593,7 @@ private struct ComposerDraftHistoryList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("找回草稿")
+            Text("Recover Draft")
                 .font(.headline)
                 .padding(.horizontal, AppSpacing.medium)
                 .padding(.vertical, AppSpacing.small)
@@ -616,12 +616,12 @@ private struct ComposerDraftHistoryList: View {
     private func row(for draft: ArchivedDraft) -> some View {
         HStack(alignment: .top, spacing: AppSpacing.small) {
             VStack(alignment: .leading, spacing: AppSpacing.xxSmall) {
-                Text(draft.text.isEmpty ? "（仅附件）" : draft.text)
+                Text(draft.text.isEmpty ? String(localized: "(attachments only)") : draft.text)
                     .font(AppTypography.interfaceCaption)
                     .lineLimit(2)
                     .foregroundStyle(Color.primary)
                 HStack(spacing: AppSpacing.xSmall) {
-                    Text(draft.origin == .retractedMessage ? "撤回的消息" : "未发送的草稿")
+                    Text(draft.origin == .retractedMessage ? "Retracted message" : "Unsent draft")
                     Text(draft.createdAt, style: .relative)
                     if !draft.attachments.isEmpty {
                         Label("\(draft.attachments.count)", systemImage: "paperclip")
@@ -631,7 +631,7 @@ private struct ComposerDraftHistoryList: View {
                 .foregroundStyle(.secondary)
             }
             Spacer(minLength: AppSpacing.small)
-            Button("恢复") { onRestore(draft.id) }
+            Button("Restore") { onRestore(draft.id) }
                 .controlSize(.small)
             Button {
                 onDelete(draft.id)
@@ -640,7 +640,7 @@ private struct ComposerDraftHistoryList: View {
             }
             .buttonStyle(.borderless)
             .controlSize(.small)
-            .help("删除这份草稿")
+            .help("Delete This Draft")
         }
         .padding(.horizontal, AppSpacing.medium)
         .padding(.vertical, AppSpacing.small)
@@ -849,31 +849,31 @@ private struct ComposerRunControls: View {
 
     private var sendButtonHelpText: String {
         if !isStreaming {
-            return "Send message (Return or ⌘Return)"
+            return String(localized: "Send message (Return or ⌘Return)")
         }
         if isPaused || isPausing {
-            return "Send message and resume run"
+            return String(localized: "Send message and resume run")
         }
         switch streamingSendPreference {
         case .queue:
-            return "Queue message to run after current turn"
+            return String(localized: "Queue message to run after current turn")
         case .steer:
-            return "Add instruction to current turn"
+            return String(localized: "Add instruction to current turn")
         }
     }
 
     private var sendButtonAccessibilityLabel: String {
         if !isStreaming {
-            return "Send message"
+            return String(localized: "Send message")
         }
         if isPaused || isPausing {
-            return "Send message and resume"
+            return String(localized: "Send message and resume")
         }
         switch streamingSendPreference {
         case .queue:
-            return "Queue message"
+            return String(localized: "Queue message")
         case .steer:
-            return "Steer run"
+            return String(localized: "Steer run")
         }
     }
 
@@ -996,14 +996,14 @@ private struct PendingAttachmentView: View {
             }
             .buttonStyle(.plain)
             .help(attachment.filename)
-            .accessibilityLabel("预览 \(attachment.filename)")
+            .accessibilityLabel("Preview \(attachment.filename)")
             .accessibilityIdentifier("composer.attachmentPreview")
 
             Button(action: onRemove) {
                 Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("移除附件")
+            .accessibilityLabel("Remove Attachment")
         }
         .font(.caption)
         .padding(.horizontal, 10).padding(.vertical, 7)
@@ -1211,11 +1211,11 @@ struct ComposerModelSelector: View {
 
     private func modelGroupLabel(_ group: ModelGroup) -> String {
         var uses: [String] = []
-        if appState.modelGroups.defaultPrimaryGroupId == group.id { uses.append("Chat default") }
-        if appState.modelGroups.defaultSubGroupId == group.id { uses.append("Helper") }
-        if appState.modelGroups.visionGroupId == group.id { uses.append("Images") }
-        if appState.modelGroups.voiceInputGroupId == group.id { uses.append("Voice input") }
-        if appState.modelGroups.voiceOutputGroupId == group.id { uses.append("Voice output") }
+        if appState.modelGroups.defaultPrimaryGroupId == group.id { uses.append(String(localized: "Chat default")) }
+        if appState.modelGroups.defaultSubGroupId == group.id { uses.append(String(localized: "Helper")) }
+        if appState.modelGroups.visionGroupId == group.id { uses.append(String(localized: "Images")) }
+        if appState.modelGroups.voiceInputGroupId == group.id { uses.append(String(localized: "Voice input")) }
+        if appState.modelGroups.voiceOutputGroupId == group.id { uses.append(String(localized: "Voice output")) }
         guard !uses.isEmpty else { return group.name }
         return "\(group.name) · \(uses.joined(separator: ", "))"
     }

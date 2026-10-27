@@ -64,6 +64,24 @@ calculate its SHA-256 and Sparkle EdDSA signature. See `release-facts.json` for
 the frozen product facts. Private keys and provisioning profiles are not
 included in source.
 
+## Languages
+
+Limare's text is English in the source and translated through one String Catalog,
+`src/macos/Limare/Localizable.xcstrings` (permission prompts are in
+`InfoPlist.xcstrings`). SwiftUI text literals are localized as they are; text built
+elsewhere uses `String(localized:)`. Settings > General > Language lists the languages the
+bundle ships and stores the choice as Limare's own `AppleLanguages`, the setting macOS
+offers per app; it applies at the next launch.
+
+- Xcode adds new strings to the catalog when it builds. From the command line, build the
+  `Limare` scheme and run `script/localization.py sync-app --derived-data <dir>`.
+- The phone page (`src/macos/RemoteWeb`) marks its text with `t('…')`. After changing it,
+  run `script/localization.py sync-web`; the Mac sends the page its translations from the
+  same catalog.
+- `script/localization.py check` fails while any string lacks a translation.
+- To add a language, add it to the catalog in Xcode (it joins the project's known
+  regions), translate its column, and run the check. Settings lists it on its own.
+
 ## Data
 
 The app keeps its data in `~/Library/Application Support/app.limare.Limare` and

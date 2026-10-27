@@ -11,8 +11,8 @@ enum SkillLocation: Sendable, Hashable, Equatable {
 
     var displayName: String {
         switch self {
-        case .workspace: "Project"
-        case .global: "Global"
+        case .workspace: String(localized: "Project")
+        case .global: String(localized: "Global")
         }
     }
 

@@ -157,13 +157,13 @@ struct ToolCallCard: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 11))
                         .foregroundStyle(AppColors.statusWarning)
-                    Text("失败，但文件已被修改（\(notice.paths.count) 个）")
+                    Text("Failed, but files were changed (\(notice.paths.count))")
                         .font(.caption)
                         .foregroundStyle(AppColors.statusWarning)
                         .lineLimit(1)
                         .accessibilityIdentifier("toolcard.changedOnFailure")
                     if notice.ownerMessageID == window.chat.retractableUserMessageID {
-                        Button("查看撤销") { pendingUndo = UndoRequest(messageID: notice.ownerMessageID) }
+                        Button("Review Undo") { pendingUndo = UndoRequest(messageID: notice.ownerMessageID) }
                             .buttonStyle(QuietLinkButtonStyle())
                     }
                     Spacer()
@@ -239,7 +239,7 @@ private struct ToolCallDetails: View {
                     withAnimation(AppMotion.resolved(AppMotion.standard)) { showsRawData.toggle() }
                 } label: {
                     HStack(spacing: AppSpacing.xxSmall) {
-                        Text("原始数据")
+                        Text("Raw Data")
                         Image(systemName: showsRawData ? "chevron.down" : "chevron.right")
                             .font(.system(size: 8, weight: .bold))
                     }

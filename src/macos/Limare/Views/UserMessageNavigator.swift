@@ -82,7 +82,7 @@ struct UserMessageNavigator: View {
         guard let index = entries.firstIndex(where: { $0.id == activeID }) else {
             return "\(entries.count) messages"
         }
-        return "\(index + 1) of \(entries.count): \(entries[index].preview)"
+        return String(localized: "\(index + 1) of \(entries.count): \(entries[index].preview)")
     }
 
     private func tick(for entry: UserMessageNavigatorModel.Entry, index: Int, pitch: CGFloat) -> some View {

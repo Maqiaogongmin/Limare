@@ -23,7 +23,7 @@ public struct ModelDiscoveryState: Codable, Hashable, Sendable {
     public var isRemoved: Bool { availability == "removed_by_provider" }
     public var isAbsent: Bool { notListedSince != nil }
     public var badge: String? {
-        isRemoved ? "Removed by provider" : isAbsent ? "Not listed by provider" : nil
+        isRemoved ? String(localized: "Removed by provider") : isAbsent ? String(localized: "Not listed by provider") : nil
     }
 }
 public struct ProviderDiscoveryObservation: Codable, Hashable, Sendable {

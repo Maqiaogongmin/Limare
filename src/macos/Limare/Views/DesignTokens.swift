@@ -244,7 +244,7 @@ enum AppColors {
     /// The icons under a user message: faint, near full ink under the pointer.
     static var bubbleActionIdle: Color { Color.primary.opacity(0.38) }
     static var bubbleActionHover: Color { Color.primary.opacity(0.85) }
-    /// A text action inside a status line ("View run details", "查看撤销"): charcoal on a faint
+    /// A text action inside a status line ("View run details", "Review Undo"): charcoal on a faint
     /// tint, never the system link blue.
     static var quietLinkText: Color { Color.primary.opacity(0.78) }
     static var quietLinkFill: Color { Color.primary.opacity(0.05) }

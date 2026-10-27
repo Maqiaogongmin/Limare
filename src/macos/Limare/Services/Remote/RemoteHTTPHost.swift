@@ -95,9 +95,9 @@ actor RemoteHTTPHost: RemoteTransportHost {
             return Response(status: .forbidden)
         }
         guard let connectionID = request.query[UUID.self, at: "connection"], await endpoint.mayUpload(connectionID: connectionID) else {
-            return uploadError(.conflict, RemoteUploadError(code: "uploadRefused", message: "连接已断开，或附件已达 \(RemoteWire.maxPendingAttachments) 个。"))
+            return uploadError(.conflict, RemoteUploadError(code: "uploadRefused", message: String(localized: "The connection was lost, or the attachment limit of \(RemoteWire.maxPendingAttachments) was reached.")))
         }
-        let tooLarge = RemoteUploadError(code: "tooLarge", message: "文件超过 \(RemoteWire.maxUploadBytes / 1024 / 1024) MB。")
+        let tooLarge = RemoteUploadError(code: "tooLarge", message: String(localized: "The file is larger than \(RemoteWire.maxUploadBytes / 1024 / 1024) MB."))
         if let length = request.headers.first(name: .contentLength).flatMap(Int.init), length > RemoteWire.maxUploadBytes {
             return uploadError(.payloadTooLarge, tooLarge)
         }
@@ -118,7 +118,7 @@ actor RemoteHTTPHost: RemoteTransportHost {
                 try handle.write(contentsOf: Data(buffer: chunk))
             }
         } catch {
-            return uploadError(.badRequest, RemoteUploadError(code: "uploadFailed", message: "上传中断：\(error.localizedDescription)"))
+            return uploadError(.badRequest, RemoteUploadError(code: "uploadFailed", message: String(localized: "The upload was interrupted: \(error.localizedDescription)")))
         }
         switch await endpoint.receiveUpload(at: file, connectionID: connectionID) {
         case .success(let attachment):
@@ -229,6 +229,39 @@ enum RemoteAssets {
     }
 }
 
+/// The page's text in Limare's language. `strings.json` lists the page's keys (its English
+/// text, collected from its scripts by `script/localization.py sync-web`), and each is looked up
+/// in Limare's string catalog, so the phone shows the language the Mac does and every language
+/// is translated in one place.
+enum RemotePageStrings {
+    static let languagePlaceholder = "__LANG__"
+    static let tablePlaceholder = "__STRINGS__"
+    /// Text written into index.html itself, shown before the scripts run.
+    private static let inlineKey = try! NSRegularExpression(pattern: #"\{\{t:(.+?)\}\}"#)
+
+    static func fill(_ page: String, webRoot: URL, bundle: Bundle = .main) -> String {
+        let keys = (try? JSONDecoder().decode([String].self, from: Data(contentsOf: webRoot.appendingPathComponent("strings.json")))) ?? []
+        let table = Dictionary(keys.map { ($0, bundle.localizedString(forKey: $0, value: $0, table: nil)) }, uniquingKeysWith: { first, _ in first })
+        let encoded = (try? JSONEncoder().encode(table)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        var filled = page
+            .replacingOccurrences(of: languagePlaceholder, with: bundle.preferredLocalizations.first ?? "en")
+            // Inside <script>, "</script" would end the element; JSON reads \u003c as "<".
+            .replacingOccurrences(of: tablePlaceholder, with: encoded.replacingOccurrences(of: "<", with: "\\u003c"))
+        for match in inlineKey.matches(in: filled, range: NSRange(filled.startIndex..., in: filled)).reversed() {
+            guard let whole = Range(match.range, in: filled), let key = Range(match.range(at: 1), in: filled) else { continue }
+            let text = bundle.localizedString(forKey: String(filled[key]), value: String(filled[key]), table: nil)
+            filled.replaceSubrange(whole, with: escapeHTML(text))
+        }
+        return filled
+    }
+
+    private static func escapeHTML(_ text: String) -> String {
+        text.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+    }
+}
+
 /// `/` and `/index.html` with the asset placeholder filled in; `/v/<fingerprint>/…` as immutable files.
 private struct RemotePageMiddleware: AsyncMiddleware {
     let webRoot: URL
@@ -241,7 +274,8 @@ private struct RemotePageMiddleware: AsyncMiddleware {
             guard let template = try? String(contentsOf: webRoot.appendingPathComponent("index.html"), encoding: .utf8) else {
                 return Response(status: .notFound)
             }
-            let response = Response(status: .ok, body: .init(string: template.replacingOccurrences(of: RemoteAssets.placeholder, with: "v/\(fingerprint)/")))
+            let page = RemotePageStrings.fill(template.replacingOccurrences(of: RemoteAssets.placeholder, with: "v/\(fingerprint)/"), webRoot: webRoot)
+            let response = Response(status: .ok, body: .init(string: page))
             response.headers.contentType = .html
             return response
         }

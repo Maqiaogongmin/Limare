@@ -83,7 +83,7 @@ enum UndoRestorePlanner {
             guard target.isRestorable else {
                 if selected.contains(where: \.isUncertain) {
                     // An uncertain change (Computer Use, MCP) seen without a backup: listed, not blocking.
-                    preview.irreversible.append(.init(id: "unbacked:" + path, title: "未能备份，无法恢复", detail: path))
+                    preview.irreversible.append(.init(id: "unbacked:" + path, title: String(localized: "Not backed up, so it can't be restored"), detail: path))
                 } else {
                     preview.missingBackups.append(path)
                 }
@@ -126,20 +126,20 @@ enum UndoRestorePlanner {
                 if nonProjectTools.contains(name) { continue }
                 if recordedFileTools.contains(name) {
                     guard call.state == .completed || call.state == .interrupted, !recordedCallIDs.contains(call.providerCallID) else { continue }
-                    effects.append(.init(id: call.providerCallID, title: "\(name) 未记录", detail: argument("path", of: call) ?? call.input))
+                    effects.append(.init(id: call.providerCallID, title: String(localized: "\(name) not recorded"), detail: argument("path", of: call) ?? call.input))
                     continue
                 }
                 switch name {
                 case "shell_execute":
-                    effects.append(.init(id: call.providerCallID, title: "命令", detail: argument("command", of: call) ?? call.input))
+                    effects.append(.init(id: call.providerCallID, title: String(localized: "Command"), detail: argument("command", of: call) ?? call.input))
                 case "computer_use":
-                    effects.append(.init(id: call.providerCallID, title: "Computer Use 操作", detail: argument("action", of: call) ?? ""))
+                    effects.append(.init(id: call.providerCallID, title: String(localized: "Computer Use action"), detail: argument("action", of: call) ?? ""))
                 case "browser_use":
-                    effects.append(.init(id: call.providerCallID, title: "浏览器操作", detail: argument("action", of: call) ?? ""))
+                    effects.append(.init(id: call.providerCallID, title: String(localized: "Browser action"), detail: argument("action", of: call) ?? ""))
                 case "delegate_task":
-                    effects.append(.init(id: call.providerCallID, title: "子任务", detail: "子任务通过文件工具做的改动已计入；它执行的命令无法撤销"))
+                    effects.append(.init(id: call.providerCallID, title: String(localized: "Subtask"), detail: String(localized: "Changes the subtask made with file tools are included; commands it ran can't be undone")))
                 default:
-                    effects.append(.init(id: call.providerCallID, title: "工具 \(name)", detail: "外部影响无法撤销"))
+                    effects.append(.init(id: call.providerCallID, title: String(localized: "Tool \(name)"), detail: String(localized: "External effects can't be undone")))
                 }
             }
         }

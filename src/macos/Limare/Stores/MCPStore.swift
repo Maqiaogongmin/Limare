@@ -9,7 +9,7 @@ struct MCPCredentialRequest: Identifiable, Sendable, Equatable {
     let promptText: String
     let generation: Int
     /// The variable or header the value is for, shown as the field label.
-    var credentialName = "Token"
+    var credentialName = String(localized: "Token")
 }
 
 @MainActor
@@ -32,7 +32,7 @@ final class MCPStore {
     /// SDK OAuth stays closed until the official SDK meets the blueprint's OAuth gate items.
     nonisolated static let oauthAdmitted = false
     var runtimeAdmissionMessage: String? {
-        Self.productionSDKAdmitted ? nil : "MCP protocol activation is gated on a qualified official Swift SDK release. Configuration is preserved."
+        Self.productionSDKAdmitted ? nil : String(localized: "MCP protocol activation is gated on a qualified official Swift SDK release. Configuration is preserved.")
     }
 
     @ObservationIgnored private var controlRecords: (any MCPControlRecordStoring)?
@@ -215,7 +215,7 @@ final class MCPStore {
         inProgressRefreshTasks.removeValue(forKey: serverID)
         _ = nextGeneration(for: serverID)
         // The mechanical exit code is sufficient; stderr can contain configured secrets.
-        let reason = "MCP server process exited with code \(exitCode)."
+        let reason = String(localized: "MCP server process exited with code \(exitCode).")
         statuses[serverID] = .failed(message: reason, kind: .processExited)
         toolsByServer.removeValue(forKey: serverID)
         instructionsByServer.removeValue(forKey: serverID)
@@ -359,7 +359,7 @@ final class MCPStore {
         serverID: String,
         serverName: String,
         promptText: String,
-        credentialName: String = "Token",
+        credentialName: String = String(localized: "Token"),
         timeoutSeconds: TimeInterval = MCPOAuth.interactiveTimeoutSeconds
     ) async -> String? {
         if isCurrentRunUnattended {
@@ -485,34 +485,34 @@ final class MCPStore {
         // Bounded so the fixed-capacity control records can always hold their receipts.
         guard !config.id.isEmpty, config.id.utf8.count <= 128,
               !config.id.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
-            throw MCPTransportError.configurationError("Server ID must be 1-128 bytes without control characters.")
+            throw MCPTransportError.configurationError(String(localized: "Server ID must be 1-128 bytes without control characters."))
         }
         if SecretMasker.containsCredential(config.id) {
-            throw MCPTransportError.configurationError("Server ID cannot contain sensitive credentials.")
+            throw MCPTransportError.configurationError(String(localized: "Server ID cannot contain sensitive credentials."))
         }
         if let cmd = config.command, SecretMasker.containsCredential(cmd) {
-            throw MCPTransportError.configurationError("Command cannot contain sensitive credentials.")
+            throw MCPTransportError.configurationError(String(localized: "Command cannot contain sensitive credentials."))
         }
         if let args = config.args, args.contains(where: SecretMasker.containsCredential) {
-            throw MCPTransportError.configurationError("Command arguments cannot contain sensitive credentials. Put them in environment variables.")
+            throw MCPTransportError.configurationError(String(localized: "Command arguments cannot contain sensitive credentials. Put them in environment variables."))
         }
         if let note = config.note, SecretMasker.containsCredential(note) {
-            throw MCPTransportError.configurationError("The note cannot contain credentials.")
+            throw MCPTransportError.configurationError(String(localized: "The note cannot contain credentials."))
         }
         if let urlStr = config.url {
             guard let components = URLComponents(string: urlStr),
                   let scheme = components.scheme?.lowercased(),
                   (scheme == "http" || scheme == "https"),
                   components.host != nil else {
-                throw MCPTransportError.invalidURL("A valid http or https URL is required.")
+                throw MCPTransportError.invalidURL(String(localized: "A valid http or https URL is required."))
             }
             if components.user != nil || components.password != nil || SecretMasker.containsCredential(urlStr) {
-                throw MCPTransportError.invalidURL("URLs must not carry credentials. Put a token in the Authorization header, or sign in.")
+                throw MCPTransportError.invalidURL(String(localized: "URLs must not carry credentials. Put a token in the Authorization header, or sign in."))
             }
             let hasCredentialHeader = config.headers?.contains(where: { MCPServerConfig.isSensitiveKey($0.key) || MCPServerConfig.isSecretReference($0.value) }) == true
             if scheme == "http", hasCredentialHeader,
                !["localhost", "127.0.0.1", "::1", "[::1]"].contains(components.host?.lowercased() ?? "") {
-                throw MCPTransportError.invalidURL("Credential-bearing remote MCP connections require HTTPS.")
+                throw MCPTransportError.invalidURL(String(localized: "Credential-bearing remote MCP connections require HTTPS."))
             }
         }
         try config.profile?.validate(config)
@@ -795,7 +795,7 @@ final class MCPStore {
 
     private nonisolated static func validateClientSecret(_ clientSecret: MCPSecretMutation, for canonical: MCPServerConfig) throws {
         if case .replace = clientSecret, canonical.oauth?.clientId?.isEmpty != false {
-            throw MCPTransportError.configurationError("A client secret needs the OAuth client ID it belongs to.")
+            throw MCPTransportError.configurationError(String(localized: "A client secret needs the OAuth client ID it belongs to."))
         }
     }
 
@@ -808,7 +808,7 @@ final class MCPStore {
         try Self.validateClientSecret(clientSecret, for: canonical)
         var ticket: MCPHumanConsent?
         if Self.writesCredential(canonical, quarantinedValues: [:], clientSecret: clientSecret) {
-            ticket = try await humanConsentProvider(UUID(), "Save credentials for the MCP connection “\(server.id)”.")
+            ticket = try await humanConsentProvider(UUID(), String(localized: "Save credentials for the MCP connection “\(server.id)”."))
         }
         try addOrUpdate(server, clientSecret: clientSecret, authorization: ticket)
     }
@@ -848,7 +848,7 @@ final class MCPStore {
         // 0. Credentials only ever go to the secret store, and only with the user's confirmation
         try Self.validate(canonical)
         if let profile = canonical.profile, profile != oldConfig?.profile, !MCPServerProfile.available.contains(profile) {
-            throw MCPTransportError.configurationError("The \(profile.contract.displayName) profile signs in with OAuth, which this Limare version does not support yet.")
+            throw MCPTransportError.configurationError(String(localized: "The \(profile.contract.displayName) profile signs in with OAuth, which this Limare version does not support yet."))
         }
         try Self.validateClientSecret(clientSecret, for: canonical)
         if Self.writesCredential(canonical, quarantinedValues: quarantinedValues, clientSecret: clientSecret) {
@@ -1096,10 +1096,10 @@ final class MCPStore {
         }
         let wanted = missing.isEmpty ? slots : missing
         missingCredentials[server.id] = wanted.map(\.name)
-        let ticket = try await humanConsentProvider(operationID, "Save credentials for the MCP connection “\(server.id)”.")
+        let ticket = try await humanConsentProvider(operationID, String(localized: "Save credentials for the MCP connection “\(server.id)”."))
         var values: [(name: String, isHeader: Bool, value: String)] = []
         for slot in wanted {
-            let prompt = "Enter \(slot.name) for “\(server.id)”. Limare stores it in its private storage and gives it only to this server."
+            let prompt = String(localized: "Enter \(slot.name) for “\(server.id)”. Limare stores it in its private storage and gives it only to this server.")
             guard let value = await requestCredential(serverID: server.id, serverName: server.id, promptText: prompt, credentialName: slot.name),
                   !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw isCurrentRunUnattended ? MCPOAuthError.unattended : MCPOAuthError.cancelled
@@ -1128,8 +1128,8 @@ final class MCPStore {
     /// Asks for a token in the protected prompt and switches the connection to a fixed Authorization header.
     private func requestToken(for server: MCPServerConfig, operationID: UUID) async throws {
         statuses[server.id] = .credentialRequired
-        let ticket = try await humanConsentProvider(operationID, "Replace the access token for the MCP connection “\(server.id)”.")
-        let prompt = "Enter the credential for this explicit generic bearer connection in Limare's secure UI."
+        let ticket = try await humanConsentProvider(operationID, String(localized: "Replace the access token for the MCP connection “\(server.id)”."))
+        let prompt = String(localized: "Enter the credential for this explicit generic bearer connection in Limare's secure UI.")
         let token = await requestCredential(serverID: server.id, serverName: server.id, promptText: prompt)
         guard let token, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw isCurrentRunUnattended ? MCPOAuthError.unattended : MCPOAuthError.cancelled
@@ -1330,7 +1330,7 @@ final class MCPStore {
             throw MCPHostControlError.unavailable
         }
         let operationID = UUID()
-        let consent = try await humanConsentProvider(operationID, "Migrate Limare MCP configuration and credentials to private application storage.")
+        let consent = try await humanConsentProvider(operationID, String(localized: "Migrate Limare MCP configuration and credentials to private application storage."))
         guard authorityState == .migrationRequired, consent.isValid,
               try native.readControlRecord(.configuration) == nil,
               try native.readControlRecord(.journal) == nil else { throw MCPHostControlError.unavailable }
@@ -1462,7 +1462,7 @@ final class MCPStore {
     nonisolated static func parseImportedEntry(id: String, entry: [String: Any]) throws -> (MCPServerConfig, [String: String]) {
         func strings(_ key: String) throws -> [String: String]? {
             guard let value = entry[key] else { return nil }
-            guard let map = value as? [String: String] else { throw MCPTransportError.configurationError("'\(key)' must map names to strings.") }
+            guard let map = value as? [String: String] else { throw MCPTransportError.configurationError(String(localized: "'\(key)' must map names to strings.")) }
             return map
         }
         let url = entry["url"] as? String
@@ -1471,22 +1471,22 @@ final class MCPStore {
             // Only Streamable HTTP and stdio exist in this Host; a legacy SSE endpoint is not adapted.
             let expected: Set<String> = url != nil ? ["http", "streamable-http", "streamableHttp"] : ["stdio"]
             guard let type = type as? String, expected.contains(type) else {
-                throw MCPTransportError.configurationError("Server '\(id)': unsupported transport type.")
+                throw MCPTransportError.configurationError(String(localized: "Server '\(id)': unsupported transport type."))
             }
         }
         var profile: MCPServerProfile?
         if let raw = entry["profile"] {
             guard let name = raw as? String, let known = MCPServerProfile(rawValue: name) else {
-                throw MCPTransportError.configurationError("Server '\(id)': unknown profile.")
+                throw MCPTransportError.configurationError(String(localized: "Server '\(id)': unknown profile."))
             }
             profile = known
         }
         if let oauth = entry["oauth"] as? [String: Any] {
             guard oauth["clientSecret"] == nil else {
-                throw MCPTransportError.configurationError("Client secrets belong in the native secure input, never configuration JSON.")
+                throw MCPTransportError.configurationError(String(localized: "Client secrets belong in the native secure input, never configuration JSON."))
             }
             guard Set(oauth.keys).isSubset(of: ["clientId", "callbackPort"]) else {
-                throw MCPTransportError.configurationError("Server '\(id)': unsupported OAuth settings.")
+                throw MCPTransportError.configurationError(String(localized: "Server '\(id)': unsupported OAuth settings."))
             }
         }
         var config = MCPServerConfig(
@@ -1532,11 +1532,11 @@ final class MCPStore {
     @discardableResult
     func importJSON(_ jsonString: String) async throws -> Int {
         guard let data = jsonString.data(using: .utf8) else {
-            throw MCPTransportError.parseError("Invalid text encoding")
+            throw MCPTransportError.parseError(String(localized: "Invalid text encoding"))
         }
 
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw MCPTransportError.parseError("JSON must be an object")
+            throw MCPTransportError.parseError(String(localized: "JSON must be an object"))
         }
 
         let serversDict: [String: Any]
@@ -1559,7 +1559,7 @@ final class MCPStore {
         }
         var ticket: MCPHumanConsent?
         if parsed.contains(where: { Self.writesCredential($0.0, quarantinedValues: $0.1, clientSecret: .unchanged) }) {
-            ticket = try await humanConsentProvider(UUID(), "Import MCP connections with credentials into Limare.")
+            ticket = try await humanConsentProvider(UUID(), String(localized: "Import MCP connections with credentials into Limare."))
         }
         for (config, quarantined) in parsed {
             try addOrUpdate(config, quarantinedValues: quarantined, authorization: ticket)

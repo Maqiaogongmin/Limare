@@ -12,8 +12,7 @@ struct AgentRunGroupView: View {
 
     private func aggregateHeader(for runs: [DelegatedRunPresentation]) -> String {
         let totalCount = runs.count
-        let agentNoun = totalCount == 1 ? "agent" : "agents"
-        let prefix = "Research · \(totalCount) \(agentNoun)"
+        let prefix = String(localized: "Research · \(totalCount) agents")
 
         let succeeded = runs.filter { $0.status == .completed }.count
         let timedOut = runs.filter { $0.status == .timedOut }.count
@@ -22,28 +21,28 @@ struct AgentRunGroupView: View {
         let active = runs.filter { $0.status == .running || $0.status == .queued }.count
 
         if active > 0 {
-            var parts: [String] = ["\(active) active"]
-            if succeeded > 0 { parts.append("\(succeeded) succeeded") }
-            if timedOut > 0 { parts.append("\(timedOut) timed out") }
-            if failed > 0 { parts.append("\(failed) failed") }
+            var parts: [String] = [String(localized: "\(active) active")]
+            if succeeded > 0 { parts.append(String(localized: "\(succeeded) succeeded")) }
+            if timedOut > 0 { parts.append(String(localized: "\(timedOut) timed out")) }
+            if failed > 0 { parts.append(String(localized: "\(failed) failed")) }
             return "\(prefix) · " + parts.joined(separator: " · ")
         }
 
         // Terminal state
         if succeeded == totalCount {
-            return "\(prefix) · \(succeeded) succeeded"
+            return "\(prefix) · " + String(localized: "\(succeeded) succeeded")
         }
 
         var parts: [String] = []
-        parts.append("\(succeeded) succeeded")
+        parts.append(String(localized: "\(succeeded) succeeded"))
         if timedOut > 0 {
-            parts.append("\(timedOut) timed out")
+            parts.append(String(localized: "\(timedOut) timed out"))
         }
         if failed > 0 {
-            parts.append("\(failed) failed")
+            parts.append(String(localized: "\(failed) failed"))
         }
         if cancelled > 0 {
-            parts.append("\(cancelled) cancelled")
+            parts.append(String(localized: "\(cancelled) cancelled"))
         }
         return "\(prefix) · " + parts.joined(separator: " · ")
     }

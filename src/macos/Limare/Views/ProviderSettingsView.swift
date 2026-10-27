@@ -111,15 +111,15 @@ public struct ProviderSettingsView: View {
                 let statusColor: Color? = hasKey ? nil : AppColors.statusWarning
                 let subtitle: String = {
                     if !hasKey {
-                        return "Needs API Key"
+                        return String(localized: "Needs API Key")
                     }
                     let count = provider.models.count
-                    return count == 0 ? "Configured • 0 models" : "\(count) \(count == 1 ? "model" : "models")"
+                    return count == 0 ? String(localized: "Configured • 0 models") : String(localized: "\(count) models")
                 }()
 
                 SettingsMasterRow(isSelected: isSelected, onSelect: { state.selection = provider.id }) {
                     ResourceRow(
-                        title: provider.name.isEmpty ? "Untitled Provider" : provider.name,
+                        title: provider.name.isEmpty ? String(localized: "Untitled Provider") : provider.name,
                         subtitle: subtitle,
                         statusColor: statusColor,
                         isSelected: isSelected
@@ -130,8 +130,8 @@ public struct ProviderSettingsView: View {
             if state.isNew {
                 SettingsMasterRow(isSelected: state.selection == state.draft.id, onSelect: { state.selection = state.draft.id }) {
                     ResourceRow(
-                        title: state.draft.name.isEmpty ? "New Provider" : state.draft.name,
-                        subtitle: "Unsaved Draft",
+                        title: state.draft.name.isEmpty ? String(localized: "New Provider") : state.draft.name,
+                        subtitle: String(localized: "Unsaved Draft"),
                         statusColor: nil,
                         isSelected: state.selection == state.draft.id
                     )
@@ -157,14 +157,14 @@ public struct ProviderSettingsView: View {
 
                         if let error = state.userError {
                             ThreeLevelErrorView(
-                                explanation: error.explanation,
-                                recommendedAction: error.recommendedAction,
+                                explanation: "\(error.explanation)",
+                                recommendedAction: error.recommendedAction.map { "\($0)" },
                                 technicalDetails: error.technicalDetails,
                                 onRetry: state.isNew ? { state.connect(store: appState.providers) } : { state.refreshModels(store: appState.providers) },
                                 retryTitle: state.isNew ? "Retry Connect" : "Retry Refresh"
                             )
                         } else if let statusMsg = state.userStatusMessage {
-                            InlineStatus(kind: .success, message: statusMsg)
+                            InlineStatus(kind: .success, message: "\(statusMsg)")
                         }
 
                         connectionSection
@@ -189,7 +189,7 @@ public struct ProviderSettingsView: View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: AppSpacing.small) {
-                    Text(state.isNew ? (state.draft.name.isEmpty ? "New Provider" : state.draft.name) : state.draft.name)
+                    Text(state.isNew ? (state.draft.name.isEmpty ? String(localized: "New Provider") : state.draft.name) : state.draft.name)
                         .font(.title2.weight(.bold))
                         .foregroundStyle(AppColors.textPrimary)
 
@@ -198,7 +198,7 @@ public struct ProviderSettingsView: View {
                     }
                 }
 
-                Text(state.draft.baseURL.isEmpty ? "Configure endpoint and authentication" : state.draft.baseURL)
+                Text(state.draft.baseURL.isEmpty ? String(localized: "Configure endpoint and authentication") : state.draft.baseURL)
                     .font(.caption)
                     .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
@@ -279,7 +279,7 @@ public struct ProviderSettingsView: View {
                         identity: CredentialFieldIdentity(providerID: state.draft.id, selection: state.draft.authenticationSelection),
                         hasStoredSecret: state.draft.hasStoredSecret,
                         replacementSecret: $state.pendingAPIKey,
-                        placeholder: state.draft.authenticationMode == .azureAPIKey ? "Enter Azure API Key" : "Enter API Key",
+                        placeholder: state.draft.authenticationMode == .azureAPIKey ? String(localized: "Enter Azure API Key") : String(localized: "Enter API Key"),
                         onReveal: {
                             try appState.providers.storedAPIKey(providerID: state.draft.id, selection: state.draft.authenticationSelection)
                         }
@@ -435,7 +435,7 @@ public struct ProviderSettingsView: View {
             } else if state.draft.hasStoredSecret {
                 Label {
                     Text(appState.providers.authenticationSummary(providerID: state.draft.id,
-                                                                  selection: state.draft.authenticationSelection) ?? "Connected")
+                                                                  selection: state.draft.authenticationSelection) ?? String(localized: "Connected"))
                         .lineLimit(1)
                         .truncationMode(.middle)
                 } icon: {
@@ -463,7 +463,7 @@ public struct ProviderSettingsView: View {
     private static func policyReason(_ draft: ProviderConfiguration) -> String {
         do {
             try ProviderProductPolicy.validate(draft)
-            return "This sign-in is unavailable for the current configuration."
+            return String(localized: "This sign-in is unavailable for the current configuration.")
         } catch { return error.localizedDescription }
     }
 
@@ -520,9 +520,9 @@ public struct ProviderSettingsView: View {
             customHeadersEditor
 
             if let err = state.headerValidationError {
-                InlineStatus(kind: .error, message: err)
+                InlineStatus(kind: .error, message: "\(err)")
             } else if let warning = state.legacyReservedWarning {
-                InlineStatus(kind: .warning, message: warning)
+                InlineStatus(kind: .warning, message: "\(warning)")
             }
 
             if !state.isNew {
@@ -800,9 +800,9 @@ public struct ModelInspectorSheet: View {
 
     private var autoReasoningSummary: String {
         switch model.baseSupportsReasoning {
-        case .some(true): "Supported"
-        case .some(false): "Not Supported"
-        case .none: "Unknown"
+        case .some(true): String(localized: "Supported")
+        case .some(false): String(localized: "Not Supported")
+        case .none: String(localized: "Unknown")
         }
     }
 
@@ -828,7 +828,7 @@ public struct ModelInspectorSheet: View {
                         }
 
                         FormField("Discovery Source") {
-                            Text(model.baseMetadataSource?.rawValue ?? (model.isCustom ? "Custom Entry" : "Unknown"))
+                            Text(model.baseMetadataSource?.displayName ?? (model.isCustom ? String(localized: "Custom Entry") : String(localized: "Unknown")))
                                 .font(.caption)
                                 .foregroundStyle(AppColors.textSecondary)
                         }
@@ -1076,7 +1076,7 @@ public struct ModelInspectorSheet: View {
         .frame(minWidth: 500, minHeight: 540)
     }
 
-    private func truthChip(_ label: String, truth: CapabilityTruth) -> some View {
+    private func truthChip(_ label: LocalizedStringKey, truth: CapabilityTruth) -> some View {
         HStack(spacing: 3) {
             Text(label)
             switch truth {
@@ -1104,7 +1104,7 @@ public struct ModelInspectorSheet: View {
         .clipShape(Capsule())
     }
 
-    private func modalityPickerRow(_ label: String, selection: Binding<ModalityOverrideChoice>) -> some View {
+    private func modalityPickerRow(_ label: LocalizedStringKey, selection: Binding<ModalityOverrideChoice>) -> some View {
         HStack {
             Text(label)
                 .font(.caption)
@@ -1122,7 +1122,7 @@ public struct ModelInspectorSheet: View {
     }
 
     private func provenanceBadge(_ prov: ModelMetadataSource) -> some View {
-        Text(prov.rawValue)
+        Text(prov.displayName)
             .font(.system(size: 9, weight: .medium))
             .padding(.horizontal, 4)
             .padding(.vertical, 1)
@@ -1268,11 +1268,11 @@ public struct AddCustomModelSheet: View {
                     Button("Add") {
                         let trimmedID = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !trimmedID.isEmpty else {
-                            errorMessage = "Model ID is required."
+                            errorMessage = String(localized: "Model ID is required.")
                             return
                         }
                         guard !existingIDs.contains(trimmedID) else {
-                            errorMessage = "Model ID '\(trimmedID)' already exists in this provider."
+                            errorMessage = String(localized: "Model ID '\(trimmedID)' already exists in this provider.")
                             return
                         }
                         let trimmedName = displayName.trimmingCharacters(in: .whitespaces)

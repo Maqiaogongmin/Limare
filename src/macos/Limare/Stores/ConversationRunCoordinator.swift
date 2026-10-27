@@ -366,7 +366,7 @@ final class ConversationRunCoordinator {
                 status: .interrupted,
                 startedAt: record.startedAt,
                 completedAt: record.updatedAt,
-                error: "Previous run was interrupted when Limare stopped.",
+                error: String(localized: "Previous run was interrupted when Limare stopped."),
                 recoveredFromRunID: record.recoveredFromRunID
             )
             // Recorded once, when the interruption is found, not again at every later launch.
@@ -394,7 +394,7 @@ final class ConversationRunCoordinator {
                             if msgs[idx].toolCalls[tIdx].output.isEmpty {
                                 msgs[idx].toolCalls[tIdx].output = "The previous process ended before this tool call completed. The outcome is unknown. Reassess the current environment before retrying."
                             }
-                            msgs[idx].toolCalls[tIdx].errorMessage = "Interrupted before completion; outcome unknown."
+                            msgs[idx].toolCalls[tIdx].errorMessage = String(localized: "Interrupted before completion; outcome unknown.")
                             changed = true
                         }
                     }
@@ -795,7 +795,7 @@ final class ConversationRunCoordinator {
 
     func admissionHoldReason(conversationID: UUID) -> String? {
         // A run started meanwhile would take the context and drop the summary.
-        if compactions[conversationID]?.isRunning == true { return "正在压缩对话，完成后再开始。" }
+        if compactions[conversationID]?.isRunning == true { return String(localized: "The conversation is being compacted; start again when it finishes.") }
         for hold in admissionHolds {
             if let reason = hold(conversationID) { return reason }
         }
@@ -1106,7 +1106,7 @@ final class ConversationRunCoordinator {
         runSkillSnapshots[runID] = snapshot
     }
 
-    func stop(conversationID: UUID, reason: String = "Stopped.") {
+    func stop(conversationID: UUID, reason: String = String(localized: "Stopped.")) {
         guard let run = activeRuns[conversationID], !run.status.isTerminal else { return }
 
         // Step 1: Revoke commit authority immediately before cancellation propagation
@@ -1320,7 +1320,7 @@ final class ConversationRunCoordinator {
         let scopedExecutor = toolExecutor.scoped(
             for: conversationID,
             runID: run.id,
-            conversationTitle: convRecord?.title,
+            conversationTitle: convRecord?.displayTitle,
             workspace: scopedWorkspace,
             modelSources: modelSources,
             allowedReadDirectories: ExtensionContribution.projectReadableDirectories(from: skillSnapshot.contributions)
@@ -1383,14 +1383,14 @@ final class ConversationRunCoordinator {
                 if runStartReason == .userPrompt {
                     let userPromptResult = await hookCoordinator.onUserPromptSubmit(conversationID: conversationID, runID: run.id, prompt: prompt, model: nil)
                     if userPromptResult.shouldBlockTurn {
-                        let blockReason = userPromptResult.blockTurnReason ?? "Turn blocked by UserPromptSubmit hook"
+                        let blockReason = userPromptResult.blockTurnReason ?? String(localized: "Turn blocked by UserPromptSubmit hook")
                         var currentMsgs = self.conversationMessages(for: conversationID)
                         if let lastUserIdx = currentMsgs.lastIndex(where: { $0.role == .user }) {
                             currentMsgs[lastUserIdx].state = .failed
                         }
                         let blockedAssistant = ChatMessage(
                             role: .assistant,
-                            content: "Hook blocked this turn:\n\(blockReason)",
+                            content: String(localized: "Hook blocked this turn:\n\(blockReason)"),
                             state: .failed
                         )
                         currentMsgs.append(blockedAssistant)
@@ -1510,14 +1510,14 @@ final class ConversationRunCoordinator {
         switch modelSource {
         case .direct(let providerID, let directModelID):
             guard let found = providers.providers.first(where: { $0.id == providerID }) else {
-                throw ManualCompactionError("Configured Provider not found.")
+                throw ManualCompactionError(String(localized: "Configured Provider not found."))
             }
             provider = found
             modelID = directModelID
         case .group(let groupID):
             guard let group = modelGroups?.group(for: groupID),
                   let candidate = modelGroups?.resolveInitial(for: group, sessionId: conversationID.uuidString, providers: providers.providers)
-            else { throw ManualCompactionError("No available model in this conversation's group.") }
+            else { throw ManualCompactionError(String(localized: "No available model in this conversation's group.")) }
             provider = candidate.provider
             modelID = candidate.modelID
             groupLimit = group.contextLimitTokens
@@ -1565,7 +1565,7 @@ final class ConversationRunCoordinator {
             commitAuthority: { [weak self] in self?.canStartRun(conversationID: conversationID) ?? false }
         )
         guard result.didCompactThisCall, let before = result.estimatedTokensBefore else {
-            throw ManualCompactionError("The conversation could not be summarized.")
+            throw ManualCompactionError(String(localized: "The conversation could not be summarized."))
         }
         return (before, result.budget.estimatedTokens)
     }
@@ -1582,7 +1582,7 @@ final class ConversationRunCoordinator {
         fallbackConversation: [ChatRequestMessage]?
     ) async {
         guard let provider = providers.providers.first(where: { $0.id == providerID }) else {
-            let msg = "Configured Provider not found."
+            let msg = String(localized: "Configured Provider not found.")
             recordPreflightFailure(conversationID: conversationID, runID: runID, classification: .provider, provider: nil, modelID: modelID, recoverable: nil)
             markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: ChatMessage.RuntimeNotice.providerUnavailableText)
             finishRun(conversationID: conversationID, runID: runID, status: .failed, error: msg, model: modelID)
@@ -1642,7 +1642,7 @@ final class ConversationRunCoordinator {
             }
             revokeMutationAuthority(conversationID: conversationID, runID: runID)
             markAuthoritativeCancellation(conversationID: conversationID, runID: runID)
-            finishRun(conversationID: conversationID, runID: runID, status: .cancelled, error: "Cancelled.", model: modelID)
+            finishRun(conversationID: conversationID, runID: runID, status: .cancelled, error: String(localized: "Cancelled."), model: modelID)
             logs.info("ConversationRun", "Run cancelled for conversation '\(conversationID)'.")
         } catch {
             guard hasMutationAuthority(conversationID: conversationID, runID: runID) else {
@@ -1665,17 +1665,17 @@ final class ConversationRunCoordinator {
             } else if let providerError = error as? ProviderClientError,
                       case .http(let status, let msg) = providerError,
                       ProviderContextOverflowRecognizer.isOverflow(status: status, message: msg) {
-                presentationMessage = "The provider rejected the request because it exceeded the model's maximum context length. Select a model with a larger context window or reduce conversation context."
+                presentationMessage = String(localized: "The provider rejected the request because it exceeded the model's maximum context length. Select a model with a larger context window or reduce conversation context.")
             } else if let providerError = error as? ProviderClientError,
                       case .responsesFailed(let code, let msg) = providerError,
                       ProviderContextOverflowRecognizer.isOverflow(responsesCode: code, message: msg) {
-                presentationMessage = "The provider rejected the request because it exceeded the model's maximum context length. Select a model with a larger context window or reduce conversation context."
+                presentationMessage = String(localized: "The provider rejected the request because it exceeded the model's maximum context length. Select a model with a larger context window or reduce conversation context.")
             } else {
                 presentationMessage = safeMessage
             }
 
             if providers.providers.first(where: { $0.id == provider.id })?.models.first(where: { $0.id == modelID })?.discovery.isRemoved == true {
-                presentationMessage += " This model was also absent from a complete provider list and rejected as model-not-found."
+                presentationMessage += String(localized: " This model was also absent from a complete provider list and rejected as model-not-found.")
             }
             let isContextRelated = error is ContextLifecycleError || (error as? ProviderClientError).map { err in
                 switch err {
@@ -1708,7 +1708,7 @@ final class ConversationRunCoordinator {
         fallbackConversation: [ChatRequestMessage]?
     ) async {
         guard let group = modelGroups?.group(for: groupID) else {
-            let msg = "Model Group '\(groupID)' not found."
+            let msg = String(localized: "Model Group '\(groupID)' not found.")
             recordPreflightFailure(conversationID: conversationID, runID: runID, classification: .provider, groupID: groupID, recoverable: nil)
             markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: ChatMessage.RuntimeNotice.groupUnavailableText)
             finishRun(conversationID: conversationID, runID: runID, status: .failed, error: msg)
@@ -1729,12 +1729,13 @@ final class ConversationRunCoordinator {
         ) else {
             let skipped = modelGroups?.unavailableMemberReasons(for: group, requireImageInput: requireImageInput, providers: providers.providers) ?? []
             let classification: RuntimeFailureClassification
-            if skipped.allSatisfy({ $0.reason == "Missing API Key" }) { classification = .authentication }
-            else if skipped.contains(where: { $0.reason.contains("image input") || $0.reason.contains("not supported") }) { classification = .modelCapability }
+            if skipped.allSatisfy({ $0.unavailability == .credentialMissing }) { classification = .authentication }
+            else if skipped.contains(where: { $0.unavailability == .noImageInput || $0.unavailability == .modelMissing }) { classification = .modelCapability }
             else { classification = .provider }
             recordPreflightFailure(conversationID: conversationID, runID: runID, classification: classification, groupID: groupID, recoverable: nil, availability: "none")
             let detail = skipped.map { "- \($0.name): \($0.reason)" }.joined(separator: "\n")
-            let msg = "No available models in Group '\(group.name)':\n\(detail.isEmpty ? "All member providers are unconfigured or missing credentials." : detail)"
+            let reasons = detail.isEmpty ? String(localized: "All member providers are unconfigured or missing credentials.") : detail
+            let msg = String(localized: "No available models in Group '\(group.name)':\n\(reasons)")
             markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: ChatMessage.RuntimeNotice.groupModelsUnavailableText)
             finishRun(conversationID: conversationID, runID: runID, status: .failed, error: msg)
             return
@@ -1811,7 +1812,7 @@ final class ConversationRunCoordinator {
                     continue
                 } else {
                     recordPreflightFailure(conversationID: conversationID, runID: runID, classification: preflightClassification, provider: currentCandidate.provider.name, modelID: currentCandidate.modelID, recoverable: "false")
-                    let msg = "Model admission failed for \(currentCandidate.provider.name): \(errDesc)"
+                    let msg = String(localized: "Model admission failed for \(currentCandidate.provider.name): \(errDesc)")
                     markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: ChatMessage.RuntimeNotice.groupNoCandidateText)
                     finishRun(conversationID: conversationID, runID: runID, status: .failed, error: msg)
                     return
@@ -1860,7 +1861,7 @@ final class ConversationRunCoordinator {
                 }
                 revokeMutationAuthority(conversationID: conversationID, runID: runID)
                 markAuthoritativeCancellation(conversationID: conversationID, runID: runID)
-                finishRun(conversationID: conversationID, runID: runID, status: .cancelled, error: "Cancelled.", model: currentCandidate.modelID)
+                finishRun(conversationID: conversationID, runID: runID, status: .cancelled, error: String(localized: "Cancelled."), model: currentCandidate.modelID)
                 logs.info("ModelRouting", "Group '\(group.name)' stream cancelled by user.")
                 return
             } catch {
@@ -1952,7 +1953,7 @@ final class ConversationRunCoordinator {
                         if let ctxErr = error as? ContextLifecycleError {
                             msg = ctxErr.userFacingMessage
                         } else {
-                            msg = "Group '\(group.name)' execution failed:\n\(failureSummary.isEmpty ? safeMessage : failureSummary)"
+                            msg = String(localized: "Group '\(group.name)' execution failed:\n\(failureSummary.isEmpty ? safeMessage : failureSummary)")
                         }
                         logs.error("ModelRouting", "All members of group '\(group.name)' exhausted or non-fallbackable.")
                         if let ctxErr = error as? ContextLifecycleError {
@@ -1972,7 +1973,7 @@ final class ConversationRunCoordinator {
                     if let ctxErr = error as? ContextLifecycleError {
                         msg = ctxErr.userFacingMessage
                     } else {
-                        msg = "Group '\(group.name)' stopped (\(reason)) after \(failureClass.label): \(safeMessage)"
+                        msg = String(localized: "Group '\(group.name)' stopped (\(reason)) after \(failureClass.label): \(safeMessage)")
                     }
                     if let ctxErr = error as? ContextLifecycleError {
                         if !removeEmptyStreamingMessage(conversationID: conversationID, runID: runID) {
@@ -2273,7 +2274,7 @@ final class ConversationRunCoordinator {
                         msgs[msgIndex].toolCalls[recordIndex].state = .cancelled
                         msgs[msgIndex].toolCalls[recordIndex].providerCallID = call.id
                         msgs[msgIndex].toolCalls[recordIndex].owningRunID = runID
-                        msgs[msgIndex].toolCalls[recordIndex].errorMessage = "Not executed: superseded by user instruction."
+                        msgs[msgIndex].toolCalls[recordIndex].errorMessage = String(localized: "Not executed: superseded by user instruction.")
                         msgs[msgIndex].toolCalls[recordIndex].output = "Not executed: superseded by user instruction."
                         msgs[msgIndex].toolCalls[recordIndex].durationMilliseconds = 0
                     } else {
@@ -2285,7 +2286,7 @@ final class ConversationRunCoordinator {
                             state: .cancelled,
                             output: "Not executed: superseded by user instruction.",
                             durationMilliseconds: 0,
-                            errorMessage: "Not executed: superseded by user instruction."
+                            errorMessage: String(localized: "Not executed: superseded by user instruction.")
                         )
                         record.owningRunID = runID
                         msgs[msgIndex].toolCalls.append(record)
@@ -2472,10 +2473,10 @@ final class ConversationRunCoordinator {
 
     private func friendlyToolName(_ identifier: String) -> String {
         switch identifier {
-        case "shell_execute": return "Ran command"
-        case "file_read": return "Read file"
-        case "file_list", "file_search": return "Searched project"
-        case "browser_use": return "Browsed web"
+        case "shell_execute": return String(localized: "Ran command")
+        case "file_read": return String(localized: "Read file")
+        case "file_list", "file_search": return String(localized: "Searched project")
+        case "browser_use": return String(localized: "Browsed web")
         default: return identifier.hasPrefix("mcp_") ? "Used MCP tool" : "Used tool"
         }
     }
@@ -2508,7 +2509,7 @@ final class ConversationRunCoordinator {
         if let groupID { metadata["group"] = groupID }
         if let recoverable { metadata["recoverable"] = recoverable }
         if let availability { metadata["availability"] = availability }
-        let summary = classification == .authentication ? "The model connection needs attention" : "Model configuration is unavailable"
+        let summary = classification == .authentication ? String(localized: "The model connection needs attention") : String(localized: "Model configuration is unavailable")
         runtimeEvents.record(conversationID: conversationID, runID: runID, domain: .failure, kind: "failure.recorded", severity: .error, summary: summary, metadata: metadata)
     }
 
@@ -2618,12 +2619,12 @@ final class ConversationRunCoordinator {
 
         let summary: String
         switch classification {
-        case .rateLimit: summary = "The current model is temporarily unavailable"
-        case .authentication: summary = "The model connection needs attention"
-        case .network: summary = "Could not reach the model"
-        case .context: summary = "The recent conversation is too large for this model"
-        case .persistence: summary = "Storage or persistence failure"
-        default: summary = "Run failed"
+        case .rateLimit: summary = String(localized: "The current model is temporarily unavailable")
+        case .authentication: summary = String(localized: "The model connection needs attention")
+        case .network: summary = String(localized: "Could not reach the model")
+        case .context: summary = String(localized: "The recent conversation is too large for this model")
+        case .persistence: summary = String(localized: "Storage or persistence failure")
+        default: summary = String(localized: "Run failed")
         }
         runtimeEvents.record(conversationID: conversationID, runID: runID, domain: .failure, kind: "failure.recorded", severity: .error, summary: summary, metadata: metadata)
         if classification == .context {
@@ -2760,12 +2761,12 @@ final class ConversationRunCoordinator {
         let kind: String
         let summary: String
         switch effectiveStatus {
-        case .completed: kind = "run.completed"; summary = "Completed"
-        case .cancelled: kind = "run.cancelled"; summary = "Stopped"
-        case .failed: kind = "run.failed"; summary = "Run failed"
-        case .interrupted: kind = "run.interrupted"; summary = "Interrupted"
-        case .paused: kind = "run.paused"; summary = "Paused"
-        case .queued, .running: kind = "run.updated"; summary = "Working"
+        case .completed: kind = "run.completed"; summary = String(localized: "Completed")
+        case .cancelled: kind = "run.cancelled"; summary = String(localized: "Stopped")
+        case .failed: kind = "run.failed"; summary = String(localized: "Run failed")
+        case .interrupted: kind = "run.interrupted"; summary = String(localized: "Interrupted")
+        case .paused: kind = "run.paused"; summary = String(localized: "Paused")
+        case .queued, .running: kind = "run.updated"; summary = String(localized: "Working")
         }
         // Capture the immutable terminal snapshot of *this* run before any external callback
         // or queued-run transition can replace `activeRuns[conversationID]`. The snapshot must
@@ -3210,14 +3211,14 @@ final class ConversationRunCoordinator {
                     model: nil
                 )
                 if result.shouldBlockTurn {
-                    let blockReason = result.blockTurnReason ?? "Turn blocked by UserPromptSubmit hook"
+                    let blockReason = result.blockTurnReason ?? String(localized: "Turn blocked by UserPromptSubmit hook")
                     var currentMsgs = conversationMessages(for: conversationID)
                     if let steerIdx = currentMsgs.lastIndex(where: { $0.id == input.message.id }) {
                         currentMsgs[steerIdx].state = .failed
                     }
                     let blockedAssistant = ChatMessage(
                         role: .assistant,
-                        content: "Hook blocked this instruction:\n\(blockReason)",
+                        content: String(localized: "Hook blocked this instruction:\n\(blockReason)"),
                         state: .failed
                     )
                     currentMsgs.append(blockedAssistant)
@@ -3330,7 +3331,7 @@ final class ConversationRunCoordinator {
         if rejectedOutcome != nil {
             for toolIndex in msgs[index].toolCalls.indices where msgs[index].toolCalls[toolIndex].state == .queued {
                 msgs[index].toolCalls[toolIndex].state = .failed
-                msgs[index].toolCalls[toolIndex].errorMessage = "Assistant turn rejected before tool dispatch."
+                msgs[index].toolCalls[toolIndex].errorMessage = String(localized: "Assistant turn rejected before tool dispatch.")
             }
         }
         if msgs[index].content.isEmpty, msgs[index].toolCalls.isEmpty {
@@ -3371,7 +3372,7 @@ final class ConversationRunCoordinator {
             switch msgs[index].toolCalls[toolIndex].state {
             case .queued, .awaitingApproval, .running:
                 msgs[index].toolCalls[toolIndex].state = .cancelled
-                msgs[index].toolCalls[toolIndex].errorMessage = "Cancelled."
+                msgs[index].toolCalls[toolIndex].errorMessage = String(localized: "Cancelled.")
                 if msgs[index].toolCalls[toolIndex].output.isEmpty {
                     msgs[index].toolCalls[toolIndex].output = "Cancelled."
                 }

@@ -126,7 +126,7 @@ struct ModelGroupsView: View {
     }
 
     /// A small caption over a part of the list, in place of a List section header.
-    private func masterSectionLabel(_ title: String) -> some View {
+    private func masterSectionLabel(_ title: LocalizedStringKey) -> some View {
         Text(title)
             .font(AppTypography.interfaceCaption.weight(.semibold))
             .foregroundStyle(AppColors.textSecondary)
@@ -244,7 +244,7 @@ private struct ModelUseView: View {
                         store: appState.modelGroups,
                         providers: appState.providers.providers
                     ) {
-                        InlineStatus(kind: .warning, message: note)
+                        InlineStatus(kind: .warning, message: "\(note)")
                     }
                 }
 
@@ -270,7 +270,7 @@ private struct ModelUseView: View {
                         store: appState.modelGroups,
                         providers: appState.providers.providers
                     ) {
-                        InlineStatus(kind: .info, message: note)
+                        InlineStatus(kind: .info, message: "\(note)")
                     }
                 }
 
@@ -296,7 +296,7 @@ private struct ModelUseView: View {
                         store: appState.modelGroups,
                         providers: appState.providers.providers
                     ) {
-                        InlineStatus(kind: .info, message: note)
+                        InlineStatus(kind: .info, message: "\(note)")
                     }
                 }
             }
@@ -342,7 +342,7 @@ private struct ModelUseView: View {
         }
     }
 
-    private func groupPicker(selection: Binding<String?>, placeholder: String) -> some View {
+    private func groupPicker(selection: Binding<String?>, placeholder: LocalizedStringKey) -> some View {
         Picker("", selection: selection) {
             Text(placeholder).tag(nil as String?)
             ForEach(appState.modelGroups.groups) { grp in
@@ -525,7 +525,7 @@ private struct ModelGroupDetailView: View {
                         if item.isAvailable {
                             SettingsBadge("Ready for Chat", tone: .positive)
                         } else {
-                            SettingsBadge(item.unavailableReason ?? "Not Ready for Chat")
+                            SettingsBadge(item.unavailableReason ?? String(localized: "Not Ready for Chat"))
                         }
                     }
                 }
@@ -643,8 +643,8 @@ private struct ModelGroupDetailView: View {
                             appState.modelGroups.updateGroup(updated)
                         }
                     ),
-                    options: [(value: RoutingStrategy.fallback, title: "Fallback"),
-                              (value: RoutingStrategy.loadBalance, title: "Load Balance")]
+                    options: [(value: RoutingStrategy.fallback, title: String(localized: "Fallback")),
+                              (value: RoutingStrategy.loadBalance, title: String(localized: "Load Balance"))]
                 )
                 .fixedSize()
                 .accessibilityLabel("Routing Strategy")
@@ -668,8 +668,8 @@ private struct ModelGroupDetailView: View {
                                 appState.modelGroups.updateGroup(updated)
                             }
                         ),
-                        options: [(value: FallbackStrategy.limited, title: "Standard"),
-                                  (value: FallbackStrategy.always, title: "Switch immediately")]
+                        options: [(value: FallbackStrategy.limited, title: String(localized: "Standard")),
+                                  (value: FallbackStrategy.always, title: String(localized: "Switch immediately"))]
                     )
                     .fixedSize()
                     .accessibilityLabel("Fallback Behavior")
@@ -855,7 +855,7 @@ private struct SpecialistModelsSheet: View {
                             ForEach(Array(appState.modelGroups.agentLoopGroupIds.enumerated()), id: \.element) { index, gid in
                                 let grp = appState.modelGroups.group(for: gid)
                                 HStack {
-                                    Text(grp?.name ?? "Unknown Group (\(gid))")
+                                    Text(grp?.name ?? String(localized: "Unknown Group (\(gid))"))
                                         .font(.subheadline)
                                     Spacer()
                                     Button {
@@ -921,7 +921,7 @@ private struct SpecialistModelsSheet: View {
                                         }
 
                                         HStack(spacing: 4) {
-                                            Text(resolved?.provider.name ?? "Unknown Provider")
+                                            Text(resolved?.provider.name ?? String(localized: "Unknown Provider"))
                                                 .font(.caption2)
                                                 .foregroundStyle(AppColors.textSecondary)
 

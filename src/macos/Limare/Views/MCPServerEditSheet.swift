@@ -6,6 +6,14 @@ enum MCPEditMode: String, CaseIterable, Identifiable {
     case jsonImport = "Import Configuration…"
 
     var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .stdio: String(localized: "Local Command")
+        case .http: String(localized: "Remote Server")
+        case .jsonImport: String(localized: "Import Configuration…")
+        }
+    }
 }
 
 struct MCPServerEditFormView: View {
@@ -30,11 +38,11 @@ struct MCPServerEditFormView: View {
     private var profile: MCPServerProfile? { existingConfig?.profile }
 
     private var oauthClientSecretPlaceholder: String {
-        guard let existingConfig else { return "Optional" }
+        guard let existingConfig else { return String(localized: "Optional") }
         switch appState.mcp.credentialPresence(serverID: existingConfig.id, key: MCPSecretKey.oauthClientSecret) {
         case .present: return "<stored secret>"
-        case .absent: return "Optional"
-        case .unknown: return "Credential status not checked"
+        case .absent: return String(localized: "Optional")
+        case .unknown: return String(localized: "Credential status not checked")
         }
     }
 
@@ -56,10 +64,10 @@ struct MCPServerEditFormView: View {
                     }
 
                     if let errorMessage {
-                        InlineStatus(kind: .error, message: errorMessage)
+                        InlineStatus(kind: .error, message: "\(errorMessage)")
                     }
                     if let successMessage {
-                        InlineStatus(kind: .success, message: successMessage)
+                        InlineStatus(kind: .success, message: "\(successMessage)")
                     }
                 }
                 .padding(AppSpacing.medium)
@@ -106,7 +114,7 @@ struct MCPServerEditFormView: View {
     private var modePicker: some View {
         SettingsSegmentedPicker(
             selection: $mode,
-            options: MCPEditMode.allCases.map { (value: $0, title: $0.rawValue) }
+            options: MCPEditMode.allCases.map { (value: $0, title: $0.title) }
         )
         .accessibilityLabel("Connection Type")
     }
@@ -293,7 +301,7 @@ struct MCPServerEditFormView: View {
         errorMessage = nil
         successMessage = nil
         guard let onImport else {
-            errorMessage = "Import is not configured."
+            errorMessage = String(localized: "Import is not configured.")
             return
         }
 
@@ -303,7 +311,7 @@ struct MCPServerEditFormView: View {
             defer { isCommitting = false }
             do {
                 let count = try await onImport(text)
-                successMessage = "Successfully imported \(count) connection\(count == 1 ? "" : "s")."
+                successMessage = String(localized: "Successfully imported \(count) connections.")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                     if let onCancel {
                         onCancel()
@@ -312,7 +320,7 @@ struct MCPServerEditFormView: View {
                     }
                 }
             } catch {
-                errorMessage = "Import failed: \(error.localizedDescription)"
+                errorMessage = String(localized: "Import failed: \(error.localizedDescription)")
             }
         }
     }
@@ -331,7 +339,7 @@ struct MCPServerEditFormView: View {
                 try await onSave(command.0, command.1)
                 draft.oauthClientSecret = ""
             } catch {
-                errorMessage = "Failed to save configuration: \(error.localizedDescription)"
+                errorMessage = String(localized: "Failed to save configuration: \(error.localizedDescription)")
             }
         }
     }
@@ -401,7 +409,7 @@ struct MCPConnectionDraft: Equatable {
     /// The definition and client secret change one Save submits.
     func command(existing: MCPServerConfig?, isHTTP: Bool) throws -> (MCPServerConfig, MCPSecretMutation) {
         let trimmedID = serverID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedID.isEmpty else { throw Invalid("Connection name is required.") }
+        guard !trimmedID.isEmpty else { throw Invalid(String(localized: "Connection name is required.")) }
         func entries(_ text: String, separator: Character, existing stored: [String: String]?, kind: String) throws -> [String: String]? {
             var result: [String: String] = [:]
             for line in text.components(separatedBy: .newlines) {
@@ -412,7 +420,7 @@ struct MCPConnectionDraft: Equatable {
                 guard !key.isEmpty else { continue }
                 if value == "<stored secret>" {
                     guard let reference = stored?[key], MCPServerConfig.isSecretReference(reference) else {
-                        throw Invalid("Cannot use '<stored secret>' for new or unset \(kind) '\(key)'.")
+                        throw Invalid(String(localized: "Cannot use '<stored secret>' for new or unset \(kind) '\(key)'."))
                     }
                     result[key] = reference
                 } else {
@@ -426,14 +434,14 @@ struct MCPConnectionDraft: Equatable {
         config.note = note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note
         if !isHTTP {
             let executable = command.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !executable.isEmpty else { throw Invalid("Command is required for local MCP connections.") }
+            guard !executable.isEmpty else { throw Invalid(String(localized: "Command is required for local MCP connections.")) }
             let args = argumentsText.components(separatedBy: .newlines)
                 .flatMap { $0.components(separatedBy: " ") }
                 .map { $0.trimmingCharacters(in: .whitespaces) }
                 .filter { !$0.isEmpty }
             config.command = executable
             config.args = args.isEmpty ? nil : args
-            config.env = try entries(environmentText, separator: "=", existing: existing?.env, kind: "environment variable")
+            config.env = try entries(environmentText, separator: "=", existing: existing?.env, kind: String(localized: "environment variable"))
             config.startupTimeoutSeconds = timeoutSeconds
             config.url = nil
             config.headers = nil
@@ -442,7 +450,7 @@ struct MCPConnectionDraft: Equatable {
         }
         if config.profile == nil {
             let url = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !url.isEmpty else { throw Invalid("A URL is required for remote server connections.") }
+            guard !url.isEmpty else { throw Invalid(String(localized: "A URL is required for remote server connections.")) }
             // Scheme, host and credential checks happen in MCPStore.validate when the config is saved.
             config.url = url
             config.headers = try entries(headersText, separator: ":", existing: existing?.headers, kind: "header")

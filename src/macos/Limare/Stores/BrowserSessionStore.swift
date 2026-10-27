@@ -3,17 +3,19 @@ import Observation
 import WebKit
 import AppKit
 
-/// Represents an independent browser tab owned by a specific conversation.
+/// One page in a conversation's browser, or a browser the user opened beside it.
 @MainActor
 @Observable
 final class BrowserTab: Identifiable {
-    let id: UUID
+    let id = UUID()
     let conversationID: UUID
+    /// The tab's number in its conversation, the `tab_id` the agent names it by. Numbers are not
+    /// reused, so a number the model saw earlier never points at a different page.
+    var number: Int
     var runtime: BrowserRuntime
     var owner: BrowserControlOwner = .agent
     var controlGeneration: Int = 0
     var lastUsedAt: Date = Date()
-    var pendingNotice: String? = nil
 
     var currentURL: String = ""
     var title: String = ""
@@ -32,17 +34,16 @@ final class BrowserTab: Identifiable {
         conversationID: UUID,
         runtime: BrowserRuntime,
         owner: BrowserControlOwner = .agent,
+        number: Int = 1,
         controlGeneration: Int = 0,
-        lastUsedAt: Date = Date(),
-        pendingNotice: String? = nil
+        lastUsedAt: Date = Date()
     ) {
-        self.id = conversationID
         self.conversationID = conversationID
+        self.number = number
         self.runtime = runtime
         self.owner = owner
         self.controlGeneration = controlGeneration
         self.lastUsedAt = lastUsedAt
-        self.pendingNotice = pendingNotice
         self.bindRuntime(runtime)
     }
 
@@ -53,6 +54,14 @@ final class BrowserTab: Identifiable {
             self.title = state.pageTitle
             self.isLoading = state.isLoading
         }
+    }
+
+    /// What the agent reads about this tab in `list_tabs` and in results while several are open.
+    func summary(isCurrent: Bool) -> [String: Any] {
+        var entry: [String: Any] = ["tab_id": number, "url": currentURL, "title": title]
+        if isCurrent { entry["current"] = true }
+        if owner == .user { entry["controlled_by"] = "user" }
+        return entry
     }
 
     func takeControl(logs: DebugLogStore? = nil) {
@@ -116,15 +125,33 @@ final class BrowserTab: Identifiable {
     }
 }
 
-/// Manages the lifecycle, tabs, and per-conversation browser runtimes for Limare.
-/// Ensures each conversation has at most one independent browser tab, sharing
-/// the common persistent `WKWebsiteDataStore`.
+/// One conversation's browser tabs, in the order they opened.
+@MainActor
+@Observable
+final class BrowserTabGroup {
+    var tabs: [BrowserTab] = []
+    /// The tab the agent's page actions act on.
+    var currentTabID: UUID?
+    /// The tab the Browser panel shows: the agent's current tab, until the person picks another.
+    var shownTabID: UUID?
+    var nextNumber = 1
+    /// Said once at the head of the agent's next browser result.
+    var pendingNotices: [String] = []
+
+    var currentTab: BrowserTab? { tabs.first { $0.id == currentTabID } }
+    var shownTab: BrowserTab? { tabs.first { $0.id == shownTabID } ?? currentTab }
+    func tab(number: Int) -> BrowserTab? { tabs.first { $0.number == number } }
+}
+
+/// Manages the lifecycle of each conversation's browser tabs. All tabs share the common
+/// persistent `WKWebsiteDataStore`, so a site signed in to in one is signed in to in all.
 @MainActor
 @Observable
 final class BrowserSessionStore {
 
-    var maxLiveTabs: Int = 6
-    private(set) var tabs: [UUID: BrowserTab] = [:]
+    /// Live agent tabs across all conversations: Limare owns their WebKit processes.
+    var maxLiveTabs: Int = 8
+    private(set) var groups: [UUID: BrowserTabGroup] = [:]
     /// Conversations some window shows: their agent tabs are never evicted.
     var displayedConversationIDs: Set<UUID> = []
     /// The one displayed conversation, for callers that know a single window.
@@ -134,9 +161,6 @@ final class BrowserSessionStore {
     }
     var hasActiveRun: (@MainActor (UUID) -> Bool)?
 
-
-    private var pendingNotices: [UUID: String] = [:]
-
     let websiteDataStore: WKWebsiteDataStore
     private let attachmentStore: AttachmentStore
     private let artifactStore: ArtifactStore?
@@ -144,7 +168,7 @@ final class BrowserSessionStore {
 
     public var snapshotProvider: (@MainActor () async throws -> NSImage)? {
         didSet {
-            for tab in tabs.values {
+            for tab in allTabs {
                 tab.runtime.snapshotProvider = snapshotProvider
             }
         }
@@ -156,7 +180,7 @@ final class BrowserSessionStore {
         artifactStore: ArtifactStore? = nil,
         logs: DebugLogStore? = nil,
         snapshotProvider: (@MainActor () async throws -> NSImage)? = nil,
-        maxLiveTabs: Int = 6
+        maxLiveTabs: Int = 8
     ) {
         let l = logs ?? DebugLogStore()
         let store = websiteDataStore ?? BrowserWebsiteDataStore.shared.websiteDataStore
@@ -169,62 +193,154 @@ final class BrowserSessionStore {
         self.maxLiveTabs = maxLiveTabs
     }
 
+    var allTabs: [BrowserTab] { groups.values.flatMap(\.tabs) }
+    var liveTabCount: Int { allTabs.count }
+
+    func tabs(for conversationID: UUID) -> [BrowserTab] {
+        groups[conversationID]?.tabs ?? []
+    }
+
+    /// The conversation's current tab, the one the agent's page actions act on.
     func tab(for conversationID: UUID) -> BrowserTab? {
-        tabs[conversationID]
+        groups[conversationID]?.currentTab
+    }
+
+    /// The tab the Browser panel shows for the conversation.
+    func shownTab(for conversationID: UUID) -> BrowserTab? {
+        groups[conversationID]?.shownTab
     }
 
     func hasSession(for conversationID: UUID) -> Bool {
-        tabs[conversationID]?.hasSession == true
+        tabs(for: conversationID).contains { $0.hasSession }
     }
 
     @discardableResult
     func getOrCreateTab(for conversationID: UUID) throws -> BrowserTab {
-        if let existing = tabs[conversationID] {
-            return existing
+        if let current = tab(for: conversationID) {
+            return current
         }
+        return try openTab(for: conversationID)
+    }
 
-        if tabs.count >= maxLiveTabs {
-            guard let victim = evictionCandidate() else {
-                throw BrowserSessionStoreError.capacityExceeded
-            }
+    /// Opens a blank tab in the conversation and shows it. It becomes the agent's current tab
+    /// unless `makesCurrent` is false (a tab the person opens) and the conversation has one.
+    @discardableResult
+    func openTab(for conversationID: UUID, owner: BrowserControlOwner = .agent, makesCurrent: Bool = true) throws -> BrowserTab {
+        try makeRoom()
+        let group = self.group(for: conversationID)
+        let tab = BrowserTab(conversationID: conversationID, runtime: makeRuntime(), owner: owner, number: group.nextNumber)
+        add(tab, to: group)
+        if makesCurrent || group.currentTab == nil { group.currentTabID = tab.id }
+        group.shownTabID = tab.id
+        return tab
+    }
 
-            victim.activeExecutionTask?.cancel()
-            victim.runtime.teardown()
-            tabs.removeValue(forKey: victim.conversationID)
-            pendingNotices[victim.conversationID] = "evicted"
-            logs.info("Browser", "Evicted idle browser tab for conversation \(victim.conversationID).")
-        }
+    /// The panel shows `tab`; the agent's current tab stays where it is.
+    func show(_ tab: BrowserTab) {
+        groups[tab.conversationID]?.shownTabID = tab.id
+    }
 
-        let rt = BrowserRuntime(
+    /// Closes a tab the person closed in the panel.
+    func closeByUser(_ tab: BrowserTab) {
+        close(tab, reason: "closed_by_user")
+    }
+
+    private func group(for conversationID: UUID) -> BrowserTabGroup {
+        if let group = groups[conversationID] { return group }
+        let group = BrowserTabGroup()
+        groups[conversationID] = group
+        return group
+    }
+
+    private func makeRuntime(configuration: WKWebViewConfiguration? = nil) -> BrowserRuntime {
+        BrowserRuntime(
             websiteDataStore: websiteDataStore,
             attachmentStore: attachmentStore,
             artifactStore: artifactStore,
             logs: logs,
-            snapshotProvider: snapshotProvider
+            snapshotProvider: snapshotProvider,
+            configuration: configuration,
+            opensWindows: true
         )
-
-        let notice = pendingNotices.removeValue(forKey: conversationID)
-        let newTab = BrowserTab(
-            conversationID: conversationID,
-            runtime: rt,
-            owner: .agent,
-            controlGeneration: 0,
-            lastUsedAt: Date(),
-            pendingNotice: notice
-        )
-        tabs[conversationID] = newTab
-        return newTab
     }
 
-    func preflight(conversationID: UUID) -> BrowserActionResult? {
-        if let tab = tabs[conversationID] {
+    private func add(_ tab: BrowserTab, to group: BrowserTabGroup) {
+        group.nextNumber = max(group.nextNumber, tab.number) + 1
+        group.tabs.append(tab)
+        bindWindows(of: tab)
+    }
+
+    /// A page's new window opens as a tab next to it; `window.close()` closes the tab.
+    private func bindWindows(of tab: BrowserTab) {
+        tab.runtime.onOpenWindow = { [weak self, weak tab] configuration in
+            guard let self, let tab else { return nil }
+            return self.openWindow(from: tab, configuration: configuration)
+        }
+        tab.runtime.onCloseWindow = { [weak self, weak tab] in
+            guard let self, let tab else { return }
+            self.close(tab, reason: "closed_by_page")
+        }
+    }
+
+    /// The window's tab takes over from its opener: it becomes current if the opener was, and
+    /// shown if the opener was, as a browser switches to a tab a link opens.
+    private func openWindow(from opener: BrowserTab, configuration: WKWebViewConfiguration) -> WKWebView? {
+        guard let group = groups[opener.conversationID], group.tabs.contains(where: { $0 === opener }) else { return nil }
+        do { try makeRoom() } catch { return nil }
+        let wasCurrent = group.currentTabID == opener.id
+        let wasShown = group.shownTab === opener
+        let tab = BrowserTab(conversationID: opener.conversationID, runtime: makeRuntime(configuration: configuration),
+                             owner: opener.owner, number: group.nextNumber)
+        add(tab, to: group)
+        if wasCurrent { group.currentTabID = tab.id }
+        if wasShown { group.shownTabID = tab.id }
+        logs.info("Browser", "Page opened tab \(tab.number) for conversation \(opener.conversationID).")
+        return tab.runtime.webView
+    }
+
+    /// Closes the least recently used idle tab when all tabs are live.
+    private func makeRoom() throws {
+        guard liveTabCount >= maxLiveTabs else { return }
+        guard let victim = evictionCandidate() else {
+            throw BrowserSessionStoreError.capacityExceeded
+        }
+        close(victim, reason: "evicted")
+        logs.info("Browser", "Evicted idle browser tab \(victim.number) for conversation \(victim.conversationID).")
+    }
+
+    /// Removes a tab. Its conversation's next browser result says so, unless the agent closed it
+    /// itself (`reason` nil).
+    private func close(_ tab: BrowserTab, reason: String?) {
+        guard let group = groups[tab.conversationID], group.tabs.contains(where: { $0 === tab }) else { return }
+        group.tabs.removeAll { $0 === tab }
+        tab.teardown()
+        if group.currentTabID == tab.id {
+            group.currentTabID = group.tabs.max { $0.lastUsedAt < $1.lastUsedAt }?.id
+        }
+        if group.shownTabID == tab.id { group.shownTabID = nil }
+        guard let reason else { return }
+        if group.tabs.isEmpty {
+            group.pendingNotices = ["Your previous browser page was closed (\(reason)). Navigate again if you still need it."]
+        } else if let current = group.currentTab {
+            group.pendingNotices.append("Browser tab \(tab.number) was closed (\(reason)); the current tab is \(current.number).")
+        }
+    }
+
+    func preflight(conversationID: UUID, action: BrowserAction = .getPageInfo) -> BrowserActionResult? {
+        if action.managesTabs {
+            if action == .newTab, liveTabCount >= maxLiveTabs, evictionCandidate() == nil {
+                return .capacityExceeded()
+            }
+            return nil
+        }
+        if let tab = tab(for: conversationID) {
             if tab.owner == .user {
                 return .pausedForUserControl()
             }
             return nil
         }
 
-        if tabs.count >= maxLiveTabs, evictionCandidate() == nil {
+        if liveTabCount >= maxLiveTabs, evictionCandidate() == nil {
             return .capacityExceeded()
         }
         return nil
@@ -235,7 +351,7 @@ final class BrowserSessionStore {
     /// not, it goes after the agent's own pages, least recently used first. Protecting it for good
     /// let six such pages lock every conversation out of the browser.
     private func evictionCandidate() -> BrowserTab? {
-        tabs.values
+        allTabs
             .filter { tab in
                 self.hasActiveRun?(tab.conversationID) != true
                     && !self.displayedConversationIDs.contains(tab.conversationID)
@@ -246,14 +362,23 @@ final class BrowserSessionStore {
             }
     }
 
-    func evidence(_ result: BrowserActionResult, conversationID: UUID) -> BrowserActionResult {
-        let gen = tabs[conversationID]?.controlGeneration ?? 0
-        var finalResult = result.sessionEvidence(ownerConversationID: conversationID, generation: gen, reset: nil)
+    /// The result as the agent reads it: the session fields; the conversation's tabs when it has
+    /// several or the action was about tabs; then any notice about tabs closed without it.
+    func evidence(_ result: BrowserActionResult, conversationID: UUID, action: BrowserAction? = nil) -> BrowserActionResult {
+        let group = groups[conversationID]
+        let current = group?.currentTab
+        var finalResult = result.sessionEvidence(ownerConversationID: conversationID, generation: current?.controlGeneration ?? 0, reset: nil)
 
-        if let tab = tabs[conversationID], let notice = tab.pendingNotice {
-            let prefix = "Your previous browser page was closed (\(notice)). Navigate again if you still need it."
-            finalResult = finalResult.prependingNotice(prefix)
-            tab.pendingNotice = nil
+        let tabs = group?.tabs ?? []
+        if tabs.count > 1 || action?.managesTabs == true {
+            var fields: [String: Any] = ["tabs": tabs.map { $0.summary(isCurrent: $0.id == group?.currentTabID) }]
+            if let current { fields["current_tab"] = current.number }
+            finalResult = finalResult.addingFields(fields)
+        }
+
+        if let group, !group.pendingNotices.isEmpty {
+            finalResult = finalResult.prependingNotice(group.pendingNotices.joined(separator: " "))
+            group.pendingNotices = []
         }
 
         return finalResult
@@ -261,8 +386,12 @@ final class BrowserSessionStore {
 
     func execute(input: BrowserActionInput, conversationID: UUID) async throws -> BrowserActionResult {
         try Task.checkCancellation()
-        if let refusal = preflight(conversationID: conversationID) {
-            return evidence(refusal, conversationID: conversationID)
+        if let refusal = preflight(conversationID: conversationID, action: input.action) {
+            return evidence(refusal, conversationID: conversationID, action: input.action)
+        }
+        if input.action.managesTabs {
+            let outcome = try await manageTabs(input, conversationID: conversationID)
+            return evidence(outcome, conversationID: conversationID, action: input.action)
         }
 
         let tab: BrowserTab
@@ -271,7 +400,44 @@ final class BrowserSessionStore {
         } catch {
             return evidence(.capacityExceeded(), conversationID: conversationID)
         }
+        let outcome = try await perform(input, on: tab, conversationID: conversationID)
+        return evidence(outcome, conversationID: conversationID, action: input.action)
+    }
 
+    private func manageTabs(_ input: BrowserActionInput, conversationID: UUID) async throws -> BrowserActionResult {
+        let group = groups[conversationID]
+        switch input.action {
+        case .newTab:
+            let tab: BrowserTab
+            do { tab = try openTab(for: conversationID) } catch { return .capacityExceeded() }
+            guard let url = input.url else { return .ok(["action": "new_tab", "tab_id": tab.number]) }
+            let navigation = try await perform(.init(action: .navigate, url: url), on: tab, conversationID: conversationID)
+            return navigation.addingFields(["action": "new_tab", "tab_id": tab.number])
+        case .switchTab:
+            guard let number = input.tabID, let group, let tab = group.tab(number: number) else {
+                return .error("No browser tab \(input.tabID.map(String.init) ?? "") in this conversation. Use list_tabs to see its tabs.")
+            }
+            group.currentTabID = tab.id
+            group.shownTabID = tab.id
+            tab.lastUsedAt = Date()
+            return .ok(["action": "switch_tab", "tab_id": tab.number, "url": tab.currentURL, "title": tab.title])
+        case .closeTab:
+            guard let group, let tab = input.tabID.map({ group.tab(number: $0) }) ?? group.currentTab else {
+                return .error("No browser tab \(input.tabID.map(String.init) ?? "") in this conversation. Use list_tabs to see its tabs.")
+            }
+            guard tab.owner == .agent else {
+                return .error("The user controls tab \(tab.number); leave it open for them.", code: "user_has_control")
+            }
+            close(tab, reason: nil)
+            return .ok(["action": "close_tab", "closed_tab": tab.number])
+        default:
+            return .ok(["action": input.action.rawValue])
+        }
+    }
+
+    /// Runs a page action on `tab`, after any action queued on it. If the page opens a tab that
+    /// becomes current, the result names it once that tab has loaded.
+    private func perform(_ input: BrowserActionInput, on tab: BrowserTab, conversationID: UUID) async throws -> BrowserActionResult {
         tab.lastUsedAt = Date()
         let currentControlGen = tab.controlGeneration
         let previousTask = tab.activeExecutionTask
@@ -313,22 +479,44 @@ final class BrowserSessionStore {
             }
         }
 
-        return try await withTaskCancellationHandler {
-            let outcome = try await task.value
-            return evidence(outcome, conversationID: conversationID)
-        } onCancel: {
-            task.cancel()
-            Task { @MainActor [weak tab] in
-                guard tab?.activeRuntimeActionID == actionID else { return }
-                tab?.runtime.cancelCurrentAction()
+        let outcome: BrowserActionResult
+        do {
+            outcome = try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+                Task { @MainActor [weak tab] in
+                    guard tab?.activeRuntimeActionID == actionID else { return }
+                    tab?.runtime.cancelCurrentAction()
+                }
             }
+        } catch is CancellationError where !Task.isCancelled && groups[conversationID]?.tabs.contains(where: { $0 === tab }) != true {
+            // The page closed its own tab (`window.close()`) during the action; the run goes on.
+            outcome = .ok(["action": input.action.rawValue, "closed_tab": tab.number])
+        }
+
+        guard let opened = groups[conversationID]?.currentTab, opened !== tab, opened.number > tab.number else {
+            return outcome
+        }
+        try await waitForLoad(of: opened)
+        return outcome.addingFields(["opened_tab": opened.number, "url": opened.currentURL, "title": opened.title])
+    }
+
+    /// Waits, at most a navigation's timeout, for a tab a page opened to load its first page.
+    private func waitForLoad(of tab: BrowserTab) async throws {
+        let deadline = ContinuousClock.now + .seconds(BrowserRuntime.navigationTimeout)
+        while (tab.isLoading || tab.currentURL.isEmpty), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(100))
         }
     }
 
-
+    /// Clearing a conversation leaves it one blank tab; its other tabs close.
     func resetSession(ownedBy conversationID: UUID) {
-        guard let tab = tabs[conversationID] else {
+        guard let group = groups[conversationID], let tab = group.currentTab ?? group.tabs.last else {
             return
+        }
+        for other in group.tabs where other !== tab {
+            other.teardown()
         }
         tab.controlGeneration += 1
         tab.activeExecutionTask?.cancel()
@@ -337,46 +525,44 @@ final class BrowserSessionStore {
         tab.activeAction = nil
         tab.runtime.teardown()
         tab.owner = .agent
-        tab.pendingNotice = "cleared"
         tab.currentURL = ""
         tab.title = ""
         tab.isLoading = false
+        tab.number = 1
 
-        let newRuntime = BrowserRuntime(
-            websiteDataStore: websiteDataStore,
-            attachmentStore: attachmentStore,
-            artifactStore: artifactStore,
-            logs: logs,
-            snapshotProvider: snapshotProvider
-        )
+        let newRuntime = makeRuntime()
         tab.runtime = newRuntime
         tab.bindRuntime(newRuntime)
+        group.tabs = []
+        group.nextNumber = 1
+        add(tab, to: group)
+        group.currentTabID = tab.id
+        group.shownTabID = tab.id
+        group.pendingNotices = ["Your previous browser page was closed (cleared). Navigate again if you still need it."]
         logs.info("Browser", "Browser session reset for conversation \(conversationID).")
     }
 
     func releaseSession(ownedBy conversationID: UUID) {
-        pendingNotices.removeValue(forKey: conversationID)
-        guard let tab = tabs.removeValue(forKey: conversationID) else {
+        guard let group = groups.removeValue(forKey: conversationID) else {
             return
         }
-        tab.activeExecutionTask?.cancel()
-        tab.activeExecutionTask = nil
-        tab.activeRuntimeActionID = nil
-        tab.activeAction = nil
-        tab.runtime.teardown()
+        for tab in group.tabs {
+            tab.teardown()
+        }
         logs.info("Browser", "Browser session released for conversation \(conversationID).")
     }
 
     func cancelActions(ownedBy conversationID: UUID) {
-        guard let tab = tabs[conversationID] else { return }
-        tab.activeExecutionTask?.cancel()
-        if tab.activeRuntimeActionID != nil {
-            tab.runtime.cancelCurrentAction()
+        for tab in tabs(for: conversationID) {
+            tab.activeExecutionTask?.cancel()
+            if tab.activeRuntimeActionID != nil {
+                tab.runtime.cancelCurrentAction()
+            }
         }
     }
 
     func cancelAll() {
-        for tab in tabs.values {
+        for tab in allTabs {
             tab.activeExecutionTask?.cancel()
             tab.runtime.cancelCurrentAction()
         }

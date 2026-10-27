@@ -58,8 +58,8 @@ final class ScheduledScheduler {
 
         var errorDescription: String? {
             switch self {
-            case .oneTimeInPast: "The time must be in the future."
-            case .emptyPrompt: "The instruction is empty."
+            case .oneTimeInPast: String(localized: "The time must be in the future.")
+            case .emptyPrompt: String(localized: "The instruction is empty.")
             }
         }
     }

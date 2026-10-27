@@ -16,19 +16,19 @@ public enum AttachmentStoreError: Error, LocalizedError, Sendable, Equatable {
     public var errorDescription: String? {
         switch self {
         case .invalidImageData:
-            return "Unable to decode or normalize image data."
+            return String(localized: "Unable to decode or normalize image data.")
         case .fileNotFound(let path):
-            return "Attachment file not found: \(path)"
+            return String(localized: "Attachment file not found: \(path)")
         case .pathTraversalDetected(let path):
-            return "Invalid attachment path detected: \(path)"
+            return String(localized: "Invalid attachment path detected: \(path)")
         case .storageUnavailable(let message):
-            return "Attachment storage unavailable: \(message)"
+            return String(localized: "Attachment storage unavailable: \(message)")
         case .fileTooLarge(let size, let maxBytes):
             let sizeMB = Double(size) / 1_048_576.0
             let maxMB = Double(maxBytes) / 1_048_576.0
             return String(format: "Attachment is too large (%.1f MB). Maximum allowed size is %.0f MB.", sizeMB, maxMB)
         case .maxPendingAttachmentsExceeded(let max):
-            return "Maximum \(max) attachments allowed per message."
+            return String(localized: "Maximum \(max) attachments allowed per message.")
         case .totalSizeExceeded(let size, let maxBytes):
             return String(format: "Attachments total %.1f MB exceeds the %.0f MB per-message limit.", Double(size) / 1_048_576, Double(maxBytes) / 1_048_576)
         case .unsupportedSource(let message):
@@ -153,7 +153,7 @@ public final class AttachmentStore: @unchecked Sendable {
         let source = url.resolvingSymlinksInPath()
         let values = try source.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .isPackageKey, .fileSizeKey])
         guard values.isRegularFile == true, values.isDirectory != true, values.isPackage != true else {
-            throw AttachmentStoreError.unsupportedSource("Folders are not supported as chat attachments yet.")
+            throw AttachmentStoreError.unsupportedSource(String(localized: "Folders are not supported as chat attachments yet."))
         }
         let classification = AttachmentClassifier.classify(url: source)
         if classification.kind == .image { return try saveImage(url: source) }

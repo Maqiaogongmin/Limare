@@ -97,7 +97,8 @@ public struct WorkSurfaceTabStrip: View {
     }
 }
 
-private struct WorkSurfaceTabItemView: View {
+/// One tab in a strip: the Work Surface's own, and a conversation's browser tabs.
+struct WorkSurfaceTabItemView: View {
     let title: String
     let systemImage: String
     let isActive: Bool

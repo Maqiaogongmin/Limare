@@ -1,11 +1,12 @@
 import { h, clear } from '../dom.js';
+import { t } from '../i18n.js';
 
 const TEXT = {
-  connecting: '正在连接…',
-  reconnecting: '连接中断，正在重连…',
-  offline: '网络已断开，恢复后自动重连',
-  unreachable: '无法连接到 Mac 上的 Limare，正在重试…',
-  signin: '登录已过期',
+  connecting: t('Connecting…'),
+  reconnecting: t('Connection lost; reconnecting…'),
+  offline: t('Offline; reconnects when the network returns'),
+  unreachable: t("Can't reach Limare on the Mac; retrying…"),
+  signin: t('Your sign-in has expired'),
 };
 
 export function renderBanner(banner, status) {
@@ -13,7 +14,7 @@ export function renderBanner(banner, status) {
   if (status === 'outdated') {
     banner.hidden = false;
     banner.className = 'banner danger';
-    banner.append('Limare 已更新，请刷新页面 ', h('button', { class: 'small', onclick: () => location.reload() }, '刷新'));
+    banner.append(t('Limare was updated. Reload the page.'), ' ', h('button', { class: 'small', onclick: () => location.reload() }, t('Reload')));
     return;
   }
   if (status === 'live') {
@@ -24,6 +25,6 @@ export function renderBanner(banner, status) {
   banner.className = status === 'signin' || status === 'unreachable' ? 'banner danger' : 'banner';
   banner.append(TEXT[status] || status);
   if (status === 'signin') {
-    banner.append(' ', h('button', { class: 'small', onclick: () => location.reload() }, '重新登录'));
+    banner.append(' ', h('button', { class: 'small', onclick: () => location.reload() }, t('Sign In Again')));
   }
 }

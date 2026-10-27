@@ -32,11 +32,11 @@ final class ScheduledStateStore {
 
         var errorDescription: String? {
             switch self {
-            case .notReadable: "The scheduled task file could not be read; scheduling is paused."
-            case .taskNotFound: "The scheduled task no longer exists."
-            case .runNotFound: "The scheduled run record no longer exists."
-            case .alreadyBound: "The scheduled run is already bound to a different run."
-            case .alreadyFinished: "The scheduled run already has a terminal status."
+            case .notReadable: String(localized: "The scheduled task file could not be read; scheduling is paused.")
+            case .taskNotFound: String(localized: "The scheduled task no longer exists.")
+            case .runNotFound: String(localized: "The scheduled run record no longer exists.")
+            case .alreadyBound: String(localized: "The scheduled run is already bound to a different run.")
+            case .alreadyFinished: String(localized: "The scheduled run already has a terminal status.")
             }
         }
     }

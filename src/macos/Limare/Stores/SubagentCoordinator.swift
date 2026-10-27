@@ -122,7 +122,7 @@ final class SubagentCoordinator {
     private func launch(_ task: SubagentTask) {
         guard let child = conversations.conversations.first(where: { $0.id == task.childConversationID }),
               let source = child.effectiveModelSource else {
-            finish(task.id, status: .failed, result: nil, failure: "Its child conversation or model is gone.")
+            finish(task.id, status: .failed, result: nil, failure: String(localized: "Its child conversation or model is gone."))
             return
         }
         let runID = UUID()
@@ -137,7 +137,7 @@ final class SubagentCoordinator {
             try runs.startSubagentRun(binding, modelSource: source,
                 workspace: child.workspace?.url ?? conversations.effectiveWorkingDirectory(for: child.id), instruction: instruction)
         } catch {
-            finish(task.id, status: .failed, result: nil, failure: "Could not start: \(error.localizedDescription)")
+            finish(task.id, status: .failed, result: nil, failure: String(localized: "Could not start: \(error.localizedDescription)"))
             return
         }
         watchers[runID] = Task { [weak self] in
@@ -150,7 +150,7 @@ final class SubagentCoordinator {
                     // Hard limit: the final turn overran its grace, or a request was still
                     // running a grace past the allowance. What the child did becomes its result.
                     self.limitStoppedRuns.insert(runID)
-                    self.runs.stop(conversationID: current.childConversationID, reason: "This task reached its time limit.")
+                    self.runs.stop(conversationID: current.childConversationID, reason: String(localized: "This task reached its time limit."))
                     return
                 }
                 self.prepareNextTurn(runID: runID)
@@ -282,14 +282,14 @@ final class SubagentCoordinator {
         let evidence = report ?? self.evidence(runID: runID)
         switch status {
         case .completed:
-            finish(task.id, status: .completed, result: evidence, failure: report == nil ? "Ended without a report." : nil)
+            finish(task.id, status: .completed, result: evidence, failure: report == nil ? String(localized: "Ended without a report.") : nil)
         case .interrupted:
-            finish(task.id, status: .interrupted, result: evidence, failure: "Interrupted; continue it to resume.")
+            finish(task.id, status: .interrupted, result: evidence, failure: String(localized: "Interrupted; continue it to resume."))
         case .cancelled where cancelled:
-            finish(task.id, status: .cancelled, result: evidence, failure: "Cancelled.")
+            finish(task.id, status: .cancelled, result: evidence, failure: String(localized: "Cancelled."))
         default:
-            let reason = limitStoppedRuns.contains(runID) ? "Stopped at its time limit before it wrote a report."
-                : (error ?? "The run stopped (\(status.rawValue)).")
+            let reason = limitStoppedRuns.contains(runID) ? String(localized: "Stopped at its time limit before it wrote a report.")
+                : (error ?? String(localized: "The run stopped (\(status.rawValue))."))
             finish(task.id, status: .failed, result: evidence, failure: reason)
         }
         if !cancelled { deliver(task.id) }
@@ -452,10 +452,10 @@ final class SubagentCoordinator {
     func cancel(taskID: UUID) {
         guard let task = store.tasks[taskID] else { return }
         switch task.status {
-        case .queued: finish(taskID, status: .cancelled, result: nil, failure: "Cancelled before it started.")
+        case .queued: finish(taskID, status: .cancelled, result: nil, failure: String(localized: "Cancelled before it started."))
         case .running:
             cancelRequested.insert(taskID)
-            runs.stop(conversationID: task.childConversationID, reason: "Cancelled.")
+            runs.stop(conversationID: task.childConversationID, reason: String(localized: "Cancelled."))
         default: break
         }
     }
@@ -486,7 +486,7 @@ final class SubagentCoordinator {
     /// and can be continued.
     func reconcileRestart() {
         for task in store.tasks.values where !task.status.isFinished {
-            finish(task.id, status: .interrupted, result: nil, failure: "Limare quit while this task was running; continue it to resume.")
+            finish(task.id, status: .interrupted, result: nil, failure: String(localized: "Limare quit while this task was running; continue it to resume."))
         }
     }
 

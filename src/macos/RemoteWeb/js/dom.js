@@ -1,3 +1,5 @@
+import { language } from './i18n.js';
+
 // Builds DOM nodes. Strings always become text nodes; nothing here parses HTML.
 export function h(tag, props = {}, ...children) {
   const el = document.createElement(tag);
@@ -25,15 +27,17 @@ export function clear(el) {
   while (el.firstChild) el.firstChild.remove();
 }
 
+/// "now", "5 minutes ago", today's time, or the month and day, in Limare's language.
 export function relativeTime(iso) {
   const date = new Date(iso);
   const seconds = (Date.now() - date.getTime()) / 1000;
-  if (seconds < 60) return '刚刚';
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟前`;
-  const sameDay = new Date().toDateString() === date.toDateString();
-  const pad = (n) => String(n).padStart(2, '0');
-  if (sameDay) return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  return `${date.getMonth() + 1}-${date.getDate()}`;
+  const relative = new Intl.RelativeTimeFormat(language, { numeric: 'auto' });
+  if (seconds < 60) return relative.format(0, 'second');
+  if (seconds < 3600) return relative.format(-Math.floor(seconds / 60), 'minute');
+  if (new Date().toDateString() === date.toDateString()) {
+    return date.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' });
+  }
+  return date.toLocaleDateString(language, { month: 'numeric', day: 'numeric' });
 }
 
 // Fixed line icons (24×24, stroked). Path data is constant here; nothing from the page reaches it.

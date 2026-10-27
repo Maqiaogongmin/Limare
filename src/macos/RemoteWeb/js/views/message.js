@@ -1,13 +1,14 @@
 import { h } from '../dom.js';
 import { fillMarkdown } from '../markdown.js';
 import { fileCard, fileList } from './files.js';
+import { t } from '../i18n.js';
 
 const TOOL_STATE = {
-  queued: '等待中', awaitingApproval: '等待批准', running: '运行中', completed: '完成',
-  failed: '失败', timedOut: '超时', cancelled: '已取消', denied: '已拒绝', interrupted: '已中断',
+  queued: t('Queued'), awaitingApproval: t('Waiting for approval'), running: t('Running'), completed: t('Completed'),
+  failed: t('Failed'), timedOut: t('Timed out'), cancelled: t('Cancelled'), denied: t('Denied'), interrupted: t('Interrupted'),
 };
 
-const MESSAGE_STATE = { failed: '失败', interrupted: '已中断' };
+const MESSAGE_STATE = { failed: t('Failed'), interrupted: t('Interrupted') };
 
 /// A disclosure whose body is built the first time it is opened: most are never opened, and a
 /// long conversation has hundreds of them.
@@ -49,9 +50,9 @@ function toolCall(tool, openTools) {
       state ? h('span', { class: `tool-state ${tool.state}` }, state) : null),
     openTools, tool.id,
     () => h('div', { class: 'tool-body' },
-      tool.input ? [h('h4', {}, '输入'), h('pre', {}, tool.input), tool.inputTruncated ? h('div', { class: 'truncated' }, '已截断，完整内容在 Mac 上查看') : null] : null,
-      tool.output ? [h('h4', {}, '输出'), h('pre', {}, tool.output), tool.outputTruncated ? h('div', { class: 'truncated' }, '已截断，完整内容在 Mac 上查看') : null] : null,
-      tool.errorMessage && tool.errorMessage !== tool.output ? [h('h4', {}, '错误'), h('pre', {}, tool.errorMessage)] : null));
+      tool.input ? [h('h4', {}, t('Input')), h('pre', {}, tool.input), tool.inputTruncated ? h('div', { class: 'truncated' }, t('Truncated; see the full content on the Mac')) : null] : null,
+      tool.output ? [h('h4', {}, t('Output')), h('pre', {}, tool.output), tool.outputTruncated ? h('div', { class: 'truncated' }, t('Truncated; see the full content on the Mac')) : null] : null,
+      tool.errorMessage && tool.errorMessage !== tool.output ? [h('h4', {}, t('Error')), h('pre', {}, tool.errorMessage)] : null));
   return tool.file ? [details, fileCard(tool.file)] : details;
 }
 
@@ -71,7 +72,7 @@ export function renderMessage(message, ui, { hidesReasoning = false, files = mes
   const article = h('article', { class: `msg msg-assistant state-${message.state}`, dataset: { id: message.id } });
   if (message.reasoning && !hidesReasoning) {
     article.append(disclosure({ class: 'reasoning' },
-      h('summary', {}, streaming && !message.content ? '思考中…' : '思考过程'),
+      h('summary', {}, streaming && !message.content ? t('Thinking…') : t('Thought process')),
       ui.openReasoning, message.id,
       () => h('div', { class: 'reasoning-text' }, message.reasoning)));
   }

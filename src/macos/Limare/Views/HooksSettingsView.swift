@@ -48,7 +48,7 @@ struct HooksSettingsView: View {
 
             if let importError = state.importErrorMessage {
                 ThreeLevelErrorView(
-                    explanation: importError,
+                    explanation: "\(importError)",
                     recommendedAction: "Check that the selected folder contains a valid hooks.json configuration.",
                     technicalDetails: state.importErrorDetails,
                     onRetry: {
@@ -83,7 +83,7 @@ struct HooksSettingsView: View {
             } else {
                 SettingsSection(
                     title: "Configured Hook Packages",
-                    description: "\(filteredSources.count) \(filteredSources.count == 1 ? "package" : "packages") configured"
+                    description: "\(filteredSources.count) packages configured"
                 ) {
                     ForEach(Array(filteredSources.enumerated()), id: \.element.id) { index, source in
                         if index > 0 {
@@ -115,8 +115,8 @@ struct HooksSettingsView: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        panel.message = "Select a hooks.json file or a package folder containing hooks/hooks.json"
-        panel.prompt = "Import"
+        panel.message = String(localized: "Select a hooks.json file or a package folder containing hooks/hooks.json")
+        panel.prompt = String(localized: "Import")
 
         if panel.runModal() == .OK, let url = panel.url {
             do {
@@ -125,7 +125,7 @@ struct HooksSettingsView: View {
                 let imported = try appState.hooks.importPackage(from: url)
                 state.reviewSource = imported
             } catch {
-                state.importErrorMessage = "Hook package could not be imported."
+                state.importErrorMessage = String(localized: "Hook package could not be imported.")
                 state.importErrorDetails = error.localizedDescription
             }
         }
@@ -494,7 +494,7 @@ private struct HookDetailSheet: View {
                     let isSupported = HookEventName(rawValue: eventKey)?.isSupported ?? false
 
                     SettingsSection(
-                        title: friendlyName,
+                        title: "\(friendlyName)",
                         description: isSupported ? nil : "Unavailable — Not supported by this version of Limare."
                     ) {
                         ForEach(groups) { group in
@@ -584,7 +584,7 @@ private struct HookDetailSheet: View {
     }
 
     @ViewBuilder
-    private func detailRow(label: String, value: String, isMonospaced: Bool = false) -> some View {
+    private func detailRow(label: LocalizedStringKey, value: String, isMonospaced: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
                 .font(.caption2.weight(.medium))

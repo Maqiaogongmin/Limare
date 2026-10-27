@@ -149,7 +149,7 @@ struct SidebarRowContainer<Content: View, Actions: View>: View {
 
 struct SidebarHoverIconButton: View {
     let systemImage: String
-    let tooltip: String
+    let tooltip: LocalizedStringKey
     var isDestructive: Bool = false
     let action: () -> Void
 
@@ -179,8 +179,8 @@ struct SidebarHoverIconButton: View {
 // MARK: - Sidebar Rename Sheet
 
 struct SidebarRenameSheet: View {
-    let title: String
-    let placeholder: String
+    let title: LocalizedStringKey
+    let placeholder: LocalizedStringKey
     @Binding var text: String
     let onSave: (String) -> Void
     let onCancel: () -> Void
@@ -329,7 +329,7 @@ struct SidebarSearchField: View {
 // MARK: - Sidebar Empty State
 
 struct SidebarEmptyState: View {
-    let message: String
+    let message: LocalizedStringKey
     var isIndented: Bool = false
 
     var body: some View {

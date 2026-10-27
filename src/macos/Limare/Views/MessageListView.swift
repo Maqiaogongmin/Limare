@@ -257,7 +257,7 @@ private struct CompactionStatusLine: View {
                 }
             case .finished(let before, let after):
                 let saved = max(0, before - after)
-                Text("Conversation compacted · \(Self.tokens(saved)) \(saved == 1 ? "token" : "tokens") saved")
+                Text("Conversation compacted · \(Self.tokens(saved)) tokens saved")
                     .help("The model now reads a summary of the conversation up to here (about \(Self.tokens(before)) → \(Self.tokens(after)) tokens). The transcript is unchanged.")
             case .failed(let message):
                 Image(systemName: "exclamationmark.triangle.fill")
@@ -363,9 +363,9 @@ private struct ExecutionHistoryLabel: View {
     var body: some View {
         Group {
             if unsuccessfulCount > 0 {
-                Text("执行过程 · \(count) 条记录\(Text(" · \(unsuccessfulCount) 个未成功").foregroundColor(AppColors.statusWarning))")
+                Text("Execution · \(count) records\(Text(" · \(unsuccessfulCount) unsuccessful").foregroundColor(AppColors.statusWarning))")
             } else {
-                Text("执行过程 · \(count) 条记录")
+                Text("Execution · \(count) records")
             }
         }
         .font(AppTypography.interfaceSubheadline.weight(.medium))
@@ -442,7 +442,7 @@ private struct MessageRow: View, Equatable {
                 // accessibility tree; the message itself offers undo to accessibility clients.
                 .accessibilityActions {
                     if let retractAction {
-                        Button("撤销这条消息", action: retractAction)
+                        Button("Undo This Message", action: retractAction)
                     }
                 }
             } else {
@@ -600,7 +600,7 @@ private struct MessageRow: View, Equatable {
             }
             .padding(.vertical, AppSpacing.xxSmall)
         } else if let notice = runtimeNotice {
-            RuntimeNoticeLabel(notice: notice, text: message.content.isEmpty ? ChatMessage.RuntimeNotice.interruptedText : message.content)
+            RuntimeNoticeLabel(notice: notice, text: ChatMessage.RuntimeNotice.displayText(for: message.content.isEmpty ? ChatMessage.RuntimeNotice.interruptedText : message.content))
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             LimareMarkdownView(
@@ -707,7 +707,7 @@ private struct UserMessageTextView: View {
     }
 }
 
-/// "🕒 定时任务 · <name> · HH:mm" over a message a scheduled run sent, in place of the
+/// "🕒 Scheduled Task · <name> · HH:mm" over a message a scheduled run sent, in place of the
 /// `[Scheduled task …]` line the message carries for the model.
 private struct ScheduledMessageBadge: View {
     let parsed: ScheduledMessage.Parsed
@@ -716,7 +716,7 @@ private struct ScheduledMessageBadge: View {
         HStack(spacing: AppSpacing.xxSmall) {
             Image(systemName: "clock")
                 .font(.system(size: 10, weight: .medium))
-            Text("定时任务 · \(parsed.taskName) · \(parsed.time)")
+            Text("Scheduled Task · \(parsed.taskName) · \(parsed.time)")
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
@@ -812,8 +812,8 @@ private struct UserMessageActionBar: View {
                 }
                 .buttonStyle(BubbleActionButtonStyle())
                 .focused($focusedAction, equals: .retract)
-                .help("撤销这条消息")
-                .accessibilityLabel("撤销这条消息")
+                .help("Undo This Message")
+                .accessibilityLabel("Undo This Message")
                 .accessibilityIdentifier("transcript.retractLastMessage")
             }
             if MessageCopyPayloadResolver.canCopy(message: message) {
@@ -916,9 +916,9 @@ private struct ProviderWaitLabel: View {
         let seconds = max(0, Int(now.timeIntervalSince(wait.since)))
         let elapsed = seconds < 60 ? "\(seconds)s" : "\(seconds / 60)m \(String(format: "%02d", seconds % 60))s"
         guard let reason = wait.retryReason else {
-            return "Waiting for \(wait.modelID) · \(elapsed)"
+            return String(localized: "Waiting for \(wait.modelID) · \(elapsed)")
         }
-        return "\(wait.modelID): \(describe(reason)), retrying (attempt \(wait.attempt)) · \(elapsed)"
+        return String(localized: "\(wait.modelID): \(describe(reason)), retrying (attempt \(wait.attempt)) · \(elapsed)")
     }
 
     /// The retry reason as recorded ("http:524", "urlError:-1005", "rateLimited"…), in words.
@@ -1046,16 +1046,16 @@ private struct SpeakerButton: View {
         if isActive {
             switch state {
             case .preparing:
-                return "Preparing voice output… (click to cancel)"
+                return String(localized: "Preparing voice output… (click to cancel)")
             case .playing(_, let engineLabel):
-                return "Pause reading · \(engineLabel)"
+                return String(localized: "Pause reading · \(engineLabel)")
             case .paused(_, let engineLabel):
-                return "Resume reading · \(engineLabel)"
+                return String(localized: "Resume reading · \(engineLabel)")
             case .idle, .failed:
                 break
             }
         }
-        return "Read aloud"
+        return String(localized: "Read aloud")
     }
 }
 

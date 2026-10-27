@@ -109,16 +109,16 @@ final class ConversationInteractionService {
         var errorDescription: String? {
             switch self {
             case .empty: nil
-            case .conversationNotFound: "找不到这个会话。"
-            case .projectNotFound: "找不到这个项目。"
-            case .nativeChild: "Native Child history 由独立运行维护；请从父会话发送 steer 或 continue。"
-            case .noModel: "No model configured. Please connect a Provider or select a Model Group in Settings."
+            case .conversationNotFound: String(localized: "This conversation can't be found.")
+            case .projectNotFound: String(localized: "This project can't be found.")
+            case .nativeChild: String(localized: "A subtask's history is maintained by its own run. Steer or continue it from the parent conversation.")
+            case .noModel: String(localized: "No model configured. Please connect a Provider or select a Model Group in Settings.")
             case .imageInputUnsupported(let reason): reason
-            case .outcomeRequiresIdle: "Cannot start an explicit outcome run while this conversation is busy."
+            case .outcomeRequiresIdle: String(localized: "Cannot start an explicit outcome run while this conversation is busy.")
             case .held(let reason): reason
-            case .persistenceFailed(let reason): "Failed to save message: \(reason)"
-            case .queuePersistenceFailed: "排队消息未能保存，输入内容已保留。"
-            case .compactUnavailable: "Compact is available when the conversation is idle and has history."
+            case .persistenceFailed(let reason): String(localized: "Failed to save message: \(reason)")
+            case .queuePersistenceFailed: String(localized: "The queued message couldn't be saved; your input was kept.")
+            case .compactUnavailable: String(localized: "Compact is available when the conversation is idle and has history.")
             }
         }
     }
@@ -186,17 +186,17 @@ final class ConversationInteractionService {
         case .direct(let pID, let mID):
             guard let prov = providers.providers.first(where: { $0.id == pID }),
                   let model = prov.models.first(where: { $0.id == mID }) else {
-                return "Configured model not found."
+                return String(localized: "Configured model not found.")
             }
             guard model.modality?.contains(.imageInput) != true, !usableVisionGroup else { return nil }
             return model.modality == nil
-                ? "This conversation contains image input, but this model's image capability is unknown, and no usable Vision Group is available."
-                : "This conversation contains image input that the selected model cannot process, and no usable Vision Group is available."
+                ? String(localized: "This conversation contains image input, but this model's image capability is unknown, and no usable Vision Group is available.")
+                : String(localized: "This conversation contains image input that the selected model cannot process, and no usable Vision Group is available.")
         case .group(let gID):
-            guard let group = modelGroups?.group(for: gID) else { return "Model Group '\(gID)' not found." }
+            guard let group = modelGroups?.group(for: gID) else { return String(localized: "Model Group '\(gID)' not found.") }
             let eligible = modelGroups?.availableEntries(for: group, requireImageInput: true, providers: providers.providers) ?? []
             return eligible.isEmpty && !usableVisionGroup
-                ? "Selected Model Group has no model configured for image input, and no usable Vision Group is available."
+                ? String(localized: "Selected Model Group has no model configured for image input, and no usable Vision Group is available.")
                 : nil
         }
     }

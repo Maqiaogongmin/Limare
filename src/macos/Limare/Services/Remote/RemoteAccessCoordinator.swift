@@ -71,13 +71,13 @@ final class RemoteAccessCoordinator {
         }
         var missing = configuration.missingSettings
         let token = secrets.tunnelToken
-        if token == nil { missing.append("tunnel token") }
+        if token == nil { missing.append(String(localized: "tunnel token")) }
         guard missing.isEmpty, let token else {
-            serverStatus = .failed("Missing: \(missing.joined(separator: ", "))")
+            serverStatus = .failed(String(localized: "Missing: \(missing.joined(separator: ", "))"))
             return
         }
         guard let host = Self.makeHost(configuration: configuration, endpoint: hub, webRoot: webRoot, logs: logs) else {
-            serverStatus = .failed("The remote server is not part of this build.")
+            serverStatus = .failed(String(localized: "The remote server is not part of this build."))
             return
         }
         serverStatus = .starting
@@ -93,7 +93,7 @@ final class RemoteAccessCoordinator {
                 await self.tunnel.start(token: token)
             } catch {
                 guard let self else { return }
-                self.serverStatus = .failed("Could not listen on 127.0.0.1:\(configuration.port): \(error.localizedDescription)")
+                self.serverStatus = .failed(String(localized: "Could not listen on 127.0.0.1:\(configuration.port): \(error.localizedDescription)"))
                 self.logs.error("Remote", "Server start failed on port \(configuration.port): \(error.localizedDescription)")
                 self.hub.stop()
                 self.host = nil

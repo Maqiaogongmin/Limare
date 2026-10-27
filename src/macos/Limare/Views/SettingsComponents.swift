@@ -293,18 +293,36 @@ public struct SettingsBadge: View {
         case danger
     }
 
-    public let title: String
+    public let title: Text
     public let tone: Tone
 
-    public init(_ title: String, tone: Tone = .neutral) {
-        self.title = title
+    /// A literal title is looked up in the string catalog, as Text does.
+    public init(_ title: LocalizedStringKey, tone: Tone = .neutral) {
+        self.title = Text(title)
+        self.tone = tone
+    }
+
+    /// A title that is already a display string (a name, or text localized where it was made).
+    @_disfavoredOverload
+    public init<S: StringProtocol>(_ title: S, tone: Tone = .neutral) {
+        self.title = Text(title)
         self.tone = tone
     }
 
     /// A status shown as a badge: success green, error red, everything else neutral.
-    public init(_ title: String, status: InlineStatusKind) {
-        self.title = title
-        self.tone = switch status {
+    public init(_ title: LocalizedStringKey, status: InlineStatusKind) {
+        self.title = Text(title)
+        self.tone = Self.tone(for: status)
+    }
+
+    @_disfavoredOverload
+    public init<S: StringProtocol>(_ title: S, status: InlineStatusKind) {
+        self.title = Text(title)
+        self.tone = Self.tone(for: status)
+    }
+
+    private static func tone(for status: InlineStatusKind) -> Tone {
+        switch status {
         case .success: .positive
         case .error: .danger
         case .info, .warning: .neutral
@@ -312,7 +330,7 @@ public struct SettingsBadge: View {
     }
 
     public var body: some View {
-        Text(title)
+        title
             .font(.system(size: 11, weight: .medium))
             .foregroundStyle(foreground)
             .lineLimit(1)
@@ -342,13 +360,13 @@ public struct SettingsBadge: View {
 // MARK: - Settings Row
 
 public struct SettingsRow<Control: View>: View {
-    public let title: String
-    public let caption: String?
+    public let title: LocalizedStringKey
+    public let caption: LocalizedStringKey?
     public let control: Control
 
     public init(
-        _ title: String,
-        caption: String? = nil,
+        _ title: LocalizedStringKey,
+        caption: LocalizedStringKey? = nil,
         @ViewBuilder control: () -> Control
     ) {
         self.title = title
@@ -381,14 +399,14 @@ public struct SettingsRow<Control: View>: View {
 // MARK: - Settings Section Card
 
 public struct SettingsSection<Content: View, Trailing: View>: View {
-    public let title: String?
-    public let description: String?
+    public let title: LocalizedStringKey?
+    public let description: LocalizedStringKey?
     public let trailing: Trailing
     public let content: Content
 
     public init(
-        title: String? = nil,
-        description: String? = nil,
+        title: LocalizedStringKey? = nil,
+        description: LocalizedStringKey? = nil,
         @ViewBuilder trailing: () -> Trailing = { EmptyView() },
         @ViewBuilder content: () -> Content
     ) {
@@ -434,14 +452,14 @@ public struct SettingsSection<Content: View, Trailing: View>: View {
 // MARK: - Form Field
 
 public struct FormField<Content: View>: View {
-    public let label: String
-    public let caption: String?
+    public let label: LocalizedStringKey
+    public let caption: LocalizedStringKey?
     public let labelWidth: CGFloat?
     public let content: Content
 
     public init(
-        _ label: String,
-        caption: String? = nil,
+        _ label: LocalizedStringKey,
+        caption: LocalizedStringKey? = nil,
         labelWidth: CGFloat? = 120,
         @ViewBuilder content: () -> Content
     ) {
@@ -511,14 +529,14 @@ public enum InlineStatusKind {
 
 public struct InlineStatus: View {
     public let kind: InlineStatusKind
-    public let message: String
-    public var actionTitle: String? = nil
+    public let message: LocalizedStringKey
+    public var actionTitle: LocalizedStringKey? = nil
     public var onAction: (() -> Void)? = nil
 
     public init(
         kind: InlineStatusKind,
-        message: String,
-        actionTitle: String? = nil,
+        message: LocalizedStringKey,
+        actionTitle: LocalizedStringKey? = nil,
         onAction: (() -> Void)? = nil
     ) {
         self.kind = kind
@@ -560,20 +578,20 @@ public struct InlineStatus: View {
 // MARK: - Three-Level Error Presentation
 
 public struct ThreeLevelErrorView: View {
-    public let explanation: String
-    public let recommendedAction: String?
+    public let explanation: LocalizedStringKey
+    public let recommendedAction: LocalizedStringKey?
     public let technicalDetails: String?
     public var onRetry: (() -> Void)? = nil
-    public var retryTitle: String = "Retry"
+    public var retryTitle: LocalizedStringKey = "Retry"
 
     @State private var isTechnicalExpanded = false
 
     public init(
-        explanation: String,
-        recommendedAction: String? = nil,
+        explanation: LocalizedStringKey,
+        recommendedAction: LocalizedStringKey? = nil,
         technicalDetails: String? = nil,
         onRetry: (() -> Void)? = nil,
-        retryTitle: String = "Retry"
+        retryTitle: LocalizedStringKey = "Retry"
     ) {
         self.explanation = explanation
         self.recommendedAction = recommendedAction
@@ -649,14 +667,14 @@ public struct ThreeLevelErrorView: View {
 // MARK: - Collapsible Disclosure Section
 
 public struct DisclosureSection<Content: View>: View {
-    public let title: String
-    public let summary: String?
+    public let title: LocalizedStringKey
+    public let summary: LocalizedStringKey?
     @Binding public var isExpanded: Bool
     public let content: Content
 
     public init(
-        title: String,
-        summary: String? = nil,
+        title: LocalizedStringKey,
+        summary: LocalizedStringKey? = nil,
         isExpanded: Binding<Bool>,
         @ViewBuilder content: () -> Content
     ) {
@@ -837,10 +855,10 @@ public struct ResourceRow: View {
 
 public struct SettingsSearchField: View {
     @Binding public var text: String
-    public var placeholder: String = "Search…"
+    public var placeholder: LocalizedStringKey = "Search…"
     @FocusState private var isFocused: Bool
 
-    public init(text: Binding<String>, placeholder: String = "Search…") {
+    public init(text: Binding<String>, placeholder: LocalizedStringKey = "Search…") {
         self._text = text
         self.placeholder = placeholder
     }

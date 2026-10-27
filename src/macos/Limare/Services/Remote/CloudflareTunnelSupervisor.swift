@@ -68,7 +68,7 @@ final class CloudflareTunnelSupervisor {
     func start(token: String) async {
         guard process == nil, restartTask == nil else { return }
         guard FileManager.default.isExecutableFile(atPath: executableURL.path) else {
-            status = .failed("cloudflared is missing from this build.")
+            status = .failed(String(localized: "cloudflared is missing from this build."))
             return
         }
         self.token = token
@@ -138,7 +138,7 @@ final class CloudflareTunnelSupervisor {
             status = .running
             logs.info("Remote", "cloudflared started (pid \(process.processIdentifier)).")
         } catch {
-            status = .failed("cloudflared could not start: \(error.localizedDescription)")
+            status = .failed(String(localized: "cloudflared could not start: \(error.localizedDescription)"))
             logs.error("Remote", "cloudflared could not start: \(error.localizedDescription)")
         }
     }
@@ -166,7 +166,7 @@ final class CloudflareTunnelSupervisor {
         let now = Date()
         exitTimes = exitTimes.filter { now.timeIntervalSince($0) < Self.quickExitWindow } + [now]
         if exitTimes.count >= Self.quickExitLimit {
-            let reason = lastErrorLine ?? "cloudflared exited with status \(code)."
+            let reason = lastErrorLine ?? String(localized: "cloudflared exited with status \(code).")
             status = .failed(reason)
             logs.error("Remote", "cloudflared keeps exiting; not restarting until Remote Access is restarted. Last: \(reason)")
             return

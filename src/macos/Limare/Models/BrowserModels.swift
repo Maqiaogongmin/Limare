@@ -13,6 +13,18 @@ public enum BrowserAction: String, CaseIterable, Sendable, Codable {
     case scroll
     case screenshot
     case waitForDomStable = "wait_for_dom_stable"
+    case listTabs = "list_tabs"
+    case newTab = "new_tab"
+    case switchTab = "switch_tab"
+    case closeTab = "close_tab"
+
+    /// Actions on the conversation's tabs rather than on the current page.
+    public var managesTabs: Bool {
+        switch self {
+        case .listTabs, .newTab, .switchTab, .closeTab: return true
+        default: return false
+        }
+    }
 }
 
 // MARK: - Browser Scroll Direction
@@ -64,6 +76,8 @@ public struct BrowserActionInput: Sendable, Codable {
     public let direction: BrowserScrollDirection?
     public let amount: Int?
     public let timeoutSeconds: Int?
+    /// A tab's number in its conversation, as `list_tabs` shows it.
+    public let tabID: Int?
 
     public init(
         action: BrowserAction,
@@ -72,7 +86,8 @@ public struct BrowserActionInput: Sendable, Codable {
         text: String? = nil,
         direction: BrowserScrollDirection? = nil,
         amount: Int? = nil,
-        timeoutSeconds: Int? = nil
+        timeoutSeconds: Int? = nil,
+        tabID: Int? = nil
     ) {
         self.action = action
         self.url = url
@@ -81,6 +96,7 @@ public struct BrowserActionInput: Sendable, Codable {
         self.direction = direction
         self.amount = amount
         self.timeoutSeconds = timeoutSeconds
+        self.tabID = tabID
     }
 
     enum CodingKeys: String, CodingKey {
@@ -91,6 +107,7 @@ public struct BrowserActionInput: Sendable, Codable {
         case direction
         case amount
         case timeoutSeconds = "timeout_seconds"
+        case tabID = "tab_id"
     }
 
     public static func parse(from jsonString: String) throws -> BrowserActionInput {
@@ -114,6 +131,7 @@ public struct BrowserActionInput: Sendable, Codable {
         let direction = directionStr.flatMap(BrowserScrollDirection.init(rawValue:))
         let amount = dict["amount"] as? Int
         let timeout = (dict["timeout_seconds"] as? Int) ?? (dict["timeout"] as? Int)
+        let tabID = (dict["tab_id"] as? Int) ?? (dict["tab_id"] as? String).flatMap { Int($0) }
 
         // Validate required arguments per action
         switch action {
@@ -143,6 +161,10 @@ public struct BrowserActionInput: Sendable, Codable {
             if let t = timeout, !(1...20).contains(t) {
                 throw BrowserRuntimeError.invalidArguments("wait_for_dom_stable timeout_seconds must be between 1 and 20.")
             }
+        case .switchTab:
+            guard tabID != nil else {
+                throw BrowserRuntimeError.invalidArguments("switch_tab requires 'tab_id' from list_tabs.")
+            }
         default:
             break
         }
@@ -161,7 +183,8 @@ public struct BrowserActionInput: Sendable, Codable {
             text: text,
             direction: direction,
             amount: amount,
-            timeoutSeconds: timeout
+            timeoutSeconds: timeout,
+            tabID: tabID
         )
     }
 }
@@ -325,6 +348,15 @@ public struct BrowserActionResult: Sendable {
         var payload = ((try? JSONSerialization.jsonObject(with: Data(jsonContent.utf8))) as? [String: Any]) ?? [:]
         payload["session"] = ["ownerConversationID": ownerConversationID?.uuidString as Any? ?? NSNull(),
             "generation": generation, "reset": reset as Any? ?? NSNull()]
+        return BrowserActionResult(jsonContent: Self.jsonString(payload), isError: isError, attachments: attachments,
+            resultParts: resultParts, mechanicalTerminalFact: mechanicalTerminalFact)
+    }
+
+    /// The result with `fields` added to its JSON object, such as the conversation's tabs.
+    func addingFields(_ fields: [String: Any]) -> BrowserActionResult {
+        guard !fields.isEmpty else { return self }
+        var payload = ((try? JSONSerialization.jsonObject(with: Data(jsonContent.utf8))) as? [String: Any]) ?? [:]
+        payload.merge(fields) { _, new in new }
         return BrowserActionResult(jsonContent: Self.jsonString(payload), isError: isError, attachments: attachments,
             resultParts: resultParts, mechanicalTerminalFact: mechanicalTerminalFact)
     }

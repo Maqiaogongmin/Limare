@@ -25,7 +25,7 @@ struct ContextUsageIndicator: View {
                     ContextUsageDetail(presentation: presentation)
                 }
                 .accessibilityElement()
-                .accessibilityLabel("上下文用量 \(presentation.headline)")
+                .accessibilityLabel("Context usage \(presentation.headline)")
                 .accessibilityValue(presentation.detail)
                 .accessibilityIdentifier("composer.contextUsage")
         }
@@ -87,7 +87,7 @@ private struct ContextUsageDetail: View {
                     .foregroundStyle(.secondary)
             }
             Divider()
-            Text("按校准估算；实测值仅供参考")
+            Text("Calibrated estimate; measured values are for reference only")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }

@@ -12,7 +12,7 @@ Remote Access.
 
 ## Download
 
-Version **0.1.5** targets **Apple Silicon (`arm64`) and macOS 15.0+**.
+Version **0.1.6** targets **Apple Silicon (`arm64`) and macOS 15.0+**.
 Download the signed, notarized DMG from [GitHub Releases](https://github.com/Maqiaogongmin/Limare/releases/latest).
 The matching source is available with each release. Intel is outside this scope.
 

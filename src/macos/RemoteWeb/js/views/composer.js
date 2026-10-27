@@ -2,16 +2,17 @@ import { h, clear, icon, formatBytes } from '../dom.js';
 import { openPicker, refreshPicker } from '../picker.js';
 import { sameModel } from '../store.js';
 import { uploadFile } from '../upload.js';
+import { t } from '../i18n.js';
 
 const ERRORS = {
-  disconnected: '未连接到 Limare，消息可能没有发送。重连后请查看对话记录。',
-  outdated: 'Limare 已更新，请刷新页面后再发送。',
-  timeout: 'Limare 没有及时回应，消息可能已发送。请查看对话记录。',
-  conversationNotFound: '找不到这个对话。',
-  attachmentNotFound: '附件已失效，请重新添加。',
-  modelNotAvailable: '这个模型已不可用。',
-  levelNotAvailable: '这个模型不支持该思考等级。',
-  runActive: '运行中不能切换模型或思考等级。',
+  disconnected: t("Not connected to Limare; the message may not have been sent. Check the conversation after reconnecting."),
+  outdated: t('Limare was updated. Reload the page, then send again.'),
+  timeout: t("Limare didn't respond in time; the message may have been sent. Check the conversation."),
+  conversationNotFound: t("This conversation can't be found."),
+  attachmentNotFound: t('The attachment is no longer available. Add it again.'),
+  modelNotAvailable: t('This model is no longer available.'),
+  levelNotAvailable: t("This model doesn't support that thinking level."),
+  runActive: t("The model and thinking level can't change while a run is active."),
 };
 
 /// The commands the draft is typing, as the Mac composer finds them (`ComposerCommand.matches`):
@@ -50,9 +51,9 @@ export class Composer {
     this.commandSelection = 0;
     this.commandDismissedDraft = null;
 
-    this.menu = h('div', { class: 'command-menu', role: 'listbox', 'aria-label': '命令', hidden: true });
+    this.menu = h('div', { class: 'command-menu', role: 'listbox', 'aria-label': t('Commands'), hidden: true });
     this.strip = h('div', { class: 'attachment-strip', hidden: true });
-    this.input = h('textarea', { rows: '1', placeholder: conversationID ? '给 Limare 发消息' : '新对话：输入第一条消息', enterkeyhint: 'send', 'aria-label': '消息' });
+    this.input = h('textarea', { rows: '1', placeholder: conversationID ? t('Message Limare') : t('New conversation: type the first message'), enterkeyhint: 'send', 'aria-label': t('Message') });
     this.input.addEventListener('input', () => {
       this.commandSelection = 0;
       if (this.input.value !== this.commandDismissedDraft) this.commandDismissedDraft = null;
@@ -103,7 +104,7 @@ export class Composer {
   modelLabel() {
     const thinking = this.thinkingMenu();
     const model = this.conversationID ? this.store.open?.settings?.modelLabel : this.newModelChoice()?.label;
-    return [model || '选择模型', thinking ? thinking.label : null].filter(Boolean).join(' · ');
+    return [model || t('Select Model'), thinking ? thinking.label : null].filter(Boolean).join(' · ');
   }
 
   setProject(projectID) {
@@ -187,7 +188,7 @@ export class Composer {
         icon('file', 16),
         h('span', { class: 'attachment-name' }, attachment.name),
         h('span', { class: 'attachment-state' }, state),
-        h('button', { type: 'button', class: 'attachment-remove', 'aria-label': `移除 ${attachment.name}`, onclick: () => this.removeAttachment(attachment) }, icon('close', 14))));
+        h('button', { type: 'button', class: 'attachment-remove', 'aria-label': t('Remove %@', attachment.name), onclick: () => this.removeAttachment(attachment) }, icon('close', 14))));
     }
   }
 
@@ -195,7 +196,7 @@ export class Composer {
     clear(this.tools);
     const live = this.connection.isLive;
     this.tools.append(h('button', {
-      type: 'button', class: 'tool-button', 'aria-label': '添加附件',
+      type: 'button', class: 'tool-button', 'aria-label': t('Add Attachment'),
       disabled: !live || this.attachments.length >= MAX_ATTACHMENTS,
       onclick: () => this.fileInput.click(),
     }, icon('plus', 20)));
@@ -203,12 +204,12 @@ export class Composer {
       const project = this.projectID ? this.store.project(this.projectID) : null;
       this.tools.append(h('button', {
         type: 'button', class: 'chip-button', disabled: !live, onclick: () => this.pickProject(),
-      }, icon(project ? 'folder' : 'inbox', 15), h('span', {}, project ? project.name : '无项目'), icon('chevron', 14)));
+      }, icon(project ? 'folder' : 'inbox', 15), h('span', {}, project ? project.name : t('No Project')), icon('chevron', 14)));
     }
     const locked = this.conversationID && this.isActive();
     this.tools.append(h('button', {
       type: 'button', class: 'chip-button model', disabled: !live || locked,
-      title: locked ? '运行中不能切换模型' : '', onclick: () => this.pickModel(),
+      title: locked ? t("The model can't change while a run is active") : '', onclick: () => this.pickModel(),
     }, h('span', {}, this.modelLabel()), icon('chevron', 14)));
   }
 
@@ -219,10 +220,10 @@ export class Composer {
     const disabled = !live || this.sending || this.uploading || !hasContent;
     if (this.conversationID && this.isActive()) {
       this.send.append(
-        h('button', { type: 'button', class: 'small', disabled, onclick: () => this.submit('steer') }, '插入'),
-        h('button', { type: 'button', class: 'small primary', disabled, onclick: () => this.submit('queue') }, '排队'));
+        h('button', { type: 'button', class: 'small', disabled, onclick: () => this.submit('steer') }, t('Steer')),
+        h('button', { type: 'button', class: 'small primary', disabled, onclick: () => this.submit('queue') }, t('Queue')));
     } else {
-      this.send.append(h('button', { type: 'button', class: 'send-button primary', 'aria-label': '发送', disabled, onclick: () => this.submit('send') }, icon('up', 20)));
+      this.send.append(h('button', { type: 'button', class: 'send-button primary', 'aria-label': t('Send'), disabled, onclick: () => this.submit('send') }, icon('up', 20)));
     }
   }
 
@@ -238,7 +239,7 @@ export class Composer {
     const lost = this.attachments.filter((a) => a.connectionID && a.connectionID !== this.store.connectionID);
     if (lost.length) {
       this.attachments = this.attachments.filter((a) => !lost.includes(a));
-      this.showError('连接已重新建立，之前上传的附件已失效，请重新添加。');
+      this.showError(t('The connection was re-established and earlier uploads are no longer available. Add them again.'));
     }
     this.render();
   }
@@ -247,13 +248,13 @@ export class Composer {
 
   pickProject() {
     openPicker({
-      title: '项目',
+      title: t('Project'),
       build: () => [{
-        title: '新对话放在',
+        title: t('Put the new conversation in'),
         items: [
-          { label: '无项目', selected: this.projectID === null, onSelect: () => { this.setProject(null); return true; } },
+          { label: t('No Project'), selected: this.projectID === null, onSelect: () => { this.setProject(null); return true; } },
           ...this.store.projects.map((p) => ({
-            label: p.name, detail: p.isPinned ? '置顶' : '', selected: this.projectID === p.id,
+            label: p.name, detail: p.isPinned ? t('Pinned') : '', selected: this.projectID === p.id,
             onSelect: () => { this.setProject(p.id); return true; },
           })),
         ],
@@ -263,7 +264,7 @@ export class Composer {
 
   pickModel() {
     openPicker({
-      title: '模型与思考',
+      title: t('Model & Thinking'),
       build: () => {
         const current = this.conversationID ? this.store.open?.settings?.model : (this.model || this.store.models.defaultModel);
         const bySection = new Map();
@@ -282,7 +283,7 @@ export class Composer {
         const thinking = this.thinkingMenu();
         if (thinking) {
           sections.unshift({
-            title: '思考等级',
+            title: t('Thinking Level'),
             items: thinking.options.map((option) => ({
               label: option.label, selected: option.isSelected, onSelect: () => this.chooseThinking(option.level),
             })),
@@ -328,15 +329,15 @@ export class Composer {
     this.showError(null);
     for (const file of files) {
       if (this.attachments.length >= MAX_ATTACHMENTS) {
-        this.showError(`最多 ${MAX_ATTACHMENTS} 个附件。`);
+        this.showError(t('Up to %lld attachments.', MAX_ATTACHMENTS));
         break;
       }
       const limit = (file.type || '').startsWith('image/') ? MAX_IMAGE_BYTES : MAX_FILE_BYTES;
-      const attachment = { key: crypto.randomUUID(), name: file.name || '附件', size: file.size, progress: 0, status: 'uploading', id: null, message: '', connectionID: this.store.connectionID };
+      const attachment = { key: crypto.randomUUID(), name: file.name || t('Attachment'), size: file.size, progress: 0, status: 'uploading', id: null, message: '', connectionID: this.store.connectionID };
       this.attachments.push(attachment);
       if (file.size > limit) {
         attachment.status = 'failed';
-        attachment.message = `超过 ${limit / 1024 / 1024} MB`;
+        attachment.message = t('Larger than %lld MB', limit / 1024 / 1024);
         continue;
       }
       uploadFile(file, this.store.connectionID, (progress) => {

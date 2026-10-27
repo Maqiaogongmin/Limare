@@ -52,24 +52,24 @@ final class MCPSettingsState {
     }
 
     func statusDisplayText(for status: MCPServerStatus, isEnabled: Bool) -> String {
-        guard isEnabled else { return "Off" }
+        guard isEnabled else { return String(localized: "Off") }
         switch status {
         case .connected(let count):
-            return "Connected · \(count) \(count == 1 ? "tool" : "tools")"
+            return String(localized: "Connected · \(count) tools")
         case .connecting:
-            return "Connecting…"
+            return String(localized: "Connecting…")
         case .credentialRequired:
-            return "Credential required"
+            return String(localized: "Credential required")
         case .signInRequired:
-            return "Sign-in required"
+            return String(localized: "Sign-in required")
         case .signingIn:
-            return "Signing in…"
+            return String(localized: "Signing in…")
         case .configSaved:
-            return "Config saved"
+            return String(localized: "Config saved")
         case .failed:
-            return "Needs attention"
+            return String(localized: "Needs attention")
         case .disconnected:
-            return "Not connected"
+            return String(localized: "Not connected")
         }
     }
 
@@ -87,6 +87,6 @@ final class MCPSettingsState {
     }
 
     func connectionTypeDisplayName(for server: MCPServerConfig) -> String {
-        server.isHTTP ? "Remote Server" : "Local Command"
+        server.isHTTP ? String(localized: "Remote Server") : String(localized: "Local Command")
     }
 }

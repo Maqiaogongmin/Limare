@@ -31,7 +31,7 @@ struct NativeDelegationTaskView: View {
                     .accessibilityIdentifier("native.delegation.toggle")
                     Spacer()
                     if let task = childTask {
-                        Button("返回父会话") {
+                        Button("Back to Parent Conversation") {
                             appState.focus(window)
                             appState.conversations.selectConversation(id: task.parentConversationID)
                         }
@@ -49,7 +49,7 @@ struct NativeDelegationTaskView: View {
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: expandedFinished.contains(conversationID) ? "chevron.down" : "chevron.right")
-                                Text("已结束 (\(finished.count))")
+                                Text("Finished (\(finished.count))")
                             }
                             .font(.caption).foregroundStyle(.secondary)
                         }
@@ -66,10 +66,10 @@ struct NativeDelegationTaskView: View {
             .padding(12)
             .background(.quaternary.opacity(0.35))
             .accessibilityIdentifier("native.delegation.tasks")
-            .alert("继续子任务", isPresented: Binding(get: { continuing != nil }, set: { if !$0 { continuing = nil } })) {
-                TextField("给子任务的指令", text: $instruction)
-                Button("取消", role: .cancel) { continuing = nil }
-                Button("继续") {
+            .alert("Continue Subtask", isPresented: Binding(get: { continuing != nil }, set: { if !$0 { continuing = nil } })) {
+                TextField("Instruction for the subtask", text: $instruction)
+                Button("Cancel", role: .cancel) { continuing = nil }
+                Button("Continue") {
                     if let task = continuing {
                         do { _ = try subagents.continueTask(taskID: task.id, instruction: instruction); errorMessage = nil }
                         catch { errorMessage = error.localizedDescription }
@@ -93,36 +93,36 @@ struct NativeDelegationTaskView: View {
             }
             Spacer()
             if !isChild {
-                Button("查看") {
+                Button("View") {
                     appState.focus(window)
                     appState.conversations.selectConversation(id: task.childConversationID)
                 }
             }
             if task.status.isFinished {
-                Button("继续") { instruction = ""; continuing = task }
+                Button("Continue") { instruction = ""; continuing = task }
             } else {
-                Button("取消", role: .destructive) { appState.subagents.cancel(taskID: task.id) }
+                Button("Cancel", role: .destructive) { appState.subagents.cancel(taskID: task.id) }
             }
         }.accessibilityIdentifier("native.task.\(task.id)")
     }
 
     private func status(_ task: SubagentTask) -> String {
         switch task.status {
-        case .queued: return "排队中"
+        case .queued: return String(localized: "Queued")
         case .running:
-            return "运行中 · \(elapsedSeconds(task)) 秒 · \(activity(task))"
+            return String(localized: "Running · \(elapsedSeconds(task)) s · \(activity(task))")
         case .completed:
-            return task.result?.partial == true ? "部分结果（到达上限或未完成）" : "已完成"
-        case .failed: return "失败：\(task.failure ?? "原因未知")"
-        case .cancelled: return "已取消"
-        case .interrupted: return task.failure ?? "已中断，可继续"
+            return task.result?.partial == true ? String(localized: "Partial result (reached a limit or didn't finish)") : String(localized: "Completed")
+        case .failed: return String(localized: "Failed: \(task.failure ?? String(localized: "unknown reason"))")
+        case .cancelled: return String(localized: "Cancelled")
+        case .interrupted: return task.failure ?? String(localized: "Interrupted; can continue")
         }
     }
 
     /// The budget and totals behind the short status line, shown on hover.
     private func usage(_ task: SubagentTask) -> String {
         guard task.status == .running else { return totalUsage(task) }
-        let round = "本轮请求 \(task.spent.modelRequests)/\(task.allowance.modelRequests) · 工具 \(task.spent.toolCalls)/\(task.allowance.toolCalls) · \(elapsedSeconds(task))/\(Int(task.allowance.seconds)) 秒"
+        let round = String(localized: "This round: requests \(task.spent.modelRequests)/\(task.allowance.modelRequests) · tools \(task.spent.toolCalls)/\(task.allowance.toolCalls) · \(elapsedSeconds(task))/\(Int(task.allowance.seconds)) s")
         return "\(round)\n\(totalUsage(task))"
     }
 
@@ -132,13 +132,13 @@ struct NativeDelegationTaskView: View {
 
     private func totalUsage(_ task: SubagentTask) -> String {
         let total = task.cumulativeSpent
-        return "累计请求 \(total.modelRequests) · 工具 \(total.toolCalls) · \(Int(total.seconds)) 秒"
+        return String(localized: "Total: requests \(total.modelRequests) · tools \(total.toolCalls) · \(Int(total.seconds)) s")
     }
 
     private func activity(_ task: SubagentTask) -> String {
         guard let runID = task.runID,
               let child = appState.conversations.conversations.first(where: { $0.id == task.childConversationID }),
-              let tool = child.messages.flatMap(\.toolCalls).last(where: { $0.owningRunID == runID }) else { return "思考中" }
+              let tool = child.messages.flatMap(\.toolCalls).last(where: { $0.owningRunID == runID }) else { return String(localized: "Thinking") }
         guard let state = ToolCallPresentationResolver.statusLabel(for: tool.state) else { return tool.name }
         return "\(tool.name) · \(state)"
     }
@@ -148,7 +148,7 @@ struct NativeChildInteractionView: View {
     let conversationID: UUID
     var body: some View {
         HStack {
-            Text("这是一个子任务的会话，由它自己的运行维护。要追加指令，请在上方点“继续”，或回到父会话。")
+            Text("This is a subtask's conversation, maintained by its own run. To add an instruction, click Continue above, or go back to the parent conversation.")
                 .font(.caption).foregroundStyle(.secondary)
             Spacer()
         }.padding(12)

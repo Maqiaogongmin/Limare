@@ -20,11 +20,11 @@ enum MCPAuthorityState: String, Sendable {
 
     var message: String {
         switch self {
-        case .ready: return "MCP configuration storage is ready."
-        case .migrationRequired: return "Existing MCP configuration requires an explicit migration. The original data has been preserved."
-        case .storageUnavailable: return "MCP configuration storage is unavailable. No empty configuration or file fallback has been activated."
-        case .recoveryRequired: return "MCP recovery must complete before another operation or connection can start."
-        case .alreadyRunning: return "Another Limare instance owns MCP configuration."
+        case .ready: return String(localized: "MCP configuration storage is ready.")
+        case .migrationRequired: return String(localized: "Existing MCP configuration requires an explicit migration. The original data has been preserved.")
+        case .storageUnavailable: return String(localized: "MCP configuration storage is unavailable. No empty configuration or file fallback has been activated.")
+        case .recoveryRequired: return String(localized: "MCP recovery must complete before another operation or connection can start.")
+        case .alreadyRunning: return String(localized: "Another Limare instance owns MCP configuration.")
         }
     }
 }
@@ -33,14 +33,14 @@ enum MCPHostControlError: Error, LocalizedError {
     case unavailable, invalidRecord, capacityExceeded, revisionConflict, alreadyRunning, unsafeLease, protectedInfrastructure, humanConfirmationRequired
     var errorDescription: String? {
         switch self {
-        case .unavailable: return "MCP native storage is unavailable."
-        case .invalidRecord: return "MCP control record is invalid; recovery is required."
-        case .capacityExceeded: return "MCP control record exceeds the product capacity limit."
-        case .revisionConflict: return "MCP configuration changed; read its current revision before retrying."
-        case .alreadyRunning: return "Another Limare instance owns MCP configuration."
-        case .unsafeLease: return "The MCP authority lease could not be secured."
+        case .unavailable: return String(localized: "MCP native storage is unavailable.")
+        case .invalidRecord: return String(localized: "MCP control record is invalid; recovery is required.")
+        case .capacityExceeded: return String(localized: "MCP control record exceeds the product capacity limit.")
+        case .revisionConflict: return String(localized: "MCP configuration changed; read its current revision before retrying.")
+        case .alreadyRunning: return String(localized: "Another Limare instance owns MCP configuration.")
+        case .unsafeLease: return String(localized: "The MCP authority lease could not be secured.")
         case .protectedInfrastructure: return "Agent file tools cannot access reserved MCP resources or file aliases."
-        case .humanConfirmationRequired: return "Adding or replacing an MCP credential needs your confirmation in Limare."
+        case .humanConfirmationRequired: return String(localized: "Adding or replacing an MCP credential needs your confirmation in Limare.")
         }
     }
 }

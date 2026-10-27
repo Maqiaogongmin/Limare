@@ -34,6 +34,6 @@ struct LimareBuild: Equatable {
     /// "0.1.0" for a release; "0.1.0 · development build 2584c818" otherwise.
     var displayVersion: String {
         guard channel == .development else { return version }
-        return sourceCommit.map { "\(version) · development build \($0)" } ?? "\(version) · development build"
+        return sourceCommit.map { String(localized: "\(version) · development build \($0)") } ?? String(localized: "\(version) · development build")
     }
 }

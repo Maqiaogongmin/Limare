@@ -27,7 +27,7 @@ final class VoiceInputResolver {
         do {
             audioData = try Data(contentsOf: audioFileURL)
         } catch {
-            throw VoiceInputError.recordingFailed("Failed to read recorded audio file: \(error.localizedDescription)")
+            throw VoiceInputError.recordingFailed(String(localized: "Failed to read recorded audio file: \(error.localizedDescription)"))
         }
 
         // 1. Check Voice Input Group candidates
@@ -117,7 +117,7 @@ final class VoiceInputResolver {
             if candidateErrors.isEmpty {
                 throw error
             } else {
-                throw VoiceInputError.transcriptionFailed("All ASR attempts failed. Cloud: [\(candidateErrors.joined(separator: ", "))]; System Speech: \(sysErr)")
+                throw VoiceInputError.transcriptionFailed(String(localized: "All ASR attempts failed. Cloud: [\(candidateErrors.joined(separator: ", "))]; System Speech: \(sysErr)"))
             }
         }
     }

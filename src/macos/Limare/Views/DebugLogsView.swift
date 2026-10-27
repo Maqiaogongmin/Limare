@@ -63,7 +63,7 @@ struct DebugLogsView: View {
 
             moduleChip("All", isSelected: module == nil) { module = nil }
             ForEach(frequentModules, id: \.self) { name in
-                moduleChip(name, isSelected: module == name) { module = name }
+                moduleChip("\(name)", isSelected: module == name) { module = name }
             }
             if !otherModules.isEmpty {
                 Menu {
@@ -71,7 +71,7 @@ struct DebugLogsView: View {
                         Toggle(name, isOn: Binding(get: { module == name }, set: { _ in module = name }))
                     }
                 } label: {
-                    Text(otherModules.contains(module ?? "") ? module ?? "More" : "More")
+                    Text(otherModules.contains(module ?? "") ? LocalizedStringKey("\(module ?? "")") : "More")
                         .font(.system(size: 11.5, weight: .medium))
                 }
                 .menuStyle(.button)
@@ -109,7 +109,7 @@ struct DebugLogsView: View {
         .frame(height: 44)
     }
 
-    private func moduleChip(_ title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+    private func moduleChip(_ title: LocalizedStringKey, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 11.5, weight: .medium))

@@ -4,6 +4,7 @@ import { groupTranscript, currentFold, renderEntry, entryIDs, finishedCompaction
 import { loadMarkdown, isMarkdownReady } from '../markdown.js';
 import { runBadge } from './list.js';
 import { Composer } from './composer.js';
+import { t } from '../i18n.js';
 
 function isActive(runState) {
   const status = runState && runState.run && runState.run.status;
@@ -29,17 +30,17 @@ export class ConversationView {
     this.title = h('h1', {}, '');
     this.project = h('div', { class: 'topbar-project', hidden: true });
     this.badge = h('span');
-    this.messages = h('div', { class: 'messages' }, h('div', { class: 'loading' }, '正在载入…'));
+    this.messages = h('div', { class: 'messages' }, h('div', { class: 'loading' }, t('Loading…')));
     this.runbar = h('div', { class: 'runbar', hidden: true });
     this.queuebar = h('div', { class: 'runbar queue', hidden: true });
     this.questionSlot = h('div', { class: 'question-slot' }); // filled by renderQuestion
     this.composer = new Composer({ store, connection, conversationID, isActive: () => isActive(this.store.open && this.store.open.runState) });
-    this.earlier = h('button', { class: 'earlier', type: 'button', hidden: true, onclick: () => this.loadEarlier() }, '加载更早的消息');
+    this.earlier = h('button', { class: 'earlier', type: 'button', hidden: true, onclick: () => this.loadEarlier() }, t('Load Earlier Messages'));
     this.messages.addEventListener('scroll', () => { this.loadEarlierIfNearTop(); this.updateFreeze(); }, { passive: true });
 
     this.element = h('section', { class: 'conversation' },
       h('header', { class: 'topbar' },
-        h('button', { class: 'back', 'aria-label': '返回', onclick: () => { location.hash = '#/'; } }, '‹'),
+        h('button', { class: 'back', 'aria-label': t('Back'), onclick: () => { location.hash = '#/'; } }, '‹'),
         h('div', { class: 'topbar-titles' }, this.title, this.project), this.badge),
       this.messages, this.runbar, this.queuebar, this.questionSlot, this.composer.element);
     this.updateSummary();
@@ -136,9 +137,9 @@ export class ConversationView {
     this.frozen = null;
     clear(this.messages);
     this.earlier.hidden = !open.hasEarlier;
-    this.earlier.textContent = '加载更早的消息';
+    this.earlier.textContent = t('Load Earlier Messages');
     this.messages.append(this.earlier);
-    if (!open.messages.length) this.messages.append(h('div', { class: 'empty' }, '还没有消息'));
+    if (!open.messages.length) this.messages.append(h('div', { class: 'empty' }, t('No messages yet')));
     const fragment = document.createDocumentFragment();
     for (const entry of this.group(open.messages)) fragment.append(renderEntry(entry, this.ui));
     this.messages.append(fragment);
@@ -163,7 +164,7 @@ export class ConversationView {
     this.earlier.after(fragment);
     this.placeCompactions();
     this.earlier.hidden = !this.store.open.hasEarlier;
-    this.earlier.textContent = '加载更早的消息';
+    this.earlier.textContent = t('Load Earlier Messages');
     this.messages.scrollTop = this.messages.scrollHeight - fromBottom;
     this.loadEarlierIfNearTop(); // one page may not fill the screen
   }
@@ -176,14 +177,14 @@ export class ConversationView {
     const open = this.store.open;
     if (this.loadingEarlier || !open || !open.hasEarlier || !open.messages.length || !this.connection.isLive) return;
     this.loadingEarlier = true;
-    this.earlier.textContent = '正在载入…';
+    this.earlier.textContent = t('Loading…');
     const result = await this.connection.request('conversation.loadEarlier', {
       conversationID: this.conversationID,
       beforeMessageID: open.messages[0].id,
     });
     if (!result.ok) {
       this.loadingEarlier = false;
-      this.earlier.textContent = '加载更早的消息';
+      this.earlier.textContent = t('Load Earlier Messages');
     }
   }
 
@@ -227,7 +228,7 @@ export class ConversationView {
   updateSummary() {
     const summary = this.store.summary(this.conversationID);
     if (!summary) return;
-    this.title.textContent = summary.title || '新对话';
+    this.title.textContent = summary.title || t('Untitled');
     // The project is fixed for an existing conversation; it is shown, not chosen (addendum D1).
     const project = summary.projectID ? this.store.project(summary.projectID) : null;
     this.project.hidden = !project;
@@ -248,25 +249,25 @@ export class ConversationView {
     this.runbar.hidden = !active;
     if (active) {
       const paused = run.status === 'paused';
-      const label = paused ? '已暂停' : run.isPausing ? '将在安全点暂停…' : (run.statusText || '运行中');
+      const label = paused ? t('Paused') : run.isPausing ? t('Pausing at the next safe point…') : (run.statusText || t('Running'));
       const pauseButton = paused || run.isPausing
-        ? h('button', { class: 'small', onclick: () => this.command('run.resume') }, paused ? '继续' : '取消暂停')
-        : h('button', { class: 'small', onclick: () => this.command('run.pause') }, '暂停');
+        ? h('button', { class: 'small', onclick: () => this.command('run.resume') }, paused ? t('Resume') : t('Cancel Pause'))
+        : h('button', { class: 'small', onclick: () => this.command('run.pause') }, t('Pause'));
       this.runbar.append(
         h('span', { class: 'status' }, runBadge(paused ? 'paused' : run.isPausing ? 'pausing' : 'running'), label),
         pauseButton,
-        h('button', { class: 'small danger', onclick: () => this.command('run.stop') }, '停止'));
+        h('button', { class: 'small danger', onclick: () => this.command('run.stop') }, t('Stop')));
     }
 
     clear(this.queuebar);
     const queued = runState ? runState.queuedCount : 0;
     this.queuebar.hidden = queued === 0;
     if (queued > 0) {
-      this.queuebar.append(h('span', { class: 'status' }, runState.queueHeld ? `${queued} 条排队（停止或出错后已暂停）` : `${queued} 条排队，当前运行结束后执行`));
+      this.queuebar.append(h('span', { class: 'status' }, runState.queueHeld ? t('%lld queued (paused after stop/error)', queued) : t('%lld queued for after the current run', queued)));
       if (runState.queueHeld || !active) {
         this.queuebar.append(
-          h('button', { class: 'small', onclick: () => this.command('queue.resume') }, runState.queueHeld ? '恢复队列' : '运行队列'),
-          h('button', { class: 'small', onclick: () => this.command('queue.clear') }, '清空'));
+          h('button', { class: 'small', onclick: () => this.command('queue.resume') }, runState.queueHeld ? t('Resume Queue') : t('Run Queue')),
+          h('button', { class: 'small', onclick: () => this.command('queue.clear') }, t('Clear')));
       }
     }
     this.composer.render();

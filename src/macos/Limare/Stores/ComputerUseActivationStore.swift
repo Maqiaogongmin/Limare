@@ -235,7 +235,7 @@ final class ComputerUseActivationStore {
             guard obsAvail && actAvail else {
                 onDeactivated?()
                 readiness = .unavailable
-                statusMessage = "Computer Use runtime is unavailable."
+                statusMessage = String(localized: "Computer Use runtime is unavailable.")
                 return
             }
         }
@@ -245,7 +245,7 @@ final class ComputerUseActivationStore {
             onDeactivated?()
             readiness = .needsScreenRecording
             activeConversationID = nil
-            statusMessage = "Screen Recording permission is required for Computer Use."
+            statusMessage = String(localized: "Screen Recording permission is required for Computer Use.")
             return
         }
 
@@ -257,7 +257,7 @@ final class ComputerUseActivationStore {
             guard axStatus == .authorized else {
                 onDeactivated?()
                 readiness = .needsAccessibility
-                statusMessage = "Computer Use needs Accessibility permission to control apps on your Mac."
+                statusMessage = String(localized: "Computer Use needs Accessibility permission to control apps on your Mac.")
                 return
             }
         }
@@ -348,8 +348,10 @@ final class ComputerUseActivationStore {
     func refusalReason(conversationID: UUID) -> String? {
         guard refusedSessions[conversationID] != nil,
               let holder = activeConversationID ?? desiredConversationID, holder != conversationID else { return nil }
-        let title = conversationTitle?(holder).map { "「\($0)」" } ?? "另一个会话"
-        return "Computer Use 正由会话\(title)使用，同一时间只能有一个会话控制电脑。请等那个会话的任务结束后再试。"
+        if let title = conversationTitle?(holder) {
+            return String(localized: "Computer Use is in use by the conversation “\(title)”, and only one conversation can control the computer at a time. Try again when that conversation's task ends.")
+        }
+        return String(localized: "Computer Use is in use by another conversation, and only one conversation can control the computer at a time. Try again when that conversation's task ends.")
     }
 
     // MARK: - Layer 1 Activation Lifecycle
@@ -377,7 +379,7 @@ final class ComputerUseActivationStore {
                 onDeactivated?()
             readiness = .needsScreenRecording
                 activeConversationID = nil
-                statusMessage = "Screen Recording permission is required for Computer Use."
+                statusMessage = String(localized: "Screen Recording permission is required for Computer Use.")
                 logs?.info("ComputerUse", "Computer Use activation blocked: Screen Recording permission missing/denied.")
                 return false
             }
@@ -472,7 +474,7 @@ final class ComputerUseActivationStore {
             activeConversationID = nil
             desiredConversationID = nil
             permissionModeAtActivation = nil
-            statusMessage = "Computer Use session ended due to permission mode change; the next run starts a new session."
+            statusMessage = String(localized: "Computer Use session ended due to permission mode change; the next run starts a new session.")
         }
     }
 

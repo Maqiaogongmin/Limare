@@ -90,7 +90,7 @@ final class SubagentStore {
                 title: String(goal.split(separator: "\n").first ?? "Subagent task").prefix(80).description, goal: goal,
                 role: tools.contains("file_write") ? .coding : .research, allowWeb: false,
                 allowance: .init(effort: .standard), background: true, status: settled ? .completed : .interrupted,
-                failure: settled ? nil : "Recorded before the subagent update; open the child conversation to see what it did.",
+                failure: settled ? nil : String(localized: "Recorded before the subagent update; open the child conversation to see what it did."),
                 createdAt: modified.addingTimeInterval(Double(index) - Double(records.count)), finishedAt: modified)
         }
         if !tasks.isEmpty {

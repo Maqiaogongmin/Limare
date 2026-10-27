@@ -54,26 +54,28 @@ enum BackgroundNotificationPolicy {
     static func body(for event: Event) -> String {
         switch event {
         case .approvalRequested:
-            return "需要你的批准"
+            return String(localized: "Needs your approval")
         case .questionRequested:
-            return "需要你的决定"
+            return String(localized: "Needs your decision")
         case .runFinished(let status, _):
             switch status {
-            case .failed: return "任务失败"
-            case .interrupted: return "任务中断"
-            default: return "任务完成"
+            case .failed: return String(localized: "Task failed")
+            case .interrupted: return String(localized: "Task interrupted")
+            default: return String(localized: "Task finished")
             }
         case .scheduledRunFinished(let name, let status, let isCatchUp, _):
-            let outcome: String
-            switch status {
-            case .failed: outcome = "运行失败"
-            case .interrupted: outcome = "已中断"
-            case .cancelled: outcome = "已取消"
-            default: outcome = "已完成"
+            switch (status, isCatchUp) {
+            case (.failed, false): return String(localized: "“\(name)” failed")
+            case (.failed, true): return String(localized: "“\(name)” failed (catch-up run)")
+            case (.interrupted, false): return String(localized: "“\(name)” was interrupted")
+            case (.interrupted, true): return String(localized: "“\(name)” was interrupted (catch-up run)")
+            case (.cancelled, false): return String(localized: "“\(name)” was cancelled")
+            case (.cancelled, true): return String(localized: "“\(name)” was cancelled (catch-up run)")
+            case (_, false): return String(localized: "“\(name)” finished")
+            case (_, true): return String(localized: "“\(name)” finished (catch-up run)")
             }
-            return "「\(name)」\(outcome)" + (isCatchUp ? "（补跑）" : "")
         case .scheduledMissed(let name):
-            return "「\(name)」已错过"
+            return String(localized: "“\(name)” was missed")
         }
     }
 }

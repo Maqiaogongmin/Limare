@@ -19,18 +19,18 @@ enum AppScreen: String, Hashable {
     var title: String {
         switch self {
         case .chat: "Limare"
-        case .scheduled: "Schedules"
-        case .settingsGeneral: "General"
-        case .settingsProviders: "Providers"
-        case .settingsModelGroups: "Model Groups"
-        case .settingsSkills: "Skills"
-        case .settingsSoul: "Personalization"
-        case .settingsArchived: "Archived"
-        case .settingsMCP: "MCP"
-        case .settingsHooks: "Hooks"
-        case .settingsPermissions: "Permissions"
-        case .settingsRemoteAccess: "Remote Access"
-        case .settingsLogs: "Logs"
+        case .scheduled: String(localized: "Schedules")
+        case .settingsGeneral: String(localized: "General")
+        case .settingsProviders: String(localized: "Providers")
+        case .settingsModelGroups: String(localized: "Model Groups")
+        case .settingsSkills: String(localized: "Skills")
+        case .settingsSoul: String(localized: "Personalization")
+        case .settingsArchived: String(localized: "Archived")
+        case .settingsMCP: String(localized: "MCP")
+        case .settingsHooks: String(localized: "Hooks")
+        case .settingsPermissions: String(localized: "Permissions")
+        case .settingsRemoteAccess: String(localized: "Remote Access")
+        case .settingsLogs: String(localized: "Logs")
         }
     }
 }

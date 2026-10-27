@@ -13,6 +13,12 @@ final class BrowserRuntime: NSObject, WKNavigationDelegate, WKUIDelegate {
     private(set) var isLoading: Bool = false
 
     var onStateChange: (@MainActor (BrowserRuntimeState) -> Void)?
+    /// Opens a page's new window (a `target=_blank` link, `window.open`) as a tab: given the
+    /// configuration WebKit requires, it returns the new tab's web view, or nil when no tab can
+    /// be opened. Unset, the page loads in this tab, as a browser with one tab does.
+    var onOpenWindow: (@MainActor (WKWebViewConfiguration) -> WKWebView?)?
+    /// The page closed its own window (`window.close()`).
+    var onCloseWindow: (@MainActor () -> Void)?
 
     private func publishState() {
         let state = BrowserRuntimeState(
@@ -42,7 +48,9 @@ final class BrowserRuntime: NSObject, WKNavigationDelegate, WKUIDelegate {
         attachmentStore: AttachmentStore? = nil,
         artifactStore: ArtifactStore? = nil,
         logs: DebugLogStore? = nil,
-        snapshotProvider: SnapshotProvider? = nil
+        snapshotProvider: SnapshotProvider? = nil,
+        configuration: WKWebViewConfiguration? = nil,
+        opensWindows: Bool = false
     ) {
         let store = websiteDataStore ?? BrowserWebsiteDataStore.shared.websiteDataStore
         self.attachmentStore = attachmentStore ?? AttachmentStore()
@@ -50,9 +58,16 @@ final class BrowserRuntime: NSObject, WKNavigationDelegate, WKUIDelegate {
         self.logs = logs ?? DebugLogStore()
         self.snapshotProvider = snapshotProvider
 
-        let config = WKWebViewConfiguration()
-        config.websiteDataStore = store
-        config.defaultWebpagePreferences.allowsContentJavaScript = true
+        // A window a page opens must use the configuration WebKit hands over, so it keeps
+        // `window.opener` (sign-in pop-ups report back through it).
+        let config = configuration ?? WKWebViewConfiguration()
+        if configuration == nil {
+            config.websiteDataStore = store
+            config.defaultWebpagePreferences.allowsContentJavaScript = true
+        }
+        // The agent clicks by script, which WebKit does not count as a user gesture; without
+        // this, a link's own `window.open` would be blocked for the agent but not for a person.
+        if opensWindows { config.preferences.javaScriptCanOpenWindowsAutomatically = true }
 
         let frame = CGRect(origin: .zero, size: Self.defaultViewport)
         self.webView = WKWebView(frame: frame, configuration: config)
@@ -115,6 +130,8 @@ final class BrowserRuntime: NSObject, WKNavigationDelegate, WKUIDelegate {
             return try await screenshot(conversationID: conversationID)
         case .waitForDomStable:
             return try await waitForDomStable(timeoutSeconds: input.timeoutSeconds ?? 10)
+        case .listTabs, .newTab, .switchTab, .closeTab:
+            return .error("\(input.action.rawValue) acts on a conversation's tabs, not on one page.")
         }
     }
 
@@ -626,8 +643,9 @@ final class BrowserRuntime: NSObject, WKNavigationDelegate, WKUIDelegate {
             return
         }
 
-        // Single Tab policy: If link has target="_blank" / nil targetFrame, open in current frame
-        if navigationAction.targetFrame == nil {
+        // A new window: with tabs, WebKit asks for its web view next (`createWebViewWith`);
+        // without, the page loads here.
+        if navigationAction.targetFrame == nil, onOpenWindow == nil {
             webView.load(navigationAction.request)
             decisionHandler(.cancel)
             return
@@ -739,6 +757,24 @@ final class BrowserRuntime: NSObject, WKNavigationDelegate, WKUIDelegate {
         }
         activeNavigation = nil
         nav.continuation.resume(throwing: error)
+    }
+
+    // MARK: - WKUIDelegate (New windows)
+
+    public func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        if let opened = onOpenWindow?(configuration) { return opened }
+        // No tab to open it in: the page loads here instead.
+        if navigationAction.request.url != nil { webView.load(navigationAction.request) }
+        return nil
+    }
+
+    public func webViewDidClose(_ webView: WKWebView) {
+        onCloseWindow?()
     }
 
     // MARK: - WKUIDelegate (Dialog policies)

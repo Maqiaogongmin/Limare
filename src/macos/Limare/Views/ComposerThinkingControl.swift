@@ -23,7 +23,7 @@ struct ComposerThinkingControl: View {
 
     private var offLabel: String {
         guard case .direct(let providerID, let modelID) = currentModelSource,
-              let provider = appState.providers.providers.first(where: { $0.id == providerID }) else { return "Model Default" }
+              let provider = appState.providers.providers.first(where: { $0.id == providerID }) else { return String(localized: "Model Default") }
         return ProviderThinkingResolution.offLabel(model: provider.models.first(where: { $0.id == modelID }), provider: provider)
     }
 

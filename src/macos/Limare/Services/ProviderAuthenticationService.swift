@@ -12,11 +12,11 @@ enum ProviderAuthenticationError: LocalizedError {
     case unavailable, cancelled, invalidIdentity, missingScope, failedExchange
     var errorDescription: String? {
         switch self {
-        case .unavailable: "The required authentication library is unavailable."
-        case .cancelled: "Authentication was cancelled."
-        case .invalidIdentity: "The returned identity or authorization transaction could not be verified."
-        case .missingScope: "This account did not authorize ChatGPT plan inference."
-        case .failedExchange: "Authorization exchange failed. Start a new sign-in attempt."
+        case .unavailable: String(localized: "The required authentication library is unavailable.")
+        case .cancelled: String(localized: "Authentication was cancelled.")
+        case .invalidIdentity: String(localized: "The returned identity or authorization transaction could not be verified.")
+        case .missingScope: String(localized: "This account did not authorize ChatGPT plan inference.")
+        case .failedExchange: String(localized: "Authorization exchange failed. Start a new sign-in attempt.")
         }
     }
 }

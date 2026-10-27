@@ -10,15 +10,15 @@ public enum StreamingSendPreference: String, CaseIterable, Identifiable, Sendabl
 
     public var displayName: String {
         switch self {
-        case .queue: "Queue for next turn"
-        case .steer: "Steer active turn"
+        case .queue: String(localized: "Queue for next turn")
+        case .steer: String(localized: "Steer active turn")
         }
     }
 
     public var detail: String {
         switch self {
-        case .queue: "Appends the message to the queue to be processed after the current run completes."
-        case .steer: "Injects the instruction immediately into the currently active run."
+        case .queue: String(localized: "Appends the message to the queue to be processed after the current run completes.")
+        case .steer: String(localized: "Injects the instruction immediately into the currently active run.")
         }
     }
 }

@@ -27,21 +27,21 @@ public enum VoiceOutputError: LocalizedError, Equatable, Sendable {
     public var errorDescription: String? {
         switch self {
         case .noSpeakableText:
-            return "No speakable text found in message."
+            return String(localized: "No speakable text found in message.")
         case .invalidAudioResponse(let reason):
-            return "Invalid audio response from TTS provider: \(reason)"
+            return String(localized: "Invalid audio response from TTS provider: \(reason)")
         case .audioTooLarge(let bytes):
-            return "Synthesized audio exceeded maximum size limit (\(bytes) bytes)."
+            return String(localized: "Synthesized audio exceeded maximum size limit (\(bytes) bytes).")
         case .synthesisFailed(let reason):
-            return "Voice synthesis failed: \(reason)"
+            return String(localized: "Voice synthesis failed: \(reason)")
         case .networkError(let reason):
-            return "Network error during voice synthesis: \(reason)"
+            return String(localized: "Network error during voice synthesis: \(reason)")
         case .playbackFailed(let reason):
-            return "Audio playback failed: \(reason)"
+            return String(localized: "Audio playback failed: \(reason)")
         case .partFailed(let part, let total, let reason):
-            return "Stopped reading at part \(part)/\(total): \(reason)"
+            return String(localized: "Stopped reading at part \(part)/\(total): \(reason)")
         case .cancelled:
-            return "Voice output was cancelled."
+            return String(localized: "Voice output was cancelled.")
         }
     }
 }

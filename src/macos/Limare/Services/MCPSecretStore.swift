@@ -28,12 +28,12 @@ public enum MCPSecretStoreError: LocalizedError, Equatable, Sendable {
         switch self {
         case let .unrecoverablePartialDeletion(serverID, failedAccount, deleteStatus, restoreFailures):
             let failureList = restoreFailures.map { "\($0.account): \($0.status)" }.joined(separator: ", ")
-            return "Failed to delete secret '\(failedAccount)' for server '\(serverID)' (status \(deleteStatus)), and restoring previously deleted secrets also failed (\(failureList))."
+            return String(localized: "Failed to delete secret '\(failedAccount)' for server '\(serverID)' (status \(deleteStatus)), and restoring previously deleted secrets also failed (\(failureList)).")
         case let .operationFailed(status, message):
-            return "Keychain operation failed (status \(status)): \(message)"
+            return String(localized: "Keychain operation failed (status \(status)): \(message)")
         case let .backupFailed(account, status):
             let msg = SecCopyErrorMessageString(status, nil) as String? ?? "code \(status)"
-            return "Failed to read backup for secret '\(account)' (\(msg))"
+            return String(localized: "Failed to read backup for secret '\(account)' (\(msg))")
         }
     }
 }
@@ -263,7 +263,7 @@ public final class KeychainMCPSecretStore: MCPSecretStoring, MCPControlRecordSto
     fileprivate func requireSignedIdentity() throws {
         guard Self.signedApplicationIdentifier == expectedApplicationIdentifier else {
             throw MCPSecretStoreError.operationFailed(status: errSecMissingEntitlement,
-                message: "This build is not signed with Limare's application identifier.")
+                message: String(localized: "This build is not signed with Limare's application identifier."))
         }
     }
 

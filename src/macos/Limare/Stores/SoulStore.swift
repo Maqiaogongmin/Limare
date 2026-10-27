@@ -328,7 +328,7 @@ final class SoulStore: @unchecked Sendable {
         if let sourceURL = pendingAvatarSourceURL {
             let ext = sourceURL.pathExtension.isEmpty ? "png" : sourceURL.pathExtension.lowercased()
             guard SoulAvatarResolver.allowedExtensions.contains(ext) else {
-                throw NSError(domain: "SoulStore", code: 2, userInfo: [NSLocalizedDescriptionKey: "Unsupported image format: .\(ext)"])
+                throw NSError(domain: "SoulStore", code: 2, userInfo: [NSLocalizedDescriptionKey: String(localized: "Unsupported image format: .\(ext)")])
             }
             let newFilename = "avatar_\(UUID().uuidString).\(ext)"
             let destURL = avatarsDirectoryURL.appendingPathComponent(newFilename, isDirectory: false)
@@ -339,7 +339,7 @@ final class SoulStore: @unchecked Sendable {
         } else if let data = pendingAvatarData {
             let ext = (pendingAvatarExtension?.isEmpty ?? true) ? "png" : (pendingAvatarExtension!.lowercased())
             guard SoulAvatarResolver.allowedExtensions.contains(ext) else {
-                throw NSError(domain: "SoulStore", code: 2, userInfo: [NSLocalizedDescriptionKey: "Unsupported image format: .\(ext)"])
+                throw NSError(domain: "SoulStore", code: 2, userInfo: [NSLocalizedDescriptionKey: String(localized: "Unsupported image format: .\(ext)")])
             }
             let newFilename = "avatar_\(UUID().uuidString).\(ext)"
             let destURL = avatarsDirectoryURL.appendingPathComponent(newFilename, isDirectory: false)
@@ -549,13 +549,13 @@ final class SoulEditorState {
             draftAvatarImage = soulStore.cachedAvatarImage
             statusMessage = nil
         } catch {
-            statusMessage = "Reload failed: \(error.localizedDescription)"
+            statusMessage = String(localized: "Reload failed: \(error.localizedDescription)")
         }
     }
 
     func save(to soulStore: SoulStore) throws {
         guard !isOverLimit else {
-            throw NSError(domain: "SoulEditor", code: 1, userInfo: [NSLocalizedDescriptionKey: "Personality exceeds the 2000 token limit."])
+            throw NSError(domain: "SoulEditor", code: 1, userInfo: [NSLocalizedDescriptionKey: String(localized: "Personality exceeds the 2000 token limit.")])
         }
         let meta = SoulMetadata(name: name, avatar: avatar, style: style, lang: lang, icon: icon)
         let file = SoulFile(metadata: meta, body: bodyText)
@@ -574,7 +574,7 @@ final class SoulEditorState {
         pendingAvatarExtension = nil
         isAvatarRemoved = false
         draftAvatarImage = soulStore.cachedAvatarImage
-        statusMessage = "Saved to SOUL.md."
+        statusMessage = String(localized: "Saved to SOUL.md.")
     }
 
     func requestReload(from soulStore: SoulStore) {
@@ -606,9 +606,9 @@ final class SoulEditorState {
             pendingAvatarExtension = nil
             isAvatarRemoved = false
             draftAvatarImage = soulStore.cachedAvatarImage
-            statusMessage = "Reloaded from disk."
+            statusMessage = String(localized: "Reloaded from disk.")
         } catch {
-            statusMessage = "Reload failed: \(error.localizedDescription)"
+            statusMessage = String(localized: "Reload failed: \(error.localizedDescription)")
         }
     }
 
@@ -636,10 +636,10 @@ final class SoulEditorState {
             pendingAvatarExtension = nil
             isAvatarRemoved = false
             draftAvatarImage = nil
-            statusMessage = "Restored default personality."
+            statusMessage = String(localized: "Restored default personality.")
             isShowingRestoreConfirmation = false
         } catch {
-            statusMessage = "Restore failed: \(error.localizedDescription)"
+            statusMessage = String(localized: "Restore failed: \(error.localizedDescription)")
             isShowingRestoreConfirmation = false
             throw error
         }

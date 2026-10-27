@@ -64,10 +64,10 @@ enum ProviderCredentialStorageError: LocalizedError {
     case invalidSchema, invalidRecord, concurrentIdentityChange, credentialMissing
     var errorDescription: String? {
         switch self {
-        case .invalidSchema: "Credential storage has an unsupported or damaged format. Original secrets were preserved."
-        case .invalidRecord: "The credential record is damaged. Original secrets were preserved."
-        case .concurrentIdentityChange: "Authentication changed while the request was running. Its result was discarded."
-        case .credentialMissing: "The selected authentication identity has no credential."
+        case .invalidSchema: String(localized: "Credential storage has an unsupported or damaged format. Original secrets were preserved.")
+        case .invalidRecord: String(localized: "The credential record is damaged. Original secrets were preserved.")
+        case .concurrentIdentityChange: String(localized: "Authentication changed while the request was running. Its result was discarded.")
+        case .credentialMissing: String(localized: "The selected authentication identity has no credential.")
         }
     }
 }

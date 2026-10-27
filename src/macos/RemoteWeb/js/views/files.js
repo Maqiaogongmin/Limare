@@ -1,18 +1,19 @@
 import { h, clear, icon, formatBytes } from '../dom.js';
 import { fillMarkdown, loadMarkdown } from '../markdown.js';
+import { t } from '../i18n.js';
 
 // The files a message shows, as the Mac's FileArtifactCard does, and their preview. What a file
 // previews as is the Mac's decision (`file.preview`, from FilePreviewClassifier); this page only
 // renders each kind. A file the Mac does not preview is saved: the phone then handles it as the
 // Mac's default app would.
 
-const TYPE = { markdown: 'Markdown', text: '文本', code: '代码', image: '图片', pdf: 'PDF', html: 'HTML' };
+const TYPE = { markdown: 'Markdown', text: t('Text'), code: t('Code'), image: t('Image'), pdf: 'PDF', html: 'HTML' };
 
 function typeName(file) {
   if (file.preview === 'code' && file.language) return file.language;
   if (file.preview) return TYPE[file.preview];
   const ext = file.filename.includes('.') ? file.filename.split('.').pop().toUpperCase() : '';
-  return ext ? `${ext} 文件` : '文件';
+  return ext ? t('%@ File', ext) : t('File');
 }
 
 function subtitle(file) {
@@ -28,9 +29,9 @@ export function fileCard(file) {
   ];
   if (!file.preview) {
     const card = h('button', { class: 'file-card', type: 'button' }, body);
-    const text = { preparing: '准备中…', tapAgain: '已准备好，再点一次保存' };
+    const text = { preparing: t('Preparing…'), tapAgain: t('Ready; tap again to save') };
     card.addEventListener('click', saver(file, (state, message) => {
-      detail.textContent = state === 'failed' ? `无法保存：${message}` : text[state] ?? subtitle(file);
+      detail.textContent = state === 'failed' ? t("Couldn't save: %@", message) : text[state] ?? subtitle(file);
     }));
     return card;
   }
@@ -64,7 +65,7 @@ function saver(file, status) {
     let fetched;
     try {
       const response = await fetch(file.url, { credentials: 'same-origin' });
-      if (!response.ok) throw new Error(response.status === 404 ? '文件已不在了' : `HTTP ${response.status}`);
+      if (!response.ok) throw new Error(response.status === 404 ? t('The file is gone') : `HTTP ${response.status}`);
       const blob = await response.blob();
       fetched = new File([blob], file.filename, { type: blob.type || 'application/octet-stream' });
     } catch (error) {
@@ -132,12 +133,12 @@ function openViewer(file) {
   }
   const content = h('div', { class: 'viewer-body' });
   const close = () => history.back();
-  const save = h('button', { class: 'small', type: 'button' }, '保存');
-  const label = { preparing: '准备中…', tapAgain: '再点保存', failed: '重试' };
-  save.addEventListener('click', saver(file, (state) => { save.textContent = label[state] ?? '保存'; }));
+  const save = h('button', { class: 'small', type: 'button' }, t('Save'));
+  const label = { preparing: t('Preparing…'), tapAgain: t('Tap to Save'), failed: t('Retry') };
+  save.addEventListener('click', saver(file, (state) => { save.textContent = label[state] ?? t('Save'); }));
   layer.replaceChildren(h('div', { class: 'viewer', role: 'dialog', 'aria-modal': 'true', 'aria-label': file.filename },
     h('div', { class: 'viewer-head' },
-      h('button', { class: 'icon-button', type: 'button', 'aria-label': '关闭', onclick: close }, icon('close', 20)),
+      h('button', { class: 'icon-button', type: 'button', 'aria-label': t('Close'), onclick: close }, icon('close', 20)),
       h('span', { class: 'viewer-title' }, h('span', { class: 'file-name' }, file.filename), h('span', { class: 'file-detail' }, subtitle(file))),
       save),
     content));
@@ -163,15 +164,15 @@ async function fill(content, file) {
     content.append(h('iframe', { class: 'viewer-frame', src: file.url, title: file.filename }));
     return;
   }
-  content.append(h('div', { class: 'viewer-status' }, '正在载入…'));
+  content.append(h('div', { class: 'viewer-status' }, t('Loading…')));
   let text;
   try {
     const response = await fetch(file.url, { credentials: 'same-origin' });
-    if (!response.ok) throw new Error(response.status === 404 ? '文件已不在了' : `HTTP ${response.status}`);
+    if (!response.ok) throw new Error(response.status === 404 ? t('The file is gone') : `HTTP ${response.status}`);
     text = await response.text();
     if (file.preview === 'markdown') await loadMarkdown();
   } catch (error) {
-    content.replaceChildren(h('div', { class: 'viewer-status' }, `无法预览：${error.message}`));
+    content.replaceChildren(h('div', { class: 'viewer-status' }, t("Couldn't preview: %@", error.message)));
     return;
   }
   if (file.preview === 'markdown') {

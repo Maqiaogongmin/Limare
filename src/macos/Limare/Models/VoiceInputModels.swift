@@ -42,31 +42,31 @@ public enum VoiceInputError: LocalizedError, Equatable, Sendable {
     public var errorDescription: String? {
         switch self {
         case .emptyAudio:
-            return "No audio was recorded."
+            return String(localized: "No audio was recorded.")
         case .audioTooShort(let duration):
             return String(format: "Audio recording was too short (%.2fs). Please speak longer.", duration)
         case .audioTooLong(let duration):
             return String(format: "Audio recording exceeded maximum limit of %.0fs.", duration)
         case .audioTooLarge(let bytes):
-            return "Audio recording exceeded maximum size limit (\(bytes) bytes)."
+            return String(localized: "Audio recording exceeded maximum size limit (\(bytes) bytes).")
         case .recordingFailed(let reason):
-            return "Microphone recording failed: \(reason)"
+            return String(localized: "Microphone recording failed: \(reason)")
         case .systemSpeechPermissionDenied:
-            return "Speech recognition permission was denied. Please enable it in macOS System Settings."
+            return String(localized: "Speech recognition permission was denied. Please enable it in macOS System Settings.")
         case .systemSpeechRestricted:
-            return "Speech recognition is restricted on this device."
+            return String(localized: "Speech recognition is restricted on this device.")
         case .systemSpeechUnavailable(let reason):
-            return "System speech recognizer is unavailable: \(reason)"
+            return String(localized: "System speech recognizer is unavailable: \(reason)")
         case .systemSpeechRecognitionFailed(let reason):
-            return "System speech recognition failed: \(reason)"
+            return String(localized: "System speech recognition failed: \(reason)")
         case .transcriptionFailed(let reason):
-            return "Voice transcription failed: \(reason)"
+            return String(localized: "Voice transcription failed: \(reason)")
         case .networkError(let reason):
-            return "Network error during voice transcription: \(reason)"
+            return String(localized: "Network error during voice transcription: \(reason)")
         case .emptyTranscription:
-            return "No speech was recognized."
+            return String(localized: "No speech was recognized.")
         case .cancelled:
-            return "Voice transcription was cancelled."
+            return String(localized: "Voice transcription was cancelled.")
         }
     }
 }

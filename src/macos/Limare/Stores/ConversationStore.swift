@@ -439,8 +439,12 @@ final class ConversationStore {
         try? persistence.saveConversation(conversations[index])
     }
 
+    /// Archiving stops the conversation's run, as Codex shuts a thread down when it is archived:
+    /// an archived conversation is out of every list (Mac sidebar, phone), so a run left going
+    /// there could wait on an approval or question no one can reach. Queued messages stay held.
     func archiveConversation(id: UUID) {
         guard let index = conversations.firstIndex(where: { $0.id == id }) else { return }
+        runCoordinator?.stop(conversationID: id)
         conversations[index].archivedAt = Date()
         conversations[index].updatedAt = Date()
         try? persistence.saveConversation(conversations[index])
@@ -706,7 +710,7 @@ final class ConversationStore {
     @discardableResult
     func newProject(name: String, workspace: WorkspaceConfiguration? = nil) -> ProjectRecord {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let projectName = trimmed.isEmpty ? "New Project" : trimmed
+        let projectName = trimmed.isEmpty ? String(localized: "New Project") : trimmed
         let project = ProjectRecord(name: projectName, workspace: workspace)
         projects.insert(project, at: 0)
         expandedProjectIDs.insert(project.id)
@@ -750,6 +754,7 @@ final class ConversationStore {
     func archiveProjectConversations(id: UUID) {
         var anyArchived = false
         for index in conversations.indices where conversations[index].projectID == id && !conversations[index].isNativeDelegationChild && !conversations[index].isArchived {
+            runCoordinator?.stop(conversationID: conversations[index].id)  // as archiveConversation
             conversations[index].archivedAt = Date()
             conversations[index].updatedAt = Date()
             try? persistence.saveConversation(conversations[index])

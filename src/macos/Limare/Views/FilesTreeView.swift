@@ -100,7 +100,7 @@ public struct FilesTreeView: View {
     }
 
     private var workspaceTitle: String {
-        guard let rootURL = tree.rootURL else { return "Workspace" }
+        guard let rootURL = tree.rootURL else { return String(localized: "Workspace") }
         if let conversation = window.conversation,
            let project = appState.conversations.project(for: conversation),
            project.workspace?.url.standardizedFileURL == rootURL.standardizedFileURL {
@@ -109,7 +109,7 @@ public struct FilesTreeView: View {
         let name = rootURL.lastPathComponent
         if let conversation = window.conversation,
            name.caseInsensitiveCompare(conversation.id.uuidString) == .orderedSame {
-            return conversation.title
+            return conversation.displayTitle
         }
         return name
     }

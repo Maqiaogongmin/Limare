@@ -95,7 +95,7 @@ final class WindowSession: Identifiable {
                     owner: .user
                 )
                 workSurface.additionalBrowsers[key] = tab
-                workSurface.open(kind: .browser, contentID: key, title: "Browser")
+                workSurface.open(kind: .browser, contentID: key, title: String(localized: "Browser"))
             }
         } else {
             openFilesTree()

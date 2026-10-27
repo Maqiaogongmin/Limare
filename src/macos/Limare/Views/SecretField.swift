@@ -93,10 +93,10 @@ struct SecretField: View {
     var identity: AnyHashable? = nil
     let hasStoredSecret: Bool
     @Binding var replacementSecret: String?
-    var placeholder: String = "Enter API Key"
+    var placeholder: String = String(localized: "Enter API Key")
     var storedMask: String = "••••••••••••••••"
     /// What the secret is called in the status line.
-    var secretName: String = "API Key"
+    var secretName: String = String(localized: "API Key")
     var onReveal: (() async throws -> String)?
 
     @State private var isReplacing = false
@@ -274,7 +274,7 @@ struct SecretField: View {
                     // Ignored on cancellation
                 } catch {
                     guard self.identity == currentID else { return }
-                    self.revealError = "Failed to reveal secret: \(error.localizedDescription)"
+                    self.revealError = String(localized: "Failed to reveal secret: \(error.localizedDescription)")
                 }
                 guard self.identity == currentID else { return }
                 self.isRevealing = false

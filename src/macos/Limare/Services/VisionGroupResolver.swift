@@ -41,7 +41,7 @@ enum VisionError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .notConfigured:
-            return "No vision-capable model is available in the configured Vision Group."
+            return String(localized: "No vision-capable model is available in the configured Vision Group.")
         case .allCandidatesFailed(let detail):
             return detail
         }

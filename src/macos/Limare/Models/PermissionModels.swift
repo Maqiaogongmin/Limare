@@ -7,20 +7,20 @@ enum PermissionMode: String, CaseIterable, Codable, Sendable {
 
     var displayName: String {
         switch self {
-        case .requestApproval: "Ask for approval"
-        case .helpMeApprove: "Approve for me"
-        case .fullAccess: "Full access"
+        case .requestApproval: String(localized: "Ask for approval")
+        case .helpMeApprove: String(localized: "Approve for me")
+        case .fullAccess: String(localized: "Full access")
         }
     }
 
     var detail: String {
         switch self {
         case .requestApproval:
-            "Shell commands run in a sandbox without asking: they read and use the network, but write only in the Workspace and temp. Asks you before a command runs outside the sandbox or a file tool reaches outside the Workspace."
+            String(localized: "Shell commands run in a sandbox without asking: they read and use the network, but write only in the Workspace and temp. Asks you before a command runs outside the sandbox or a file tool reaches outside the Workspace.")
         case .helpMeApprove:
-            "The same sandbox. Requests that need more access are reviewed automatically."
+            String(localized: "The same sandbox. Requests that need more access are reviewed automatically.")
         case .fullAccess:
-            "Runs commands outside the sandbox and reaches files outside the Workspace without approval."
+            String(localized: "Runs commands outside the sandbox and reaches files outside the Workspace without approval.")
         }
     }
 }

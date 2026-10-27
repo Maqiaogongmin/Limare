@@ -18,11 +18,11 @@ enum ProviderOperationState: Equatable, Sendable {
     var label: String {
         switch self {
         case .idle: ""
-        case .saving: "Saving settings…"
-        case .connecting: "Connecting to provider…"
-        case .fetchingModels: "Discovering models…"
-        case .refreshingModels: "Refreshing models…"
-        case .authenticating: "Waiting for browser authorization…"
+        case .saving: String(localized: "Saving settings…")
+        case .connecting: String(localized: "Connecting to provider…")
+        case .fetchingModels: String(localized: "Discovering models…")
+        case .refreshingModels: String(localized: "Refreshing models…")
+        case .authenticating: String(localized: "Waiting for browser authorization…")
         }
     }
 }
@@ -144,7 +144,7 @@ final class ProviderSettingsState {
                 self.draft = result
                 self.isNew = false
                 self.selection = result.id
-                self.userStatusMessage = "Account authorized. Fetch models to choose one."
+                self.userStatusMessage = String(localized: "Account authorized. Fetch models to choose one.")
                 self.activeOperation = .idle
             } catch {
                 guard let self, !Task.isCancelled, self.currentOpToken == token else { return }
@@ -158,7 +158,7 @@ final class ProviderSettingsState {
         do {
             try store.logout(providerID: draft.id, selection: draft.authenticationSelection)
             draft.hasStoredSecret = false
-            userStatusMessage = "This authentication identity was disconnected. Other credentials were preserved."
+            userStatusMessage = String(localized: "This authentication identity was disconnected. Other credentials were preserved.")
         } catch { userError = UserFacingError(explanation: error.localizedDescription) }
     }
 
@@ -184,21 +184,21 @@ final class ProviderSettingsState {
         for row in headerRows {
             let trimmed = row.name.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty {
-                return "Header name cannot be empty."
+                return String(localized: "Header name cannot be empty.")
             }
             if trimmed.unicodeScalars.contains(where: { $0 == "\n" || $0 == "\r" || $0 == ":" }) {
-                return "Header name '\(trimmed)' contains illegal characters (colons or newlines)."
+                return String(localized: "Header name '\(trimmed)' contains illegal characters (colons or newlines).")
             }
             if ProviderRequestConfigurator.isReservedHeader(trimmed) && !row.isLegacyReserved {
-                return "'\(trimmed)' is a reserved header name managed by Harness."
+                return String(localized: "'\(trimmed)' is a reserved header name managed by Harness.")
             }
             let lower = trimmed.lowercased()
             if seen.contains(lower) {
-                return "Duplicate header name '\(trimmed)'."
+                return String(localized: "Duplicate header name '\(trimmed)'.")
             }
             seen.insert(lower)
             if row.value.unicodeScalars.contains(where: { $0 == "\n" || $0 == "\r" }) {
-                return "Header value for '\(trimmed)' contains newlines."
+                return String(localized: "Header value for '\(trimmed)' contains newlines.")
             }
         }
         return nil
@@ -207,7 +207,7 @@ final class ProviderSettingsState {
     var legacyReservedWarning: String? {
         let legacyNames = headerRows.filter { $0.isLegacyReserved && ProviderRequestConfigurator.isReservedHeader($0.name) }.map { $0.name }
         if !legacyNames.isEmpty {
-            return "Legacy reserved headers present (\(legacyNames.joined(separator: ", "))). Handled according to system precedence."
+            return String(localized: "Legacy reserved headers present (\(legacyNames.joined(separator: ", "))). Handled according to system precedence.")
         }
         return nil
     }
@@ -287,8 +287,8 @@ final class ProviderSettingsState {
         } catch {
             // Case A: Save failure
             self.userError = UserFacingError(
-                explanation: "Provider settings could not be saved.",
-                recommendedAction: "Check that the Provider name and Base URL are valid, and try saving again.",
+                explanation: String(localized: "Provider settings could not be saved."),
+                recommendedAction: String(localized: "Check that the Provider name and Base URL are valid, and try saving again."),
                 technicalDetails: error.localizedDescription
             )
             self.activeOperation = .idle
@@ -324,10 +324,10 @@ final class ProviderSettingsState {
                 try? store.save(updated, apiKey: nil)
 
                 self.userStatusMessage = models.isEmpty
-                    ? "Provider connected. The models endpoint returned no model IDs."
-                    : "Provider connected and \(models.count) models discovered."
-                if updated.providerIdentity == .kimiCode { self.userStatusMessage = "Loaded four official Kimi models (2026-10-08). Account access requires Quick Test; catalog loading does not verify it." }
-                if updated.lastDiscovery?.completeness?.isComplete == false { self.userStatusMessage = "The provider list may be incomplete. Existing models and settings were preserved." }
+                    ? String(localized: "Provider connected. The models endpoint returned no model IDs.")
+                    : String(localized: "Provider connected and \(models.count) models discovered.")
+                if updated.providerIdentity == .kimiCode { self.userStatusMessage = String(localized: "Loaded four official Kimi models (2026-10-08). Account access requires Quick Test; catalog loading does not verify it.") }
+                if updated.lastDiscovery?.completeness?.isComplete == false { self.userStatusMessage = String(localized: "The provider list may be incomplete. Existing models and settings were preserved.") }
                 self.activeOperation = .idle
             } catch is CancellationError {
                 return
@@ -338,8 +338,8 @@ final class ProviderSettingsState {
                 // Case B: Save succeeded, but model discovery failed
                 self.discoveryStatus = .failed(message: error.localizedDescription)
                 self.userError = UserFacingError(
-                    explanation: "Provider settings were saved, but models could not be discovered.",
-                    recommendedAction: "Check your endpoint URL, authentication mode, or network connection. You can retry discovery or add models manually.",
+                    explanation: String(localized: "Provider settings were saved, but models could not be discovered."),
+                    recommendedAction: String(localized: "Check your endpoint URL, authentication mode, or network connection. You can retry discovery or add models manually."),
                     technicalDetails: error.localizedDescription
                 )
                 self.activeOperation = .idle
@@ -366,12 +366,12 @@ final class ProviderSettingsState {
                 draft.models = saved.models
             }
             draft.hasStoredSecret = store.hasStoredAPIKey(providerID: providerSnapshot.id)
-            userStatusMessage = "Provider settings saved."
+            userStatusMessage = String(localized: "Provider settings saved.")
         } catch {
             draft.hasStoredSecret = store.hasStoredAPIKey(providerID: draft.id)
             userError = UserFacingError(
-                explanation: "Failed to save provider settings.",
-                recommendedAction: "Verify required fields and try saving again.",
+                explanation: String(localized: "Failed to save provider settings."),
+                recommendedAction: String(localized: "Verify required fields and try saving again."),
                 technicalDetails: error.localizedDescription
             )
         }
@@ -414,10 +414,10 @@ final class ProviderSettingsState {
                 }
                 self.draft.hasStoredSecret = store.hasStoredAPIKey(providerID: targetID)
                 self.userStatusMessage = models.isEmpty
-                    ? "The models endpoint returned no model IDs."
-                    : "Fetched and enriched \(models.count) models."
-                if updated.providerIdentity == .kimiCode { self.userStatusMessage = "Loaded four official Kimi models (2026-10-08). Account access requires Quick Test; catalog loading does not verify it." }
-                if updated.lastDiscovery?.completeness?.isComplete == false { self.userStatusMessage = "The provider list may be incomplete. Existing models and settings were preserved." }
+                    ? String(localized: "The models endpoint returned no model IDs.")
+                    : String(localized: "Fetched and enriched \(models.count) models.")
+                if updated.providerIdentity == .kimiCode { self.userStatusMessage = String(localized: "Loaded four official Kimi models (2026-10-08). Account access requires Quick Test; catalog loading does not verify it.") }
+                if updated.lastDiscovery?.completeness?.isComplete == false { self.userStatusMessage = String(localized: "The provider list may be incomplete. Existing models and settings were preserved.") }
                 self.activeOperation = .idle
             } catch is CancellationError {
                 return
@@ -428,8 +428,8 @@ final class ProviderSettingsState {
                 self.draft.hasStoredSecret = store.hasStoredAPIKey(providerID: targetID)
                 self.discoveryStatus = .failed(message: error.localizedDescription)
                 self.userError = UserFacingError(
-                    explanation: "Failed to refresh models.",
-                    recommendedAction: "Check your connection or API Key and try again.",
+                    explanation: String(localized: "Failed to refresh models."),
+                    recommendedAction: String(localized: "Check your connection or API Key and try again."),
                     technicalDetails: error.localizedDescription
                 )
                 self.activeOperation = .idle
@@ -490,8 +490,8 @@ final class ProviderSettingsState {
             loadSelection(store: store)
         } catch {
             userError = UserFacingError(
-                explanation: "Failed to delete provider.",
-                recommendedAction: "Try again or check permissions.",
+                explanation: String(localized: "Failed to delete provider."),
+                recommendedAction: String(localized: "Try again or check permissions."),
                 technicalDetails: error.localizedDescription
             )
         }

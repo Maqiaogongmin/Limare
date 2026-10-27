@@ -97,7 +97,7 @@ struct ApprovalElsewhereNotice: View {
     }
 
     private func title(of conversationID: UUID) -> String {
-        appState.conversations.conversations.first { $0.id == conversationID }?.title ?? "Another conversation"
+        appState.conversations.conversations.first { $0.id == conversationID }?.displayTitle ?? String(localized: "Another conversation")
     }
 }
 
@@ -242,7 +242,7 @@ struct ApprovalCardContainer<Content: View>: View {
 }
 
 private struct ApprovalDetailRow<Value: View>: View {
-    let label: String
+    let label: LocalizedStringKey
     @ViewBuilder let value: Value
 
     var body: some View {

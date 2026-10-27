@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Browser Work Surface content view displaying the active conversation's `WKWebView`
 /// with compact human navigation controls, ownership affordance, and quiet empty state.
+/// A conversation with several tabs shows them in a row under the controls.
 public struct BrowserSurfaceView: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowSession.self) private var window
@@ -29,7 +30,14 @@ public struct BrowserSurfaceView: View {
             return session
         }
         guard let id = window.conversationID else { return nil }
-        return appState.browser.tab(for: id)
+        return appState.browser.shownTab(for: id)
+    }
+
+    /// The conversation's tabs, when it has several; a browser the user opened beside it has one.
+    private var conversationTabs: [BrowserTab] {
+        guard session == nil, let id = window.conversationID else { return [] }
+        let tabs = appState.browser.tabs(for: id)
+        return tabs.count > 1 ? tabs : []
     }
 
     public var body: some View {
@@ -37,6 +45,10 @@ public struct BrowserSurfaceView: View {
         let tab = currentTab
         VStack(spacing: 0) {
             navigationRow(store: store, tab: tab)
+            let tabs = conversationTabs
+            if !tabs.isEmpty {
+                tabRow(store: store, tabs: tabs, shown: tab)
+            }
             Divider()
 
             if let tab, tab.hasSession {
@@ -156,6 +168,21 @@ public struct BrowserSurfaceView: View {
                 .help("Open in Default Browser")
                 .accessibilityLabel("Open in Default Browser")
 
+                // New tab, for the person; the agent's current tab stays where it is.
+                if session == nil, tab != nil {
+                    Button {
+                        openNewTab(store: store)
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 12, weight: .semibold))
+                            .frame(width: AppControlHeight.iconSmall, height: AppControlHeight.iconSmall)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .help("New Tab")
+                    .accessibilityLabel("New Tab")
+                }
+
                 if tab?.isLoading == true {
                     ProgressView()
                         .controlSize(.small)
@@ -223,6 +250,59 @@ public struct BrowserSurfaceView: View {
                 urlInput = newURL
             }
         }
+        // Another tab shown: its address, blank for a new tab.
+        .onChange(of: tab?.id) { _, _ in
+            urlInput = tab?.currentURL ?? ""
+            validationErrorMessage = nil
+        }
+    }
+
+    // MARK: - Tab Row
+
+    private func tabRow(store: BrowserSessionStore, tabs: [BrowserTab], shown: BrowserTab?) -> some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: AppSpacing.xxSmall) {
+                    ForEach(tabs) { item in
+                        WorkSurfaceTabItemView(
+                            title: Self.title(of: item),
+                            systemImage: item.owner == .user ? "hand.raised" : "globe",
+                            isActive: item === shown,
+                            onSelect: { store.show(item) },
+                            onClose: { store.closeByUser(item) }
+                        )
+                        .id(item.id)
+                    }
+                }
+            }
+            .onAppear { if let shown { proxy.scrollTo(shown.id) } }
+            .onChange(of: shown?.id) { _, id in
+                guard let id else { return }
+                withAnimation(AppMotion.resolved(AppMotion.quick)) { proxy.scrollTo(id) }
+            }
+        }
+        .padding(.horizontal, AppSpacing.standard)
+        .padding(.bottom, AppSpacing.xSmall)
+    }
+
+    /// A tab's page title, else its host, else "New Tab".
+    private static func title(of tab: BrowserTab) -> String {
+        let title = tab.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !title.isEmpty { return title }
+        if let host = URL(string: tab.currentURL)?.host(), !host.isEmpty { return host }
+        return String(localized: "New Tab")
+    }
+
+    private func openNewTab(store: BrowserSessionStore) {
+        guard let convID = activeConversationID else { return }
+        do {
+            try store.openTab(for: convID, owner: .user, makesCurrent: false)
+            capacityNotice = nil
+            urlInput = ""
+            isURLFieldFocused = true
+        } catch {
+            capacityNotice = String(localized: "Browser tabs are full; try again when other conversations finish")
+        }
     }
 
     private func submitURL(store: BrowserSessionStore, tab: BrowserTab?) {
@@ -248,7 +328,7 @@ public struct BrowserSurfaceView: View {
                     isURLFieldFocused = false
                     isEditingURL = false
                 } catch {
-                    capacityNotice = "浏览器标签已满，等其他对话结束后再试"
+                    capacityNotice = String(localized: "Browser tabs are full; try again when other conversations finish")
                 }
             }
         case .invalid(let msg):

@@ -135,7 +135,7 @@ final class VoiceOutputResolver {
                         text: chunk
                     )
                 case .protocolUnsupported:
-                    throw VoiceOutputError.synthesisFailed("Protocol unsupported")
+                    throw VoiceOutputError.synthesisFailed(String(localized: "Protocol unsupported"))
                 }
                 try audioValidator.validate(data)
                 return data

@@ -65,7 +65,7 @@ struct ArchivedConversationsSettingsView: View {
             case .standalone: guard group.project == nil else { return nil }
             case .project(let id): guard group.project?.id == id else { return nil }
             }
-            let rows = query.isEmpty ? group.conversations : group.conversations.filter { $0.title.localizedCaseInsensitiveContains(query) }
+            let rows = query.isEmpty ? group.conversations : group.conversations.filter { $0.displayTitle.localizedCaseInsensitiveContains(query) }
             return rows.isEmpty ? nil : ArchiveGroup(project: group.project, conversations: rows)
         }
     }
@@ -119,7 +119,7 @@ struct ArchivedConversationsSettingsView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: { conv in
-            Text("This action cannot be undone. All messages in '\(conv.title)' will be permanently deleted.")
+            Text("This action cannot be undone. All messages in '\(conv.displayTitle)' will be permanently deleted.")
         }
         .confirmationDialog(
             "Delete all archived conversations?",
@@ -205,16 +205,16 @@ struct ArchivedConversationsSettingsView: View {
         let groups = allGroups
         let filter = effectiveFilter
         let label: String = switch filter {
-        case .all: "All Projects"
-        case .standalone: "Standalone"
-        case .project(let id): groups.first { $0.project?.id == id }?.project?.name ?? "All Projects"
+        case .all: String(localized: "All Projects")
+        case .standalone: String(localized: "Standalone")
+        case .project(let id): groups.first { $0.project?.id == id }?.project?.name ?? String(localized: "All Projects")
         }
         return Menu {
             filterButton("All Projects", value: .all, current: filter)
             Divider()
             ForEach(groups) { group in
                 if let project = group.project {
-                    filterButton(project.name, value: .project(project.id), current: filter)
+                    filterButton("\(project.name)", value: .project(project.id), current: filter)
                 } else {
                     filterButton("Standalone", value: .standalone, current: filter)
                 }
@@ -247,7 +247,7 @@ struct ArchivedConversationsSettingsView: View {
         .accessibilityIdentifier("archived.projectFilter")
     }
 
-    private func filterButton(_ title: String, value: ProjectFilter, current: ProjectFilter) -> some View {
+    private func filterButton(_ title: LocalizedStringKey, value: ProjectFilter, current: ProjectFilter) -> some View {
         Button {
             projectFilter = value
         } label: {
@@ -265,11 +265,11 @@ struct ArchivedConversationsSettingsView: View {
                 Image(systemName: group.project == nil ? "bubble.left.and.bubble.right" : "folder")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
-                Text(group.project?.name ?? "Standalone")
+                Text(group.project?.name ?? String(localized: "Standalone"))
                     .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
                 Spacer(minLength: AppSpacing.small)
-                Text(group.conversations.count == 1 ? "1 conversation" : "\(group.conversations.count) conversations")
+                Text("\(group.conversations.count) conversations")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
@@ -358,7 +358,7 @@ private struct ArchivedConversationRow: View {
         HStack(spacing: AppSpacing.medium) {
             Button(action: onOpen) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(conversation.title)
+                    Text(conversation.displayTitle)
                         .font(.system(size: 13.5, weight: .medium))
                         .foregroundStyle(Color.primary)
                         .underline(isHoveringTitle, color: Color.primary.opacity(0.3))

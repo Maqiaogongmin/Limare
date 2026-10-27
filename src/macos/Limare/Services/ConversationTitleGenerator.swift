@@ -91,10 +91,10 @@ final class ConversationTitleGenerator {
 
     static func localFallbackTitle(for conversation: ConversationRecord) -> String {
         guard let firstUser = conversation.messages.first(where: { $0.role == .user }) else {
-            return "Image Conversation"
+            return String(localized: "Image Conversation")
         }
         let text = collapseWhitespace(firstUser.content)
-        guard !text.isEmpty else { return "Image Conversation" }
+        guard !text.isEmpty else { return String(localized: "Image Conversation") }
         return boundedTitle(text, maximum: 35)
     }
 

@@ -1,4 +1,5 @@
 import { h, clear } from '../dom.js';
+import { t } from '../i18n.js';
 
 const built = new Map(); // card id → { element, refresh }, kept while the card waits
 
@@ -32,8 +33,8 @@ function build(card, connection) {
   const showHeaders = card.questions.length > 1; // as the Mac: one question needs no chip
   const states = card.questions.map((q, index) => buildQuestion(q, index, card.id, showHeaders, () => refresh()));
 
-  const skip = h('button', { title: '不回答，结束这一轮，等你发消息' }, '跳过');
-  const submit = h('button', { class: 'primary' }, '提交');
+  const skip = h('button', { title: t("Don't answer; end this turn and wait for your message") }, t('Skip'));
+  const submit = h('button', { class: 'primary' }, t('Submit'));
 
   const send = async (payload) => {
     if (busy) return;
@@ -55,7 +56,7 @@ function build(card, connection) {
     for (const s of states) s.setDisabled(busy);
   }
 
-  const element = h('div', { class: 'question-card', role: 'group', 'aria-label': '需要你的决定' },
+  const element = h('div', { class: 'question-card', role: 'group', 'aria-label': t('Needs your decision') },
     h('div', { class: 'questions' }, states.map((s) => s.element)),
     h('div', { class: 'buttons' }, skip, submit));
   return { element, refresh };
@@ -67,7 +68,7 @@ function buildQuestion(q, index, cardID, showHeader, onChange) {
   const type = q.multiSelect ? 'checkbox' : 'radio';
   const optionInputs = q.options.map(() => h('input', { type, name }));
   const otherInput = h('input', { type, name });
-  const otherText = h('textarea', { rows: '2', placeholder: '写下你的回答', hidden: true });
+  const otherText = h('textarea', { rows: '2', placeholder: t('Write your answer'), hidden: true });
 
   const syncOther = () => {
     otherText.hidden = !otherInput.checked;
@@ -89,7 +90,7 @@ function buildQuestion(q, index, cardID, showHeader, onChange) {
     h('h2', {}, q.question),
     h('div', { class: 'options' },
       rows,
-      h('label', { class: 'option' }, otherInput, h('span', { class: 'option-text' }, h('span', { class: 'option-label' }, '其他'))),
+      h('label', { class: 'option' }, otherInput, h('span', { class: 'option-text' }, h('span', { class: 'option-label' }, t('Other')))),
       otherText));
 
   const selectedLabels = () => q.options.filter((_, i) => optionInputs[i].checked).map((o) => o.label);

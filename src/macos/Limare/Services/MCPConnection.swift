@@ -114,7 +114,7 @@ actor MCPConnection {
         let transport: any Transport
         if config.isHTTP {
             guard let urlString = config.url, let endpoint = URL(string: urlString) else {
-                throw MCPTransportError.invalidURL("Invalid server URL.")
+                throw MCPTransportError.invalidURL(String(localized: "Invalid server URL."))
             }
             let session = URLSession(configuration: Self.sessionConfiguration(), delegate: MCPHTTPSessionPolicy(), delegateQueue: nil)
             let headers = config.headers ?? [:]
@@ -157,10 +157,10 @@ actor MCPConnection {
     /// working directory.
     private func spawn(loginPATH: String?) throws -> MCPChildProcess {
         guard let command = config.command?.trimmingCharacters(in: .whitespacesAndNewlines), !command.isEmpty else {
-            throw MCPTransportError.commandNotFound("Command is empty")
+            throw MCPTransportError.commandNotFound(String(localized: "Command is empty"))
         }
         if command.hasPrefix("/") && !FileManager.default.fileExists(atPath: command) {
-            throw MCPTransportError.commandNotFound("Executable not found at path '\(command)'")
+            throw MCPTransportError.commandNotFound(String(localized: "Executable not found at path '\(command)'"))
         }
         let parent = ProcessInfo.processInfo.environment
         var environment = parent.filter { ["PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "TMPDIR"].contains($0.key) || $0.key.hasPrefix("LC_") }
@@ -200,7 +200,7 @@ actor MCPConnection {
             if let exit = child.exitCode {
                 let stderr = child.recentStderr.trimmingCharacters(in: .whitespacesAndNewlines)
                 if exit == 127 || stderr.lowercased().contains("not found") {
-                    return .commandNotFound(stderr.isEmpty ? "Command not found (exit code 127)" : stderr)
+                    return .commandNotFound(stderr.isEmpty ? String(localized: "Command not found (exit code 127)") : stderr)
                 }
                 return .processExited(exitCode: exit, stderr: stderr)
             }

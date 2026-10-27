@@ -13,17 +13,17 @@ enum ProviderStoreError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .nameRequired:
-            "Provider name is required."
+            String(localized: "Provider name is required.")
         case .apiKeyRequired:
-            "API key is required."
+            String(localized: "API key is required.")
         case .apiKeyReplacementRequired:
-            "The saved API key is unavailable. Open Settings → Providers and save it once in Limare private storage."
+            String(localized: "The saved API key is unavailable. Open Settings → Providers and save it once in Limare private storage.")
         case .modelRequired:
-            "Select a model or enter a model ID."
+            String(localized: "Select a model or enter a model ID.")
         case .providerNotFound:
-            "The selected provider no longer exists."
+            String(localized: "The selected provider no longer exists.")
         case .duplicateModelID(let id):
-            "A model with ID '\(id)' already exists in this provider."
+            String(localized: "A model with ID '\(id)' already exists in this provider.")
         case .invalidHeader(let message):
             message
         }
@@ -220,9 +220,9 @@ final class ProviderStore {
         // The OAuth subject is an opaque account ID: it is never shown, so it cannot pass for a secret.
         if let display = slot.providerMetadata["accountDisplay"] { return display }
         if let archive = slot.oauthStateArchive {
-            return ProviderAuthenticationService.accountEmail(archive: archive) ?? "ChatGPT account"
+            return ProviderAuthenticationService.accountEmail(archive: archive) ?? String(localized: "ChatGPT account")
         }
-        return slot.apiKey == nil ? nil : "API Key stored"
+        return slot.apiKey == nil ? nil : String(localized: "API Key stored")
     }
 
     var selectedProvider: ProviderConfiguration? {
@@ -314,16 +314,16 @@ final class ProviderStore {
         var cleanHeaders: [String: String] = [:]
         for (k, v) in validated.extraHeaders {
             let trimmedK = k.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmedK.isEmpty else { throw ProviderStoreError.invalidHeader("Header name cannot be empty.") }
+            guard !trimmedK.isEmpty else { throw ProviderStoreError.invalidHeader(String(localized: "Header name cannot be empty.")) }
             guard !trimmedK.unicodeScalars.contains(where: { $0 == "\n" || $0 == "\r" || $0 == ":" }) else {
-                throw ProviderStoreError.invalidHeader("Header name cannot contain colons or newlines.")
+                throw ProviderStoreError.invalidHeader(String(localized: "Header name cannot contain colons or newlines."))
             }
             guard !v.unicodeScalars.contains(where: { $0 == "\n" || $0 == "\r" }) else {
-                throw ProviderStoreError.invalidHeader("Header value cannot contain newlines.")
+                throw ProviderStoreError.invalidHeader(String(localized: "Header value cannot contain newlines."))
             }
             let duplicateKey = cleanHeaders.keys.first { $0.caseInsensitiveCompare(trimmedK) == .orderedSame }
             if duplicateKey != nil {
-                throw ProviderStoreError.invalidHeader("Duplicate header name '\(trimmedK)'.")
+                throw ProviderStoreError.invalidHeader(String(localized: "Duplicate header name '\(trimmedK)'."))
             }
             cleanHeaders[trimmedK] = v
         }

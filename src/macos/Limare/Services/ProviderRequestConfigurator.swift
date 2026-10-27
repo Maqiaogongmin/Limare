@@ -49,20 +49,20 @@ public enum ProviderRequestConfigurator {
     public static func validateHeaderName(_ name: String) -> String? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
-            return "Header name cannot be empty."
+            return String(localized: "Header name cannot be empty.")
         }
         if trimmed.unicodeScalars.contains(where: { $0 == "\n" || $0 == "\r" || $0 == ":" }) {
-            return "Header name cannot contain colons or newlines."
+            return String(localized: "Header name cannot contain colons or newlines.")
         }
         if isReservedHeader(trimmed) {
-            return "'\(trimmed)' is a reserved header name."
+            return String(localized: "'\(trimmed)' is a reserved header name.")
         }
         return nil
     }
 
     public static func validateHeaderValue(_ value: String) -> String? {
         if value.unicodeScalars.contains(where: { $0 == "\n" || $0 == "\r" }) {
-            return "Header value cannot contain newlines."
+            return String(localized: "Header value cannot contain newlines.")
         }
         return nil
     }

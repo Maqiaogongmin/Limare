@@ -539,7 +539,7 @@ final class ToolExecutor {
 
             let permission = ToolPermissionRequest(
                 toolName: "model_use",
-                summary: "Send delegated text to \(entry.provider.name) / \(entry.model.displayName)",
+                summary: String(localized: "Send delegated text to \(entry.provider.name) / \(entry.model.displayName)"),
                 workspaceURL: workspace.url,
                 affectedURLs: [],
                 requestsNetwork: true,
@@ -595,7 +595,7 @@ final class ToolExecutor {
             }
             let permission = ToolPermissionRequest(
                 toolName: "model_use",
-                summary: "Generate an image with \(entry.provider.name) / \(entry.model.displayName)",
+                summary: String(localized: "Generate an image with \(entry.provider.name) / \(entry.model.displayName)"),
                 workspaceURL: nil,
                 affectedURLs: [],
                 requestsNetwork: true,
@@ -691,8 +691,8 @@ final class ToolExecutor {
             ?? activeConversationIDProvider?() else {
             throw ToolExecutorError.invalidArguments("Browser action requires a conversation identity.")
         }
-        if let refusal = browserSessionStore.preflight(conversationID: convID) {
-            let result = browserSessionStore.evidence(refusal, conversationID: convID)
+        if let refusal = browserSessionStore.preflight(conversationID: convID, action: input.action) {
+            let result = browserSessionStore.evidence(refusal, conversationID: convID, action: input.action)
             onUpdate(.init(state: .failed, approvalState: .notRequired, output: result.jsonContent))
             return .init(content: result.jsonContent, isError: true, approvalState: .notRequired,
                 durationMilliseconds: 0, mechanicalTerminalFact: result.mechanicalTerminalFact)
@@ -715,7 +715,11 @@ final class ToolExecutor {
         case .scroll:
             requestsNetwork = true
             summary = "Scroll \(input.direction?.rawValue ?? "down")"
-        case .getPageInfo, .getText, .getReadable, .findElements, .screenshot, .waitForDomStable:
+        case .newTab where input.url != nil:
+            requestsNetwork = true
+            summary = "Open \(sanitizedBrowserHost(input.url ?? "")) in a new tab"
+        case .getPageInfo, .getText, .getReadable, .findElements, .screenshot, .waitForDomStable,
+             .listTabs, .newTab, .switchTab, .closeTab:
             requestsNetwork = false
             summary = "Browser \(input.action.rawValue)"
         }
@@ -1015,7 +1019,7 @@ final class ToolExecutor {
         let approval = await authorize(
             ToolPermissionRequest(
                 toolName: call.function.name,
-                summary: "List directory contents in \(targetURL.path)",
+                summary: String(localized: "List directory contents in \(targetURL.path)"),
                 workspaceURL: workspace.url,
                 affectedURLs: [targetURL],
                 command: nil,
@@ -1072,7 +1076,7 @@ final class ToolExecutor {
         let approval = await authorize(
             ToolPermissionRequest(
                 toolName: call.function.name,
-                summary: "Search for '\(args.query)' in \(targetURL.path)",
+                summary: String(localized: "Search for '\(args.query)' in \(targetURL.path)"),
                 workspaceURL: workspace.url,
                 affectedURLs: [targetURL],
                 command: nil,
@@ -1396,7 +1400,7 @@ final class ToolExecutor {
 
         let request = ToolPermissionRequest(
             toolName: call.function.name,
-            summary: "Inspect image at \(fileURL.path)",
+            summary: String(localized: "Inspect image at \(fileURL.path)"),
             workspaceURL: workspace.url,
             affectedURLs: [fileURL],
             command: nil,
@@ -1485,7 +1489,7 @@ final class ToolExecutor {
         let isHTTP = mcpStore.servers.first(where: { $0.id == serverID })?.isHTTP ?? false
         let request = ToolPermissionRequest(
             toolName: call.function.name,
-            summary: "Call MCP tool '\(toolName)' on '\(serverID)'",
+            summary: String(localized: "Call MCP tool '\(toolName)' on '\(serverID)'"),
             workspaceURL: workspace.url,
             affectedURLs: [],
             command: nil,
@@ -1695,7 +1699,7 @@ final class ToolExecutor {
             // A local server is a program Limare will run, so its creation is approved like a command.
             let approval = await authorize(ToolPermissionRequest(
                 toolName: "mcp_manage",
-                summary: "Create MCP server '\(serverID)': \(config.transportSummary)",
+                summary: String(localized: "Create MCP server '\(serverID)': \(config.transportSummary)"),
                 workspaceURL: workspace.url,
                 affectedURLs: [],
                 command: config.isSTDIO ? config.transportSummary : nil,
@@ -1718,7 +1722,7 @@ final class ToolExecutor {
             let touchesExecution = patch.set.keys.contains { ["command", "args", "env"].contains($0) }
             let approval = await authorize(ToolPermissionRequest(
                 toolName: "mcp_manage",
-                summary: "Change MCP server '\(serverID)': \((Array(patch.set.keys) + patch.remove.map { "remove \($0)" }).sorted().joined(separator: ", "))",
+                summary: String(localized: "Change MCP server '\(serverID)': \((Array(patch.set.keys) + patch.remove.map { "remove \($0)" }).sorted().joined(separator: ", "))"),
                 workspaceURL: workspace.url,
                 affectedURLs: [],
                 command: nil,
@@ -1864,7 +1868,7 @@ final class ToolExecutor {
             )
             if let raw = args.notify { task.notifyOn = try notify(raw) }
             if let enabled = args.enabled { task.isEnabled = enabled }
-            let approval = await approve("Create scheduled task '\(task.name.isEmpty ? String(prompt.prefix(40)) : task.name)'")
+            let approval = await approve(String(localized: "Create scheduled task '\(task.name.isEmpty ? String(prompt.prefix(40)) : task.name)'"))
             guard approval != .denied else { return deniedOutcome() }
             let created = try scheduler.create(task)
             return completed(["task": scheduleDescription(created, scheduler: scheduler, conversationID: conversationID)], approval: approval)
@@ -1879,21 +1883,21 @@ final class ToolExecutor {
             if let raw = args.target { task.target = try target(raw) }
             if let raw = args.notify { task.notifyOn = try notify(raw) }
             if let enabled = args.enabled { task.isEnabled = enabled }
-            let approval = await approve("Change scheduled task '\(task.name)'")
+            let approval = await approve(String(localized: "Change scheduled task '\(task.name)'"))
             guard approval != .denied else { return deniedOutcome() }
             let updated = try scheduler.update(task)
             return completed(["task": scheduleDescription(updated, scheduler: scheduler, conversationID: conversationID)], approval: approval)
 
         case "delete":
             let task = try existingTask()
-            let approval = await approve("Delete scheduled task '\(task.name)'")
+            let approval = await approve(String(localized: "Delete scheduled task '\(task.name)'"))
             guard approval != .denied else { return deniedOutcome() }
             try scheduler.delete(taskID: task.id)
             return completed(["deleted": task.id.uuidString, "name": task.name], approval: approval)
 
         case "run_now":
             let task = try existingTask()
-            let approval = await approve("Run scheduled task '\(task.name)' now")
+            let approval = await approve(String(localized: "Run scheduled task '\(task.name)' now"))
             guard approval != .denied else { return deniedOutcome() }
             do {
                 try scheduler.runNow(taskID: task.id)
@@ -2262,7 +2266,7 @@ final class ToolExecutor {
         // 4. Authorize via permission system
         let request = ToolPermissionRequest(
             toolName: call.function.name,
-            summary: "Copy attachment to \(candidateURL.path)",
+            summary: String(localized: "Copy attachment to \(candidateURL.path)"),
             workspaceURL: workspace.url,
             affectedURLs: [candidateURL],
             command: nil,
@@ -2641,7 +2645,7 @@ final class ToolExecutor {
 
         let request = ToolPermissionRequest(
             toolName: "artifact_acquire",
-            summary: "Acquire host file at \(fileURL.path) into conversation artifacts",
+            summary: String(localized: "Acquire host file at \(fileURL.path) into conversation artifacts"),
             workspaceURL: workspace.url,
             affectedURLs: [fileURL],
             command: nil,
@@ -2733,7 +2737,7 @@ final class ToolExecutor {
 
         let request = ToolPermissionRequest(
             toolName: "artifact_register",
-            summary: "Register workspace artifact: \(fileURL.lastPathComponent)",
+            summary: String(localized: "Register workspace artifact: \(fileURL.lastPathComponent)"),
             workspaceURL: workspace.url,
             affectedURLs: [fileURL],
             command: nil,

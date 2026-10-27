@@ -505,7 +505,7 @@ final class RemoteSessionHub: RemoteSessionEndpoint {
 
     func receiveUpload(at file: URL, connectionID: UUID) async -> Result<RemoteAttachment, RemoteUploadError> {
         guard mayUpload(connectionID: connectionID), let client = clients[connectionID] else {
-            return .failure(RemoteUploadError(code: "uploadRefused", message: "最多 \(RemoteWire.maxPendingAttachments) 个附件。"))
+            return .failure(RemoteUploadError(code: "uploadRefused", message: String(localized: "At most \(RemoteWire.maxPendingAttachments) attachments.")))
         }
         client.uploadsInProgress += 1
         defer { client.uploadsInProgress -= 1 }
@@ -514,7 +514,7 @@ final class RemoteSessionHub: RemoteSessionEndpoint {
             // The connection may have closed while the file was imported.
             guard clients[connectionID] === client else {
                 attachments.deleteAttachment(attachment)
-                return .failure(RemoteUploadError(code: "disconnected", message: "连接已断开。"))
+                return .failure(RemoteUploadError(code: "disconnected", message: String(localized: "The connection was lost.")))
             }
             client.pendingAttachments.append(attachment)
             logs.info("Remote", "Took in an uploaded \(attachment.kind.rawValue) attachment, \(attachment.byteCount / 1024) KB.")
@@ -603,7 +603,7 @@ final class RemoteSessionHub: RemoteSessionEndpoint {
         var choices: [RemoteModelChoice] = []
         if let modelGroups {
             choices += ModelChoiceCatalog.selectableGroups(modelGroups: modelGroups, providers: providerList)
-                .map { choice(.group(groupID: $0.id), label: $0.name, section: "Model Groups") }
+                .map { choice(.group(groupID: $0.id), label: $0.name, section: String(localized: "Model Groups")) }
         }
         choices += ModelChoiceCatalog.visibleModelEntries(providers: providerList, current: nil)
             .map { choice(.direct(providerID: $0.providerID, modelID: $0.model.id), label: $0.model.displayName, section: $0.providerName) }

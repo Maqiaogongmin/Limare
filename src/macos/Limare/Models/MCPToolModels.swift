@@ -251,27 +251,27 @@ enum MCPTransportError: LocalizedError, Sendable, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .commandNotFound(let cmd): return "Command not found: \(cmd)"
-        case .spawnFailed(let msg): return "Failed to start MCP server process: \(msg)"
-        case .connectionClosed: return "MCP server closed the connection."
+        case .commandNotFound(let cmd): return String(localized: "Command not found: \(cmd)")
+        case .spawnFailed(let msg): return String(localized: "Failed to start MCP server process: \(msg)")
+        case .connectionClosed: return String(localized: "MCP server closed the connection.")
         case .processExited(let code, let stderr):
-            return stderr.isEmpty ? "MCP server process exited with code \(code)." : "MCP server process exited (\(code)): \(stderr)"
-        case .timeout(let sec): return "MCP request timed out after \(sec) seconds."
-        case .protocolError(let code, let msg): return "MCP protocol error (\(code)): \(msg)"
-        case .parseError(let msg): return "Failed to parse MCP message: \(msg)"
-        case .invalidResponse(let msg): return "Invalid MCP response: \(msg)"
-        case .unknownServer(let id): return "Unknown MCP server: \(id)"
-        case .serverDisabled(let id): return "MCP server is disabled: \(id)"
+            return stderr.isEmpty ? String(localized: "MCP server process exited with code \(code).") : String(localized: "MCP server process exited (\(code)): \(stderr)")
+        case .timeout(let sec): return String(localized: "MCP request timed out after \(sec) seconds.")
+        case .protocolError(let code, let msg): return String(localized: "MCP protocol error (\(code)): \(msg)")
+        case .parseError(let msg): return String(localized: "Failed to parse MCP message: \(msg)")
+        case .invalidResponse(let msg): return String(localized: "Invalid MCP response: \(msg)")
+        case .unknownServer(let id): return String(localized: "Unknown MCP server: \(id)")
+        case .serverDisabled(let id): return String(localized: "MCP server is disabled: \(id)")
         case .authenticationRequired(let msg): return msg
         case .signInRequired(let id): return "MCP server '\(id)' requires sign-in. Sign in from Settings → MCP, or ask the agent to run mcp_manage action 'authenticate'."
         case .accessForbidden(let msg): return msg
         case .networkUnreachable(let msg): return msg
-        case .serverError(let code, let msg): return "Remote server error (\(code)): \(msg)"
+        case .serverError(let code, let msg): return String(localized: "Remote server error (\(code)): \(msg)")
         case .toolUnavailable(let serverID, let toolName):
             return "MCP tool '\(toolName)' is not available from the current connected discovery of server '\(serverID)'."
         case .executionFailed(let msg): return msg
-        case .invalidURL(let msg): return "Invalid MCP URL: \(msg)"
-        case .configurationError(let msg): return "MCP configuration error: \(msg)"
+        case .invalidURL(let msg): return String(localized: "Invalid MCP URL: \(msg)")
+        case .configurationError(let msg): return String(localized: "MCP configuration error: \(msg)")
         case .credentialMissing(let id, let names):
             return "MCP server '\(id)' needs \(names.joined(separator: ", ")). Limare asks for it in its own secure prompt (Settings → MCP → Enter Credentials…, or mcp_manage action 'authenticate')."
         }

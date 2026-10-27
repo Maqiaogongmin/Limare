@@ -28,30 +28,30 @@ enum ContextUsagePresenter {
             let value = min(100, max(0, Int(ratio.rounded())))
             percent = value
             headline = "\(value)%"
-            detail = "≈ \(estimate) / \(grouped(budget)) tokens"
+            detail = String(localized: "≈ \(estimate) / \(grouped(budget)) tokens")
             if snapshot.estimatedInputTokens > budget {
-                notice = "超出可用预算：下一次请求会先压缩上下文"
+                notice = String(localized: "Over the available budget: the next request compacts the context first")
             }
         } else {
             percent = nil
-            headline = "窗口未知"
-            detail = "≈ \(estimate) tokens"
+            headline = String(localized: "Window unknown")
+            detail = String(localized: "≈ \(estimate) tokens")
         }
         let provenance: String
         switch snapshot.provenance {
         case .heuristic:
-            provenance = "估算"
+            provenance = String(localized: "Estimated")
         case .calibrated(let factor):
-            provenance = "校准 ×" + factor.formatted(.number.precision(.fractionLength(2)))
+            provenance = String(localized: "Calibrated ×\(factor.formatted(.number.precision(.fractionLength(2))))")
         }
         let source: String
         switch snapshot.origin {
         case .request:
-            source = "来自最近一次请求 · 模型 \(snapshot.modelID)"
+            source = String(localized: "From the latest request · model \(snapshot.modelID)")
         case .preview:
-            source = "下一次请求的预估（尚未发送）· 模型 \(snapshot.modelID)"
+            source = String(localized: "Estimate for the next request (not sent yet) · model \(snapshot.modelID)")
         }
-        let footnote = snapshot.lastActualInputTokens.map { "上次请求实测 \(grouped($0)) tokens" }
+        let footnote = snapshot.lastActualInputTokens.map { String(localized: "Last request measured \(grouped($0)) tokens") }
         return Presentation(
             percent: percent,
             headline: headline,

@@ -39,7 +39,7 @@ struct ConversationRow: View {
                 .font(AppTypography.interfaceSubheadline)
                 .foregroundStyle(iconForegroundStyle)
 
-            Text(conversation.title)
+            Text(conversation.displayTitle)
                 .font(AppTypography.interfaceSubheadline)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -124,7 +124,7 @@ struct ConversationRow: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Are you sure you want to permanently delete '\(conversation.title)'? This action cannot be undone.")
+            Text("Are you sure you want to permanently delete '\(conversation.displayTitle)'? This action cannot be undone.")
         }
     }
 
@@ -140,7 +140,7 @@ struct ConversationRow: View {
         Divider()
 
         Button {
-            renameText = conversation.title
+            renameText = conversation.displayTitle
             isRenaming = true
         } label: {
             Label("Rename", systemImage: "pencil")

@@ -102,27 +102,27 @@ enum ToolCallDetail: Equatable, Sendable {
             return "+\(difference.insertions.count) −\(difference.removals.count)"
         case .write:
             guard let arguments: WriteArguments = decode(record.input) else { return nil }
-            return "\(lines(arguments.content).count) 行"
+            return String(localized: "\(lines(arguments.content).count) lines")
         case .read:
             guard let arguments: ReadArguments = decode(record.input), arguments.offset != nil || arguments.limit != nil,
                   let start = wholeNumber(arguments.offset ?? 1) else { return nil }
-            guard let limit = arguments.limit else { return "第 \(start) 行起" }
+            guard let limit = arguments.limit else { return String(localized: "From line \(start)") }
             guard let count = wholeNumber(limit) else { return nil }
-            return "第 \(start)–\(start + count - 1) 行"
+            return String(localized: "Lines \(start)–\(start + count - 1)")
         case .list:
             guard let output: FileListOutput = decode(record.output) else { return nil }
-            return "\(output.count) 项"
+            return String(localized: "\(output.count) items")
         case .search:
             guard let output: FileSearchOutput = decode(record.output) else { return nil }
-            return "\(output.count) 处"
+            return String(localized: "\(output.count) matches")
         case .plan:
             guard let arguments: PlanArguments = decode(record.input) else { return nil }
-            return "完成 \(arguments.plan.filter { $0.status == "completed" }.count)/\(arguments.plan.count)"
+            return String(localized: "\(arguments.plan.filter { $0.status == "completed" }.count)/\(arguments.plan.count) done")
         case .question:
             switch record.questionResolution {
-            case .answered: return "已回答"
-            case .skipped: return "已跳过"
-            case .superseded: return "未回答"
+            case .answered: return String(localized: "Answered")
+            case .skipped: return String(localized: "Skipped")
+            case .superseded: return String(localized: "Not answered")
             case nil: return nil
             }
         }

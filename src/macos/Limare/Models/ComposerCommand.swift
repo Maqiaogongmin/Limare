@@ -11,7 +11,7 @@ struct ComposerCommand: Identifiable, Equatable, Sendable {
 
     static let compact = ComposerCommand(
         name: "compact",
-        summary: "Summarize the conversation so far, so each request sends less"
+        summary: String(localized: "Summarize the conversation so far, so each request sends less")
     )
 
     static let all: [ComposerCommand] = [compact]

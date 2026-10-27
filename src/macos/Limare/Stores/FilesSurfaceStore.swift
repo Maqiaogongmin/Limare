@@ -429,7 +429,7 @@ public final class FilesSurfaceStore {
         guard FileManager.default.fileExists(atPath: root.path, isDirectory: &isDir), isDir.boolValue else {
             treeNodes = []
             isLoadingTree = false
-            treeErrorMessage = "Workspace is unavailable."
+            treeErrorMessage = String(localized: "Workspace is unavailable.")
             return
         }
 

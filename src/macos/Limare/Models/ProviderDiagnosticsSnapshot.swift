@@ -42,7 +42,7 @@ public struct ProviderDiagnosticsSnapshot: Identifiable, Sendable, Equatable {
         apiKeyAvailable: Bool? = nil
     ) {
         self.providerID = provider.id
-        self.providerName = provider.name.isEmpty ? "Untitled Provider" : provider.name
+        self.providerName = provider.name.isEmpty ? String(localized: "Untitled Provider") : provider.name
         self.providerKind = provider.kind
         self.apiFormat = provider.apiFormat
         self.baseURL = provider.baseURL
@@ -65,7 +65,7 @@ public struct ProviderDiagnosticsSnapshot: Identifiable, Sendable, Equatable {
             ep = url.absoluteString
             isEndpointValid = true
         } catch {
-            ep = provider.baseURL.isEmpty ? "No Base URL" : "\(provider.baseURL) (Invalid)"
+            ep = provider.baseURL.isEmpty ? String(localized: "No Base URL") : String(localized: "\(provider.baseURL) (Invalid)")
             isEndpointValid = false
         }
         self.endpointSummary = ep
@@ -82,7 +82,7 @@ public struct ProviderDiagnosticsSnapshot: Identifiable, Sendable, Equatable {
         self.modelDisplayName = model.displayName
         self.isCustomModel = model.isCustom
         self.isHidden = model.isHidden
-        self.baseMetadataSource = model.baseMetadataSource?.rawValue ?? (model.isCustom ? "Custom" : "Unknown")
+        self.baseMetadataSource = model.baseMetadataSource?.displayName ?? (model.isCustom ? String(localized: "Custom") : String(localized: "Unknown"))
         self.capabilityProvenance = model.capabilityProvenance
         self.hasOverrides = !model.overrides.isEmpty
 

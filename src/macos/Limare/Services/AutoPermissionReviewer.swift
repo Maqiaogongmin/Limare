@@ -39,11 +39,11 @@ final class AutoPermissionReviewer: PermissionReviewing {
         let resolved = staticContext.map { ($0.provider, $0.apiKey, $0.modelID) } ?? providerResolver?()
         guard let (provider, apiKey, modelID) = resolved else {
             logs.info("Permission", "Auto-reviewer: no active provider configured; delegating to human.")
-            return .needsUserReview(reason: "No active model provider configured for auto-review")
+            return .needsUserReview(reason: String(localized: "No active model provider configured for auto-review"))
         }
         guard !apiKey.isEmpty else {
             logs.info("Permission", "Auto-reviewer: active provider lacks API key; delegating to human.")
-            return .needsUserReview(reason: "Active model provider lacks API key for auto-review")
+            return .needsUserReview(reason: String(localized: "Active model provider lacks API key for auto-review"))
         }
 
         let sanitizedBaseURL: String = {
@@ -98,7 +98,7 @@ final class AutoPermissionReviewer: PermissionReviewing {
 
         guard let payloadData = try? JSONSerialization.data(withJSONObject: details, options: [.sortedKeys]),
               let payloadStr = String(data: payloadData, encoding: .utf8) else {
-            return .needsUserReview(reason: "Failed to serialize review payload")
+            return .needsUserReview(reason: String(localized: "Failed to serialize review payload"))
         }
 
         let messages = [
@@ -129,18 +129,18 @@ final class AutoPermissionReviewer: PermissionReviewing {
 
                 group.addTask {
                     try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                    return .needsUserReview(reason: "Auto-review timed out after \(Int(timeout))s")
+                    return .needsUserReview(reason: String(localized: "Auto-review timed out after \(Int(timeout))s"))
                 }
 
                 guard let first = try await group.next() else {
-                    return .needsUserReview(reason: "No response from reviewer")
+                    return .needsUserReview(reason: String(localized: "No response from reviewer"))
                 }
                 group.cancelAll()
                 return first
             }
         } catch {
             logs.info("Permission", "Auto-reviewer call failed with error: \(error.localizedDescription)")
-            return .needsUserReview(reason: "Reviewer error: \(error.localizedDescription)")
+            return .needsUserReview(reason: String(localized: "Reviewer error: \(error.localizedDescription)"))
         }
     }
 
@@ -154,7 +154,7 @@ final class AutoPermissionReviewer: PermissionReviewing {
         guard let data = clean.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let decisionStr = json["decision"] as? String else {
-            return .needsUserReview(reason: "Failed to parse reviewer JSON response")
+            return .needsUserReview(reason: String(localized: "Failed to parse reviewer JSON response"))
         }
         let rationale = (json["rationale"] as? String) ?? "Auto-review completed."
         switch decisionStr.lowercased() {
@@ -165,7 +165,7 @@ final class AutoPermissionReviewer: PermissionReviewing {
         case "user_review":
             return .needsUserReview(reason: rationale)
         default:
-            return .needsUserReview(reason: "Unrecognized decision '\(decisionStr)' from reviewer")
+            return .needsUserReview(reason: String(localized: "Unrecognized decision '\(decisionStr)' from reviewer"))
         }
     }
 }

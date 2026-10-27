@@ -41,11 +41,11 @@ public enum FilePreviewClassifier {
 
         // 7. Explicit Excluded P1/P2 Formats (Must be rejected to unsupported, not text)
         if isExplicitUnsupported(ext: ext) {
-            return .unsupported(reason: "Preview isn’t available for this file type.")
+            return .unsupported(reason: String(localized: "Preview isn’t available for this file type."))
         }
 
         // 8. Conservative Fallback
-        return .unsupported(reason: "Preview isn’t available for this file type.")
+        return .unsupported(reason: String(localized: "Preview isn’t available for this file type."))
     }
 
     private static func codeLanguage(for ext: String, filename: String) -> String? {

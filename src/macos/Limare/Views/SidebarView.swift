@@ -272,7 +272,7 @@ struct SettingsSidebarView: View {
 
     /// A page, drawn as the chat sidebar draws its rows: the selected one on a warm tint in
     /// full-strength semibold text, the others quieter; no system selection blue.
-    private func row(_ title: String, systemImage: String, screen: AppScreen) -> some View {
+    private func row(_ title: LocalizedStringKey, systemImage: String, screen: AppScreen) -> some View {
         SettingsSidebarRow(title: title, systemImage: systemImage, isSelected: selection == screen) {
             selection = screen
         }
@@ -280,7 +280,7 @@ struct SettingsSidebarView: View {
 }
 
 private struct SettingsSidebarRow: View {
-    let title: String
+    let title: LocalizedStringKey
     let systemImage: String
     let isSelected: Bool
     let onSelect: () -> Void

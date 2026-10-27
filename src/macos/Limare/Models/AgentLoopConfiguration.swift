@@ -7,9 +7,9 @@ enum AgentLoopTerminationReason: LocalizedError, Sendable, Equatable {
     var errorDescription: String? {
         switch self {
         case .turnLimitReached(let limit):
-            "Agent reached its configured turn budget of \(limit) turns without finishing. This budget belongs to the agent's own policy, not to a global Harness default."
+            String(localized: "Agent reached its configured turn budget of \(limit) turns without finishing. This budget belongs to the agent's own policy, not to a global Harness default.")
         case .repeatedToolCall(let name, let count):
-            "Agent stopped because tool '\(name)' was repeatedly called with identical arguments \(count) times without progress."
+            String(localized: "Agent stopped because tool '\(name)' was repeatedly called with identical arguments \(count) times without progress.")
         }
     }
 }

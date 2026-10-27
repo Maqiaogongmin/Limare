@@ -425,7 +425,7 @@ final class AppState {
             coordinator?.isActive(conversationID: id) == true
         }
         computerUseActivation.conversationTitle = { [weak conversations] id in
-            conversations?.conversations.first(where: { $0.id == id })?.title
+            conversations?.conversations.first(where: { $0.id == id })?.displayTitle
         }
 
         // Selecting a conversation shows it in the focused window; other windows keep theirs.

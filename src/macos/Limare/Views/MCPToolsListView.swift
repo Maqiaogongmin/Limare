@@ -54,7 +54,7 @@ struct MCPToolsListView: View {
                 Text("Tools: \(serverID)")
                     .font(.headline)
                     .foregroundStyle(AppColors.textPrimary)
-                Text("\(tools.count) \(tools.count == 1 ? "tool" : "tools") provided by this connection")
+                Text("\(tools.count) tools provided by this connection")
                     .font(.caption)
                     .foregroundStyle(AppColors.textSecondary)
             }

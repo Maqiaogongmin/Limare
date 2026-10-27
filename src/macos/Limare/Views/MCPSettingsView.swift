@@ -19,7 +19,7 @@ struct MCPSettingsView: View {
     var body: some View {
         SettingsPage {
             if appState.mcp.authorityState != .ready {
-                InlineStatus(kind: .error, message: appState.mcp.authorityState.message)
+                InlineStatus(kind: .error, message: "\(appState.mcp.authorityState.message)")
             }
             if appState.mcp.authorityState == .recoveryRequired {
                 // Re-runs reconciliation against the durable records; nothing falls back to files.
@@ -32,14 +32,14 @@ struct MCPSettingsView: View {
                     Task {
                         defer { migrationInProgress = false }
                         do { try await appState.mcp.migrateLegacyConfiguration() }
-                        catch { migrationError = "MCP migration did not complete. Original configuration and credentials were preserved." }
+                        catch { migrationError = String(localized: "MCP migration did not complete. Original configuration and credentials were preserved.") }
                     }
                 }
                 .disabled(migrationInProgress)
             }
-            if let migrationError { InlineStatus(kind: .error, message: migrationError) }
+            if let migrationError { InlineStatus(kind: .error, message: "\(migrationError)") }
             if let admissionMessage = appState.mcp.runtimeAdmissionMessage {
-                InlineStatus(kind: .warning, message: admissionMessage)
+                InlineStatus(kind: .warning, message: "\(admissionMessage)")
             }
             // Header / Controls Section
             VStack(alignment: .leading, spacing: AppSpacing.small) {
@@ -103,7 +103,7 @@ struct MCPSettingsView: View {
             } else {
                 SettingsSection(
                     title: "Configured Connections",
-                    description: "\(filteredServers.count) \(filteredServers.count == 1 ? "connection" : "connections") configured"
+                    description: "\(filteredServers.count) connections configured"
                 ) {
                     ForEach(Array(filteredServers.enumerated()), id: \.element.id) { index, server in
                         if index > 0 {
@@ -268,7 +268,7 @@ private struct MCPManagementSheet: View {
     private func authenticate() { perform("authenticate") }
 
     /// The authenticate action's label for this connection, or nil when it takes no credential.
-    private var authenticateTitle: String? {
+    private var authenticateTitle: LocalizedStringKey? {
         if usesOAuth { return "Sign In…" }
         if !server.credentialSlots.isEmpty { return "Replace Credentials…" }
         return nil
@@ -316,7 +316,7 @@ private struct MCPManagementSheet: View {
                     dismiss()
                 } catch {
                     state.pendingDeleteServerID = nil
-                    state.deleteErrorMessage = "Failed to delete server “\(server.id)”: \(error.localizedDescription)"
+                    state.deleteErrorMessage = String(localized: "Failed to delete server “\(server.id)”: \(error.localizedDescription)")
                 }
             }
             Button("Cancel", role: .cancel) {
@@ -336,7 +336,7 @@ private struct MCPManagementSheet: View {
                 state.deleteErrorMessage = nil
             }
         } message: {
-            Text(state.deleteErrorMessage ?? "An unexpected error occurred.")
+            Text(state.deleteErrorMessage ?? String(localized: "An unexpected error occurred."))
         }
     }
 
@@ -382,7 +382,7 @@ private struct MCPManagementSheet: View {
                     // Status Section
                     statusView
                     if let runtimeActionError {
-                        InlineStatus(kind: .error, message: runtimeActionError)
+                        InlineStatus(kind: .error, message: "\(runtimeActionError)")
                     }
 
                     if server.requiresReview {
@@ -392,7 +392,7 @@ private struct MCPManagementSheet: View {
                         ) {
                             Button("Discard Imported Fields") {
                                 do { try appState.mcp.discardQuarantinedFields(serverID: server.id) }
-                                catch { appState.mcp.setServerStatus(.failed(message: "The imported fields could not be discarded.", kind: .credentialStorage), for: server.id) }
+                                catch { appState.mcp.setServerStatus(.failed(message: String(localized: "The imported fields could not be discarded."), kind: .credentialStorage), for: server.id) }
                             }
                         }
                     }
@@ -400,7 +400,7 @@ private struct MCPManagementSheet: View {
                     // Tools Section
                     SettingsSection(
                         title: "Tools",
-                        description: "\(tools.count) \(tools.count == 1 ? "tool" : "tools") discovered"
+                        description: "\(tools.count) tools discovered"
                     ) {
                         HStack {
                             Text(tools.isEmpty ? "No tools available from this server." : "\(tools.count) tools ready for agent execution.")
@@ -503,7 +503,7 @@ private struct MCPManagementSheet: View {
             case .connected(let toolCount):
                 InlineStatus(
                     kind: toolCount == 0 ? .warning : .success,
-                    message: toolCount == 0 ? "Connected · no tools discovered" : "Connected and ready · \(toolCount) \(toolCount == 1 ? "tool" : "tools") available"
+                    message: toolCount == 0 ? "Connected · no tools discovered" : "Connected and ready · \(toolCount) tools available"
                 )
             case .connecting:
                 InlineStatus(
@@ -519,7 +519,7 @@ private struct MCPManagementSheet: View {
                 VStack(alignment: .leading, spacing: AppSpacing.small) {
                     InlineStatus(
                         kind: .warning,
-                        message: appState.mcp.missingCredentials[server.id].map { "This connection needs: \($0.joined(separator: ", "))." }
+                        message: appState.mcp.missingCredentials[server.id].map { "This connection needs: \(ListFormatter.localizedString(byJoining: $0))." }
                             ?? "This connection needs an access token."
                     )
                     Button("Enter Credentials…") { authenticate() }
@@ -548,8 +548,8 @@ private struct MCPManagementSheet: View {
                 let classified = MCPErrorClassifier.details(for: kind, message: message)
                 let retryAuthenticates = kind == .authentication && authenticateTitle != nil
                 ThreeLevelErrorView(
-                    explanation: classified.explanation,
-                    recommendedAction: classified.recommendedAction,
+                    explanation: "\(classified.explanation)",
+                    recommendedAction: "\(classified.recommendedAction)",
                     technicalDetails: classified.technicalDetails,
                     onRetry: {
                         perform(retryAuthenticates ? "authenticate" : "reconnect")

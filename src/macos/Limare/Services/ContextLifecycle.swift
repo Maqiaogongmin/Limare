@@ -1077,29 +1077,29 @@ enum ContextLifecycleError: LocalizedError, Equatable {
         }
     }
 
-    static let recoveryMessage = "Conversation too large for this model. Choose a model with a larger context window or start a new conversation. Your history is saved."
+    static var recoveryMessage: String { String(localized: "Conversation too large for this model. Choose a model with a larger context window or start a new conversation. Your history is saved.") }
 
     var userFacingMessage: String {
         switch self {
         case .protectedContextExhaustion:
-            return "The system instructions and recent protected conversation are too large for this model. Shorten current instructions or recent request, or choose a model with a larger context window."
+            return String(localized: "The system instructions and recent protected conversation are too large for this model. Shorten current instructions or recent request, or choose a model with a larger context window.")
         case .noSafeCompactionBoundary:
-            return "Active or protocol-sensitive context cannot be reduced safely. Complete or resolve the active tool operation or choose a model with a larger context window."
+            return String(localized: "Active or protocol-sensitive context cannot be reduced safely. Complete or resolve the active tool operation or choose a model with a larger context window.")
         case .recoveryExhaustion:
-            return "Conversation context reduction was attempted but could not fit this model. Choose a model with a larger context window or start a new conversation. Your history is saved."
+            return String(localized: "Conversation context reduction was attempted but could not fit this model. Choose a model with a larger context window or start a new conversation. Your history is saved.")
         case .derivedStatePersistenceFailure(let reason):
             let clean = SecretMasker.redactCredentials(reason)
-            return "Context state could not be saved locally: \(clean). Check disk space or storage permissions. Your conversation history remains saved."
+            return String(localized: "Context state could not be saved locally: \(clean). Check disk space or storage permissions. Your conversation history remains saved.")
         case .recentContextExceedsBudget:
             return Self.recoveryMessage
         case .emptySummary:
-            return "Context compaction could not produce a durable summary."
+            return String(localized: "Context compaction could not produce a durable summary.")
         case .commitAuthorityRevoked:
-            return "Context compaction derived-state commit rejected: mutation authority invalid or revoked."
+            return String(localized: "Context compaction derived-state commit rejected: mutation authority invalid or revoked.")
         case .sourceMutatedDuringPlanning:
-            return "Context planning aborted: canonical conversation source mutated repeatedly."
+            return String(localized: "Context planning aborted: canonical conversation source mutated repeatedly.")
         case .nothingToCompact:
-            return "Nothing new to compact since the last summary."
+            return String(localized: "Nothing new to compact since the last summary.")
         }
     }
 

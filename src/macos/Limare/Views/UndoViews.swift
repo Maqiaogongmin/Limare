@@ -27,9 +27,9 @@ struct UndoMessageSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.medium) {
-            Text("撤销这条消息")
+            Text("Undo This Message")
                 .font(.title3.weight(.semibold))
-            Text("这条消息和之后的回复会被移除，消息回到输入框。")
+            Text("This message and the replies after it are removed, and the message goes back to the composer.")
                 .foregroundStyle(.secondary)
 
             if let preview {
@@ -44,15 +44,15 @@ struct UndoMessageSheet: View {
 
             HStack {
                 Spacer()
-                Button("取消", role: .cancel) { dismiss() }
+                Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("只撤回消息") {
+                Button("Retract Message Only") {
                     window.chat.undoLastUserMessage(messageID, restoreFiles: false)
                     dismiss()
                 }
                 .accessibilityIdentifier("undo.retractOnly")
                 if let preview, preview.hasFileChanges {
-                    Button("撤销并恢复文件") {
+                    Button("Undo and Restore Files") {
                         window.chat.undoLastUserMessage(messageID, restoreFiles: true, includeLeftovers: includeLeftovers, optionalPaths: selectedOptional)
                         dismiss()
                     }
@@ -70,28 +70,28 @@ struct UndoMessageSheet: View {
     @ViewBuilder
     private func content(for preview: UndoPreview) -> some View {
         if !preview.conflicts.isEmpty {
-            section("不能安全恢复", tint: .red) {
+            section("Can't Be Restored Safely", tint: .red) {
                 ForEach(preview.conflicts) { conflict in
                     row(display(conflict.path), detail: reasonText(conflict.reason))
                 }
             }
             if preview.canIncludeLeftovers || preview.includesLeftovers {
-                Toggle("一并恢复已撤回消息遗留的文件改动", isOn: $includeLeftovers)
+                Toggle("Also restore file changes left by retracted messages", isOn: $includeLeftovers)
                     .accessibilityIdentifier("undo.includeLeftovers")
             }
         }
         if !preview.missingBackups.isEmpty {
-            section("备份已清理，只能撤回消息", tint: .orange) {
+            section("Backups were cleaned up; only the message can be retracted", tint: .orange) {
                 ForEach(preview.missingBackups, id: \.self) { path in row(display(path), detail: nil) }
             }
         }
         if !preview.willRestore.isEmpty {
-            section("将恢复（\(preview.willRestore.count)）", tint: .accentColor) {
+            section("Will Restore (\(preview.willRestore.count))", tint: .accentColor) {
                 ForEach(preview.willRestore) { item in row(display(item.path), detail: kindText(item.kind)) }
             }
         }
         if !preview.optional.isEmpty {
-            section("可选恢复（来源不确定，默认不选）", tint: .secondary) {
+            section("Optional (source uncertain, not selected by default)", tint: .secondary) {
                 ForEach(preview.optional) { item in
                     Toggle(isOn: Binding(
                         get: { selectedOptional.contains(item.path) },
@@ -103,17 +103,17 @@ struct UndoMessageSheet: View {
             }
         }
         if !preview.irreversible.isEmpty {
-            section("无法撤销（\(preview.irreversible.count)）", tint: .secondary) {
+            section("Can't Be Undone (\(preview.irreversible.count))", tint: .secondary) {
                 ForEach(preview.irreversible) { effect in row(effect.title, detail: effect.detail) }
             }
         }
         if !preview.hasFileChanges && preview.irreversible.isEmpty && preview.conflicts.isEmpty && preview.missingBackups.isEmpty {
-            Text("这一轮没有记录到文件改动。")
+            Text("No file changes were recorded in this turn.")
                 .foregroundStyle(.secondary)
         }
     }
 
-    private func section<Content: View>(_ title: String, tint: Color, @ViewBuilder content: () -> Content) -> some View {
+    private func section<Content: View>(_ title: LocalizedStringKey, tint: Color, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: AppSpacing.xxSmall) {
             Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(tint)
             content()
@@ -136,18 +136,18 @@ struct UndoMessageSheet: View {
 
     private func kindText(_ kind: UndoRestoreItem.Kind) -> String {
         switch kind {
-        case .removeCreated: "删除这一轮新建的文件"
-        case .restoreContent: "还原为修改前的内容"
-        case .recreateDeleted: "恢复被删除的文件"
+        case .removeCreated: String(localized: "Delete the file created in this turn")
+        case .restoreContent: String(localized: "Restore the content from before the change")
+        case .recreateDeleted: String(localized: "Restore the deleted file")
         }
     }
 
     private func reasonText(_ reason: UndoConflictReason) -> String {
         switch reason {
-        case .modifiedSinceChange: "该文件在之后被修改过"
-        case .modifiedBetweenChanges: "这一轮的两次修改之间，文件被其他操作改过"
-        case .pathRedirected: "上级目录被替换成了符号链接或文件，恢复会写到别处"
-        case .leftoverChanges: "已撤回消息的文件改动尚未恢复"
+        case .modifiedSinceChange: String(localized: "The file was modified afterward")
+        case .modifiedBetweenChanges: String(localized: "Something else changed the file between this turn's two edits")
+        case .pathRedirected: String(localized: "A parent folder was replaced by a symbolic link or file, so restoring would write elsewhere")
+        case .leftoverChanges: String(localized: "File changes from retracted messages haven't been restored")
         }
     }
 }
@@ -168,31 +168,31 @@ struct UndoPlanBanner: View {
                     Spacer()
                     switch plan.phase {
                     case .partiallyFailed:
-                        Button("重试") { window.chat.resolveOpenUndo(.retry) }
+                        Button("Retry") { window.chat.resolveOpenUndo(.retry) }
                             .controlSize(.small)
-                        Button("保留已恢复的文件并撤回消息") { window.chat.resolveOpenUndo(.keepAndRetract) }
+                        Button("Keep Restored Files and Retract Message") { window.chat.resolveOpenUndo(.keepAndRetract) }
                             .controlSize(.small)
-                        Button("取消撤销") { window.chat.resolveOpenUndo(.cancel) }
+                        Button("Cancel Undo") { window.chat.resolveOpenUndo(.cancel) }
                             .controlSize(.small)
-                            .help("停止恢复：已恢复的文件保持现状，其余文件不再恢复，消息保留")
+                            .help("Stop restoring: restored files stay as they are, the rest are not restored, and the message is kept")
                             .accessibilityIdentifier("undo.cancelPlan")
                     case .filesRestored:
-                        Button("完成撤回") { window.chat.resolveOpenUndo(.retry) }
+                        Button("Finish Retracting") { window.chat.resolveOpenUndo(.retry) }
                             .buttonStyle(.borderedProminent)
                             .controlSize(.small)
-                        Button("保留消息") { window.chat.resolveOpenUndo(.cancel) }
+                        Button("Keep Message") { window.chat.resolveOpenUndo(.cancel) }
                             .controlSize(.small)
-                            .help("不再撤回消息：已恢复的文件保持现状，消息保留")
+                            .help("Don't retract the message: restored files stay as they are, and the message is kept")
                             .accessibilityIdentifier("undo.keepMessage")
                     default:
-                        Button("继续") { window.chat.resolveOpenUndo(.retry) }
+                        Button("Continue") { window.chat.resolveOpenUndo(.retry) }
                             .controlSize(.small)
-                        Button("取消撤销") { window.chat.resolveOpenUndo(.cancel) }
+                        Button("Cancel Undo") { window.chat.resolveOpenUndo(.cancel) }
                             .controlSize(.small)
                     }
                 }
-                pathList("已恢复", plan.steps.filter { $0.state == .done }.map { ($0.path, nil) })
-                pathList("未恢复", plan.steps.filter { $0.state != .done }.map { ($0.path, $0.failure) })
+                pathList(restored: plan.steps.filter { $0.state == .done }.map { ($0.path, nil) })
+                pathList(unrestored: plan.steps.filter { $0.state != .done }.map { ($0.path, $0.failure) })
             }
             .padding(.horizontal, AppSpacing.standard)
             .padding(.vertical, AppSpacing.small)
@@ -203,15 +203,15 @@ struct UndoPlanBanner: View {
             VStack(alignment: .leading, spacing: AppSpacing.xSmall) {
                 HStack(spacing: AppSpacing.small) {
                     Image(systemName: "info.circle").foregroundStyle(.secondary)
-                    Text("撤销已取消，消息保留。已恢复的文件保持现状，其余文件未恢复。").font(.caption)
+                    Text("Undo was cancelled and the message kept. Restored files stay as they are; the rest were not restored.").font(.caption)
                     Spacer()
                     Button { appState.undo.dismissCancellation(conversationID: conversationID) } label: { Image(systemName: "xmark") }
                         .buttonStyle(.borderless)
                         .controlSize(.small)
-                        .help("关闭")
+                        .help("Close")
                 }
-                pathList("已恢复", cancellation.restoredPaths.map { ($0, nil) })
-                pathList("未恢复", cancellation.unrestoredPaths.map { ($0, nil) })
+                pathList(restored: cancellation.restoredPaths.map { ($0, nil) })
+                pathList(unrestored: cancellation.unrestoredPaths.map { ($0, nil) })
             }
             .padding(.horizontal, AppSpacing.standard)
             .padding(.vertical, AppSpacing.xSmall)
@@ -219,10 +219,18 @@ struct UndoPlanBanner: View {
         }
     }
 
+    private func pathList(restored items: [(String, String?)]) -> some View {
+        pathList("Restored (\(items.count))", items)
+    }
+
+    private func pathList(unrestored items: [(String, String?)]) -> some View {
+        pathList("Not Restored (\(items.count))", items)
+    }
+
     @ViewBuilder
-    private func pathList(_ heading: String, _ items: [(String, String?)]) -> some View {
+    private func pathList(_ heading: LocalizedStringKey, _ items: [(String, String?)]) -> some View {
         if !items.isEmpty {
-            Text("\(heading)（\(items.count)）").font(.caption.weight(.medium))
+            Text(heading).font(.caption.weight(.medium))
             ForEach(items, id: \.0) { path, note in
                 Text(note.map { "\(path) — \($0)" } ?? path)
                     .font(.caption)
@@ -235,9 +243,9 @@ struct UndoPlanBanner: View {
 
     private func title(for plan: UndoRestorePlan) -> String {
         switch plan.phase {
-        case .partiallyFailed: "撤销未完成：\(plan.failedSteps.count) 个文件未能恢复"
-        case .filesRestored: "文件已恢复，消息尚未撤回"
-        default: "撤销未完成"
+        case .partiallyFailed: String(localized: "Undo isn't finished: \(plan.failedSteps.count) files couldn't be restored")
+        case .filesRestored: String(localized: "Files are restored, but the message isn't retracted yet")
+        default: String(localized: "Undo isn't finished")
         }
     }
 }

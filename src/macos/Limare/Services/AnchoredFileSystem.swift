@@ -121,9 +121,9 @@ enum AnchoredFileError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .redirected(let path): "路径 \(path) 已被重定向：它的上级目录被替换成了符号链接或文件"
-        case .rootMoved(let root): "目录 \(root) 已被移动或替换"
-        case let .failed(path, reason): "\(path)：\(reason)"
+        case .redirected(let path): String(localized: "The path \(path) was redirected: a parent folder was replaced by a symbolic link or file")
+        case .rootMoved(let root): String(localized: "The folder \(root) was moved or replaced")
+        case let .failed(path, reason): "\(path): \(reason)"
         }
     }
 }
@@ -173,7 +173,7 @@ enum AnchoredFileSystem {
         var rootInfo = stat()
         guard fstat(current, &rootInfo) == 0 else {
             Darwin.close(current)
-            throw AnchoredFileError.failed(location.path, "无法读取根目录身份")
+            throw AnchoredFileError.failed(location.path, String(localized: "Couldn't read the root folder's identity"))
         }
         let rootIdentity = AnchoredPath.DirectoryIdentity(rootInfo)
         var parentIdentities: [String: AnchoredPath.DirectoryIdentity] = [:]
@@ -216,7 +216,7 @@ enum AnchoredFileSystem {
             var info = stat()
             guard fstat(next, &info) == 0 else {
                 Darwin.close(next); Darwin.close(current)
-                throw AnchoredFileError.failed(location.path, "无法读取父目录身份")
+                throw AnchoredFileError.failed(location.path, String(localized: "Couldn't read the parent folder's identity"))
             }
             let observed = AnchoredPath.DirectoryIdentity(info)
             if let expected = location.parentIdentities?[relativeParent], observed != expected {
@@ -236,7 +236,7 @@ enum AnchoredFileSystem {
     /// Callers persist the returned anchor before modifying the file, including crash recovery.
     static func prepareParents(_ location: AnchoredPath) throws -> AnchoredPath {
         guard let parent = try openParent(location, create: true) else {
-            throw AnchoredFileError.failed(location.path, "无法准备父目录")
+            throw AnchoredFileError.failed(location.path, String(localized: "Couldn't prepare the parent folder"))
         }
         defer { parent.close() }
         return parent.location
@@ -323,7 +323,7 @@ enum AnchoredFileSystem {
         defer { parent.close() }
         var info = stat()
         guard fstatat(parent.descriptor, parent.name, &info, AT_SYMLINK_NOFOLLOW) == 0 else { return }
-        if (info.st_mode & S_IFMT) == S_IFDIR { throw AnchoredFileError.failed(location.path, "目标是一个目录") }
+        if (info.st_mode & S_IFMT) == S_IFDIR { throw AnchoredFileError.failed(location.path, String(localized: "The target is a folder")) }
         guard unlinkat(parent.descriptor, parent.name, 0) == 0 || errno == ENOENT else {
             throw AnchoredFileError.failed(location.path, String(cString: strerror(errno)))
         }
@@ -342,13 +342,13 @@ enum AnchoredFileSystem {
     private static func replace(_ location: AnchoredPath, replaceNonDirectories: Bool, defaultMode: mode_t?, isLink: Bool = false,
                                 stage: (Int32, String) -> Int32) throws -> [String] {
         guard let parent = try openParent(location, create: true, replaceNonDirectories: replaceNonDirectories) else {
-            throw AnchoredFileError.failed(location.path, "无法打开上级目录")
+            throw AnchoredFileError.failed(location.path, String(localized: "Couldn't open the parent folder"))
         }
         defer { parent.close() }
         var existing = stat()
         let exists = fstatat(parent.descriptor, parent.name, &existing, AT_SYMLINK_NOFOLLOW) == 0
         if exists && (existing.st_mode & S_IFMT) == S_IFDIR {
-            throw AnchoredFileError.failed(location.path, "目标是一个目录")
+            throw AnchoredFileError.failed(location.path, String(localized: "The target is a folder"))
         }
         let staged = ".limare-stage-\(UUID().uuidString)"
         let result = stage(parent.descriptor, staged)

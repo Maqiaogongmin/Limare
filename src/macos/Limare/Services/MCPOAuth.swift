@@ -22,21 +22,21 @@ enum MCPOAuthError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unavailable:
-            return "MCP OAuth is not available in this build."
+            return String(localized: "MCP OAuth is not available in this build.")
         case .notOAuthServer(let reason):
             return reason
         case .clientRegistrationUnavailable:
-            return "This server's authorization server does not support automatic client registration. Configure a self-owned, pre-registered OAuth client in the native setup UI. There is no automatic token fallback."
+            return String(localized: "This server's authorization server does not support automatic client registration. Configure a self-owned, pre-registered OAuth client in the native setup UI. There is no automatic token fallback.")
         case .authorizationDenied(let reason):
-            return "Authorization was denied: \(reason)"
+            return String(localized: "Authorization was denied: \(reason)")
         case .cancelled:
-            return "Sign-in was cancelled or timed out."
+            return String(localized: "Sign-in was cancelled or timed out.")
         case .unattended:
-            return "Sign-in was cancelled or timed out. No one is present to enter credentials during an unattended scheduled run."
+            return String(localized: "Sign-in was cancelled or timed out. No one is present to enter credentials during an unattended scheduled run.")
         case .browserOpenFailed:
-            return "Could not open the browser for sign-in."
+            return String(localized: "Could not open the browser for sign-in.")
         case .credentialNotCommitted:
-            return "The server may have completed sign-in, but Limare could not store the credential securely. Sign in again."
+            return String(localized: "The server may have completed sign-in, but Limare could not store the credential securely. Sign in again.")
         }
     }
 }

@@ -24,14 +24,14 @@ public final class AudioDataPlayer: AudioDataPlaying, @unchecked Sendable {
         stopCurrent()
 
         guard !data.isEmpty else {
-            throw VoiceOutputError.playbackFailed("Cannot play empty audio data.")
+            throw VoiceOutputError.playbackFailed(String(localized: "Cannot play empty audio data."))
         }
 
         let audioPlayer: AVAudioPlayer
         do {
             audioPlayer = try AVAudioPlayer(data: data)
         } catch {
-            throw VoiceOutputError.playbackFailed("Invalid audio format: \(error.localizedDescription)")
+            throw VoiceOutputError.playbackFailed(String(localized: "Invalid audio format: \(error.localizedDescription)"))
         }
 
         let playerID = ObjectIdentifier(audioPlayer)
@@ -59,7 +59,7 @@ public final class AudioDataPlayer: AudioDataPlaying, @unchecked Sendable {
                     self.player = nil
                     self.playerDelegate = nil
                     lock.unlock()
-                    cont?.resume(throwing: VoiceOutputError.playbackFailed("Failed to start audio playback."))
+                    cont?.resume(throwing: VoiceOutputError.playbackFailed(String(localized: "Failed to start audio playback.")))
                 }
             }
         } onCancel: {
@@ -124,7 +124,7 @@ public final class AudioDataPlayer: AudioDataPlaying, @unchecked Sendable {
         } else if success {
             continuation?.resume()
         } else {
-            continuation?.resume(throwing: VoiceOutputError.playbackFailed("Audio playback did not complete successfully."))
+            continuation?.resume(throwing: VoiceOutputError.playbackFailed(String(localized: "Audio playback did not complete successfully.")))
         }
     }
 }

@@ -145,27 +145,27 @@ final class ModelGroupStore {
             switch self {
             case .ready(let task):
                 switch task {
-                case .chat: return "Ready for Chat"
-                case .voiceOutputTTS: return "Ready for Voice Output"
-                case .voiceInputASR: return "Ready for Voice In"
-                case .visionInput: return "Ready for Images"
+                case .chat: return String(localized: "Ready for Chat")
+                case .voiceOutputTTS: return String(localized: "Ready for Voice Output")
+                case .voiceInputASR: return String(localized: "Ready for Voice In")
+                case .visionInput: return String(localized: "Ready for Images")
                 }
             case .capabilityUnknown(let task):
                 switch task {
-                case .chat: return "Chat capability unverified"
-                default: return "Capability Unknown"
+                case .chat: return String(localized: "Chat capability unverified")
+                default: return String(localized: "Capability Unknown")
                 }
             case .protocolUnsupported:
-                return "Protocol Unsupported"
+                return String(localized: "Protocol Unsupported")
             case .credentialMissing(let task):
                 switch task {
-                case .chat: return "API Key missing"
-                default: return "Credential Missing"
+                case .chat: return String(localized: "API Key missing")
+                default: return String(localized: "Credential Missing")
                 }
             case .modelRemoved(let task):
                 switch task {
-                case .chat: return "Removed by provider"
-                default: return "Model Removed"
+                case .chat: return String(localized: "Removed by provider")
+                default: return String(localized: "Model Removed")
                 }
             case .notReady(_, let reason):
                 return reason
@@ -191,13 +191,37 @@ final class ModelGroupStore {
         public let provider: ProviderConfiguration?
         public let model: ProviderModel?
         public let isChatEligible: Bool
-        public let unavailableReason: String?
+        public let unavailability: Unavailability?
+
+        /// Why a member cannot be used. Code compares this; people read `unavailableReason`.
+        public enum Unavailability: Equatable, Sendable {
+            case invalidEntry
+            case providerMissing
+            case modelMissing
+            case removedByProvider
+            case credentialMissing
+            case noTextInputOutput
+            case noImageInput
+        }
+
+        public var unavailableReason: String? {
+            switch unavailability {
+            case nil: nil
+            case .invalidEntry: String(localized: "Invalid entry ID")
+            case .providerMissing: String(localized: "Provider missing")
+            case .modelMissing: String(localized: "Model missing")
+            case .removedByProvider: String(localized: "Removed by provider")
+            case .credentialMissing: String(localized: "API Key missing")
+            case .noTextInputOutput: String(localized: "Model does not support text input/output")
+            case .noImageInput: String(localized: "Model does not support image input")
+            }
+        }
 
         public var providerName: String {
             if let provider {
                 return provider.name
             }
-            return parsedProviderId != nil ? "Unknown Provider" : "Unknown"
+            return parsedProviderId != nil ? String(localized: "Unknown Provider") : String(localized: "Unknown")
         }
 
         public var modelDisplayName: String {
@@ -212,15 +236,15 @@ final class ModelGroupStore {
     ) -> (readiness: TaskMemberReadiness, provider: ProviderConfiguration?, model: ProviderModel?) {
         guard let parsed = ModelGroup.parseEntryId(entryId),
               !parsed.modelID.isEmpty else {
-            return (.notReady(task: task, reason: "Invalid entry ID"), nil, nil)
+            return (.notReady(task: task, reason: String(localized: "Invalid entry ID")), nil, nil)
         }
 
         guard let provider = providers.first(where: { $0.id == parsed.providerID }) else {
-            return (.notReady(task: task, reason: "Provider missing"), nil, nil)
+            return (.notReady(task: task, reason: String(localized: "Provider missing")), nil, nil)
         }
 
         guard let model = provider.models.first(where: { $0.id == parsed.modelID }) else {
-            return (.notReady(task: task, reason: "Model missing"), provider, nil)
+            return (.notReady(task: task, reason: String(localized: "Model missing")), provider, nil)
         }
 
         if model.discovery.isRemoved {
@@ -232,7 +256,7 @@ final class ModelGroupStore {
         }
 
         if provider.authenticationMode == .oauth && task == .voiceOutputTTS {
-            return (.notReady(task: .voiceOutputTTS, reason: "OAuth does not authorize speech synthesis (API Key required)"), provider, model)
+            return (.notReady(task: .voiceOutputTTS, reason: String(localized: "OAuth does not authorize speech synthesis (API Key required)")), provider, model)
         }
 
         switch task {
@@ -241,7 +265,7 @@ final class ModelGroupStore {
                 if modality.contains(.textInput) && modality.contains(.textOutput) {
                     return (.ready(task: .chat), provider, model)
                 } else {
-                    return (.notReady(task: .chat, reason: "Model does not support text input/output"), provider, model)
+                    return (.notReady(task: .chat, reason: String(localized: "Model does not support text input/output")), provider, model)
                 }
             } else {
                 return (.capabilityUnknown(task: .chat), provider, model)
@@ -250,7 +274,7 @@ final class ModelGroupStore {
         case .voiceOutputTTS:
             if model.modality != nil {
                 guard isDedicatedTTS(model) else {
-                    return (.notReady(task: .voiceOutputTTS, reason: "Model does not have TTS modality (text in + audio out)"), provider, model)
+                    return (.notReady(task: .voiceOutputTTS, reason: String(localized: "Model does not have TTS modality (text in + audio out)")), provider, model)
                 }
             } else {
                 return (.capabilityUnknown(task: .voiceOutputTTS), provider, model)
@@ -267,7 +291,7 @@ final class ModelGroupStore {
         case .voiceInputASR:
             if model.modality != nil {
                 guard isDedicatedASR(model) else {
-                    return (.notReady(task: .voiceInputASR, reason: "Model does not have speech recognition modality"), provider, model)
+                    return (.notReady(task: .voiceInputASR, reason: String(localized: "Model does not have speech recognition modality")), provider, model)
                 }
                 return (.ready(task: .voiceInputASR), provider, model)
             } else {
@@ -277,7 +301,7 @@ final class ModelGroupStore {
         case .visionInput:
             if let modality = model.modality {
                 guard modality.contains(.imageInput) else {
-                    return (.notReady(task: .visionInput, reason: "Model does not support image input"), provider, model)
+                    return (.notReady(task: .visionInput, reason: String(localized: "Model does not support image input")), provider, model)
                 }
                 return (.ready(task: .visionInput), provider, model)
             } else {
@@ -300,7 +324,7 @@ final class ModelGroupStore {
                 provider: nil,
                 model: nil,
                 isChatEligible: false,
-                unavailableReason: "Invalid entry ID"
+                unavailability: .invalidEntry
             )
         }
 
@@ -312,7 +336,7 @@ final class ModelGroupStore {
                 provider: nil,
                 model: nil,
                 isChatEligible: false,
-                unavailableReason: "Provider missing"
+                unavailability: .providerMissing
             )
         }
 
@@ -324,14 +348,14 @@ final class ModelGroupStore {
                 provider: provider,
                 model: nil,
                 isChatEligible: false,
-                unavailableReason: "Model missing"
+                unavailability: .modelMissing
             )
         }
 
         if model.discovery.isRemoved {
             return GroupMemberEligibility(entryId: entryId, parsedProviderId: parsed.providerID,
                 parsedModelId: parsed.modelID, provider: provider, model: model,
-                isChatEligible: false, unavailableReason: "Removed by provider")
+                isChatEligible: false, unavailability: .removedByProvider)
         }
 
         if provider.authenticationMode != .none && !provider.hasStoredSecret {
@@ -342,7 +366,7 @@ final class ModelGroupStore {
                 provider: provider,
                 model: model,
                 isChatEligible: false,
-                unavailableReason: "API Key missing"
+                unavailability: .credentialMissing
             )
         }
 
@@ -355,7 +379,7 @@ final class ModelGroupStore {
                     provider: provider,
                     model: model,
                     isChatEligible: false,
-                    unavailableReason: "Model does not support text input/output"
+                    unavailability: .noTextInputOutput
                 )
             }
         }
@@ -369,7 +393,7 @@ final class ModelGroupStore {
                     provider: provider,
                     model: model,
                     isChatEligible: false,
-                    unavailableReason: "Model does not support image input"
+                    unavailability: .noImageInput
                 )
             }
         }
@@ -381,7 +405,7 @@ final class ModelGroupStore {
             provider: provider,
             model: model,
             isChatEligible: true,
-            unavailableReason: nil
+            unavailability: nil
         )
     }
 
@@ -532,30 +556,30 @@ final class ModelGroupStore {
         for group: ModelGroup,
         requireImageInput: Bool = false,
         providers: [ProviderConfiguration]
-    ) -> [(name: String, reason: String)] {
-        var reasons: [(name: String, reason: String)] = []
+    ) -> [(name: String, reason: String, unavailability: GroupMemberEligibility.Unavailability?)] {
+        var reasons: [(name: String, reason: String, unavailability: GroupMemberEligibility.Unavailability?)] = []
         for entryId in group.memberEntryIds {
             let eval = Self.evaluateMemberEligibility(entryId: entryId, providers: providers, requireImageInput: requireImageInput)
             if !eval.isChatEligible {
                 let name: String
                 let reason: String
                 if eval.parsedModelId == nil {
-                    name = "Unknown (\(entryId))"
-                    reason = "Invalid entry identifier"
+                    name = String(localized: "Unknown (\(entryId))")
+                    reason = String(localized: "Invalid entry identifier")
                 } else if eval.provider == nil {
                     name = eval.parsedModelId!
-                    reason = "Provider not found"
+                    reason = String(localized: "Provider not found")
                 } else if eval.model == nil {
                     name = "\(eval.providerName) / \(eval.parsedModelId!)"
-                    reason = "Model not supported by provider"
-                } else if eval.unavailableReason == "API Key missing" {
+                    reason = String(localized: "Model not supported by provider")
+                } else if eval.unavailability == .credentialMissing {
                     name = "\(eval.providerName) / \(eval.parsedModelId!)"
-                    reason = "Missing API Key"
+                    reason = String(localized: "Missing API Key")
                 } else {
                     name = "\(eval.providerName) / \(eval.parsedModelId!)"
-                    reason = eval.unavailableReason ?? "Unavailable"
+                    reason = eval.unavailableReason ?? String(localized: "Unavailable")
                 }
-                reasons.append((name, reason))
+                reasons.append((name, reason, eval.unavailability))
             }
         }
         return reasons

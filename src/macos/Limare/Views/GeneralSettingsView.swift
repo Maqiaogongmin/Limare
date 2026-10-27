@@ -23,6 +23,10 @@ struct GeneralSettingsView: View {
                 .buttonStyle(.settingsOutline)
             }
 
+            SettingsSection(title: "Language") {
+                LanguageSettingsRow()
+            }
+
             // Appearance Section
             SettingsSection(title: "Appearance") {
                 SettingsRow(
@@ -86,7 +90,7 @@ struct GeneralSettingsView: View {
             SettingsSection(title: "Composer & Run") {
                 SettingsRow(
                     "When Agent is Running",
-                    caption: streamingSendPreference.detail
+                    caption: "\(streamingSendPreference.detail)"
                 ) {
                     Picker("", selection: $streamingSendPreference) {
                         ForEach(StreamingSendPreference.allCases) { pref in
@@ -131,7 +135,7 @@ struct GeneralSettingsView: View {
                     InlineStatus(
                         kind: .error,
                         message: "Notifications are off for Limare in System Settings.",
-                        actionTitle: "打开系统设置",
+                        actionTitle: "Open System Settings",
                         onAction: { PrivacySettingsOpener.openNotificationSettings() }
                     )
                 }
@@ -150,7 +154,7 @@ struct GeneralSettingsView: View {
             // Default Workspace Section
             SettingsSection(title: "Workspace") {
                 if let errorMessage = appState.workspace.errorMessage {
-                    InlineStatus(kind: .error, message: errorMessage)
+                    InlineStatus(kind: .error, message: "\(errorMessage)")
                 }
 
                 if let workspace = appState.workspace.configuration {
@@ -197,6 +201,49 @@ struct GeneralSettingsView: View {
                     }
                 }
             }
+        }
+    }
+}
+
+/// The display language. "System" follows macOS; the other choices are the languages the app
+/// ships (see AppLanguage). The new language applies at the next launch, so the row offers a
+/// relaunch until the language in effect matches the choice.
+private struct LanguageSettingsRow: View {
+    /// "" stands for following the system, so the picker can tag it.
+    @State private var selection = AppLanguage.selected ?? ""
+
+    private var needsRelaunch: Bool {
+        let wanted = selection.isEmpty ? AppLanguage.systemResolved : selection
+        return wanted != AppLanguage.inEffect
+    }
+
+    var body: some View {
+        SettingsRow(
+            "Language",
+            caption: "The language of menus, settings and messages in Limare."
+        ) {
+            Picker("", selection: $selection) {
+                Text("System").tag("")
+                Divider()
+                ForEach(AppLanguage.available, id: \.self) { language in
+                    Text(verbatim: AppLanguage.displayName(for: language)).tag(language)
+                }
+            }
+            .frame(width: 180)
+            .labelsHidden()
+            .accessibilityIdentifier("settings.general.language")
+            .accessibilityLabel("Language")
+            .onChange(of: selection) { _, language in
+                AppLanguage.select(language.isEmpty ? nil : language)
+            }
+        }
+        if needsRelaunch {
+            InlineStatus(
+                kind: .info,
+                message: "Limare will use the new language after it restarts.",
+                actionTitle: "Restart Now",
+                onAction: { AppLanguage.relaunch() }
+            )
         }
     }
 }

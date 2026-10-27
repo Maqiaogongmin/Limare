@@ -30,7 +30,7 @@ struct SkillsSettingsView: View {
 
                     SettingsSegmentedPicker(
                         selection: $state.filterScope,
-                        options: SkillFilterScope.allCases.map { (value: $0, title: $0.rawValue) }
+                        options: SkillFilterScope.allCases.map { (value: $0, title: $0.displayName) }
                     )
                     .fixedSize()
                     .accessibilityLabel("Scope")
@@ -83,7 +83,7 @@ struct SkillsSettingsView: View {
             } else {
                 SettingsSection(
                     title: "Discovered Skills",
-                    description: "\(filteredSkills.count) \(filteredSkills.count == 1 ? "skill" : "skills") available"
+                    description: "\(filteredSkills.count) skills available"
                 ) {
                     ForEach(Array(filteredSkills.enumerated()), id: \.element.id) { index, skill in
                         if index > 0 {

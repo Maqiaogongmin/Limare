@@ -18,14 +18,14 @@ public enum VoiceOutputRouting {
             if trimmedModelID == ProviderOfficialCatalog.geminiTTSModelID {
                 return .geminiNativeInteractions
             } else {
-                return .protocolUnsupported(reason: "Model '\(trimmedModelID)' is not supported by Gemini Native Interactions TTS. Only '\(ProviderOfficialCatalog.geminiTTSModelID)' is supported.")
+                return .protocolUnsupported(reason: String(localized: "Model '\(trimmedModelID)' is not supported by Gemini Native Interactions TTS. Only '\(ProviderOfficialCatalog.geminiTTSModelID)' is supported."))
             }
         }
 
         // 2. Reject Google generativelanguage OpenAI compatible endpoint
         let lowerBase = provider.baseURL.lowercased()
         if lowerBase.contains("generativelanguage.googleapis.com") {
-            return .protocolUnsupported(reason: "Google Gemini does not support OpenAI-compatible /audio/speech endpoints. Use Google Gemini with Native protocol.")
+            return .protocolUnsupported(reason: String(localized: "Google Gemini does not support OpenAI-compatible /audio/speech endpoints. Use Google Gemini with Native protocol."))
         }
 
         // 3. Providers with standard OpenAI-compatible audio speech endpoints
@@ -33,6 +33,6 @@ public enum VoiceOutputRouting {
             return .openAIAudioSpeech
         }
 
-        return .protocolUnsupported(reason: "Protocol adapter '\(provider.protocolAdapter.rawValue)' does not support audio speech synthesis.")
+        return .protocolUnsupported(reason: String(localized: "Protocol adapter '\(provider.protocolAdapter.rawValue)' does not support audio speech synthesis."))
     }
 }

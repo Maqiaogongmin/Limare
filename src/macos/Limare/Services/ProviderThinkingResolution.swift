@@ -92,7 +92,7 @@ struct ProviderThinkingResolution: Sendable, Equatable {
 
     static func resolve(requested: ThinkingLevel, model: ProviderModel?, provider: ProviderConfiguration? = nil, maxTokens: Int? = nil) throws -> Self {
         guard requested != .ultra else {
-            throw ProviderConnectionError.invalidThinking("Ultra orchestration is unavailable. Select a supported reasoning tier.")
+            throw ProviderConnectionError.invalidThinking(String(localized: "Ultra orchestration is unavailable. Select a supported reasoning tier."))
         }
         let available = supportedLevels(for: model, provider: provider, maxTokens: maxTokens)
         let known = Set(["none", "off", "disabled", "minimal", "low", "medium", "high", "xhigh", "max"])
@@ -104,18 +104,18 @@ struct ProviderThinkingResolution: Sendable, Equatable {
         guard !positive.isEmpty else {
             // No reasoning control to send: the request runs at the model default, and the reason is recorded.
             return Self(requested: requested, effective: .off, wireEffort: nil, supported: available, unsupportedRawTiers: unknown,
-                        reason: "Requested \(requested.rawValue), but the model has no executable reasoning control; sent the model default.")
+                        reason: String(localized: "Requested \(requested.rawValue), but the model has no executable reasoning control; sent the model default."))
         }
         let effective = positive.contains(requested) ? requested : positive.last(where: { $0 <= requested }) ?? positive[0]
         return Self(requested: requested, effective: effective, wireEffort: effective.rawValue,
                     supported: available, unsupportedRawTiers: unknown,
-                    reason: effective == requested ? nil : "Requested \(requested.rawValue), model accepts \(effective.rawValue).")
+                    reason: effective == requested ? nil : String(localized: "Requested \(requested.rawValue), model accepts \(effective.rawValue)."))
     }
 
     static func offLabel(model: ProviderModel?, provider: ProviderConfiguration) -> String {
-        if provider.providerIdentity == .kimiCode && model?.declaresNoEffortTiers != true { return "Off (K2.8 Preview)" }
+        if provider.providerIdentity == .kimiCode && model?.declaresNoEffortTiers != true { return String(localized: "Off (K2.8 Preview)") }
         if model?.reasoningEffortValues?.contains(where: { ["none", "off", "disabled"].contains($0) }) == true { return "Off" }
         if provider.protocolAdapter == .geminiNative && model?.id.lowercased().contains("gemini-2.5-flash") == true { return "Off" }
-        return "Model Default"
+        return String(localized: "Model Default")
     }
 }

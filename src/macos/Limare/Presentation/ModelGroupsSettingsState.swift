@@ -18,9 +18,9 @@ enum GroupMemberChatReadiness: Equatable, Sendable {
     var label: String {
         switch self {
         case .ready:
-            return "Ready for Chat"
+            return String(localized: "Ready for Chat")
         case .notReady:
-            return "Not Ready for Chat"
+            return String(localized: "Not Ready for Chat")
         }
     }
 }
@@ -63,7 +63,7 @@ struct GroupMemberDisplayItem: Identifiable, Sendable, Equatable {
 
     var unavailableReason: String? {
         if isUnbound {
-            return "Unassigned Group"
+            return String(localized: "Unassigned Group")
         }
         if let firstNotReady = roleStatuses.first(where: { !$0.readiness.isReady }) {
             return firstNotReady.readiness.label
@@ -112,7 +112,7 @@ struct GroupMemberDisplayItem: Identifiable, Sendable, Equatable {
         if isAvailable {
             self.chatReadiness = .ready
         } else {
-            self.chatReadiness = .notReady(reason: unavailableReason ?? "Unavailable")
+            self.chatReadiness = .notReady(reason: unavailableReason ?? String(localized: "Unavailable"))
         }
     }
 }
@@ -134,27 +134,27 @@ final class ModelGroupsSettingsState {
 
     func summary(for group: ModelGroup) -> String {
         let count = group.memberEntryIds.count
-        let countStr = "\(count) \(count == 1 ? "model" : "models")"
-        let stratStr = group.strategy == .fallback ? "Fallback" : "Load Balance"
+        let countStr = String(localized: "\(count) models")
+        let stratStr = group.strategy == .fallback ? String(localized: "Fallback") : String(localized: "Load Balance")
         return "\(countStr) · \(stratStr)"
     }
 
     func roleBadges(for group: ModelGroup, store: ModelGroupStore) -> [String] {
         var badges: [String] = []
         if store.defaultPrimaryGroupId == group.id {
-            badges.append("Chat")
+            badges.append(String(localized: "Chat"))
         }
         if store.defaultSubGroupId == group.id {
-            badges.append("Helper")
+            badges.append(String(localized: "Helper"))
         }
         if store.visionGroupId == group.id {
-            badges.append("Images")
+            badges.append(String(localized: "Images"))
         }
         if store.voiceInputGroupId == group.id {
-            badges.append("Voice In")
+            badges.append(String(localized: "Voice In"))
         }
         if store.voiceOutputGroupId == group.id {
-            badges.append("Voice Out")
+            badges.append(String(localized: "Voice Out"))
         }
         return badges
     }
@@ -170,29 +170,29 @@ final class ModelGroupsSettingsState {
         let hasStore = (store != nil)
         if let store {
             if store.defaultPrimaryGroupId == group.id {
-                roles.append(("Chat", .chat))
+                roles.append((String(localized: "Chat"), .chat))
             }
             if store.defaultSubGroupId == group.id {
-                roles.append(("Helper", .chat))
+                roles.append((String(localized: "Helper"), .chat))
             }
             if store.visionGroupId == group.id {
-                roles.append(("Images", .visionInput))
+                roles.append((String(localized: "Images"), .visionInput))
             }
             if store.voiceInputGroupId == group.id {
-                roles.append(("Voice In", .voiceInputASR))
+                roles.append((String(localized: "Voice In"), .voiceInputASR))
             }
             if store.voiceOutputGroupId == group.id {
-                roles.append(("Voice Out", .voiceOutputTTS))
+                roles.append((String(localized: "Voice Out"), .voiceOutputTTS))
             }
         } else {
-            roles = [("Chat", .chat)]
+            roles = [(String(localized: "Chat"), .chat)]
         }
 
         let isUnbound = hasStore && roles.isEmpty
 
         return group.memberEntryIds.enumerated().map { index, entryId in
             let chatEval = ModelGroupStore.evaluateMemberEligibility(entryId: entryId, providers: providers, requireImageInput: false)
-            let chatReadiness: GroupMemberChatReadiness = chatEval.isChatEligible ? .ready : .notReady(reason: chatEval.unavailableReason ?? "Unavailable")
+            let chatReadiness: GroupMemberChatReadiness = chatEval.isChatEligible ? .ready : .notReady(reason: chatEval.unavailableReason ?? String(localized: "Unavailable"))
 
             var roleStatuses: [RoleMemberStatusItem] = []
             for role in roles {
@@ -210,11 +210,11 @@ final class ModelGroupsSettingsState {
 
             var capabilities: [String] = []
             if let model = chatEval.model, let mod = model.modality {
-                if mod.contains(.textInput) { capabilities.append("Text In") }
-                if mod.contains(.textOutput) { capabilities.append("Text Out") }
-                if mod.contains(.audioOutput) { capabilities.append("Audio Out") }
-                if mod.contains(.imageInput) { capabilities.append("Vision") }
-                if mod.contains(.audioInput) { capabilities.append("Audio In") }
+                if mod.contains(.textInput) { capabilities.append(String(localized: "Text In")) }
+                if mod.contains(.textOutput) { capabilities.append(String(localized: "Text Out")) }
+                if mod.contains(.audioOutput) { capabilities.append(String(localized: "Audio Out")) }
+                if mod.contains(.imageInput) { capabilities.append(String(localized: "Vision")) }
+                if mod.contains(.audioInput) { capabilities.append(String(localized: "Audio In")) }
             }
 
             return GroupMemberDisplayItem(
@@ -256,7 +256,7 @@ final class ModelGroupsSettingsState {
         }
         let candidates = store.voiceInputCandidates(for: group, providers: providers)
         if candidates.isEmpty {
-            return "This group currently has no compatible speech recognition models. Limare will use System Speech."
+            return String(localized: "This group currently has no compatible speech recognition models. Limare will use System Speech.")
         }
         return nil
     }
@@ -267,7 +267,7 @@ final class ModelGroupsSettingsState {
         }
         let candidates = store.voiceOutputCandidates(for: group, providers: providers)
         if candidates.isEmpty {
-            return "This group currently has no compatible text-to-speech models. Limare will use System Voice."
+            return String(localized: "This group currently has no compatible text-to-speech models. Limare will use System Voice.")
         }
         return nil
     }
@@ -280,7 +280,7 @@ final class ModelGroupsSettingsState {
         }
         let candidates = store.visionCandidates(for: group, providers: providers)
         if candidates.isEmpty {
-            return "This group currently has no image-capable models Limare can use. Image understanding will be unavailable."
+            return String(localized: "This group currently has no image-capable models Limare can use. Image understanding will be unavailable.")
         }
         return nil
     }
@@ -292,15 +292,15 @@ final class ModelGroupsSettingsState {
         let modelCount = store.agentLoopModelEntryIds.count
         let total = groupCount + modelCount
         if total == 0 {
-            return "None"
+            return String(localized: "None")
         } else if groupCount > 0 && modelCount > 0 {
-            let grpStr = "\(groupCount) \(groupCount == 1 ? "group" : "groups")"
-            let mdlStr = "\(modelCount) \(modelCount == 1 ? "model" : "models")"
+            let grpStr = String(localized: "\(groupCount) groups")
+            let mdlStr = String(localized: "\(modelCount) models")
             return "\(grpStr) · \(mdlStr)"
         } else if groupCount > 0 {
-            return "\(groupCount) \(groupCount == 1 ? "group" : "groups")"
+            return String(localized: "\(groupCount) groups")
         } else {
-            return "\(modelCount) \(modelCount == 1 ? "model" : "models")"
+            return String(localized: "\(modelCount) models")
         }
     }
 }

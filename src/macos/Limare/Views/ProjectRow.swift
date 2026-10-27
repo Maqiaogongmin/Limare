@@ -119,7 +119,7 @@ struct ProjectRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(isExpanded ? "Collapse" : "Expand") project \(project.name)")
+            .accessibilityLabel(isExpanded ? "Collapse project \(project.name)" : "Expand project \(project.name)")
         } actions: {
             SidebarHoverIconButton(
                 systemImage: "plus",

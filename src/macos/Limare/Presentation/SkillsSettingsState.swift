@@ -7,6 +7,14 @@ enum SkillFilterScope: String, CaseIterable, Identifiable, Sendable {
     case global = "Global"
 
     var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .all: String(localized: "All")
+        case .workspace: String(localized: "Project")
+        case .global: String(localized: "Global")
+        }
+    }
 }
 
 @MainActor

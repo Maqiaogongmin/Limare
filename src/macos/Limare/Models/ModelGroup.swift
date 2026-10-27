@@ -6,8 +6,8 @@ public enum RoutingStrategy: String, Codable, CaseIterable, Hashable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .fallback: "Fallback"
-        case .loadBalance: "Load Balance"
+        case .fallback: String(localized: "Fallback")
+        case .loadBalance: String(localized: "Load Balance")
         }
     }
 }
@@ -18,8 +18,8 @@ public enum FallbackStrategy: String, Codable, CaseIterable, Hashable, Sendable 
 
     public var displayName: String {
         switch self {
-        case .limited: "Default"
-        case .always: "Always"
+        case .limited: String(localized: "Default")
+        case .always: String(localized: "Always")
         }
     }
 }
@@ -44,14 +44,14 @@ public enum ThinkingLevel: String, Codable, CaseIterable, Comparable, Hashable, 
 
     public var displayName: String {
         switch self {
-        case .off: "Off"
-        case .minimal: "Minimal"
-        case .low: "Low"
-        case .medium: "Medium"
-        case .high: "High"
-        case .xhigh: "XHigh"
-        case .max: "Max"
-        case .ultra: "Ultra"
+        case .off: String(localized: "Off")
+        case .minimal: String(localized: "Minimal")
+        case .low: String(localized: "Low")
+        case .medium: String(localized: "Medium")
+        case .high: String(localized: "High")
+        case .xhigh: String(localized: "XHigh")
+        case .max: String(localized: "Max")
+        case .ultra: String(localized: "Ultra")
         }
     }
 

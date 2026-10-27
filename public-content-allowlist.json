@@ -36,6 +36,7 @@
     "script/embed_helpers.sh",
     "script/sign_helper.sh",
     "script/bundle_notices.py",
+    "script/localization.py",
     "script/sign_release_bundle.py",
     "script/verify_release_bundle.py",
     "script/export_public_tree.py",

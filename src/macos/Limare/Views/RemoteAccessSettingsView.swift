@@ -53,7 +53,7 @@ struct RemoteAccessSettingsView: View {
                 }
                 SettingsDivider()
                 field("Tunnel token") {
-                    SecretField(hasStoredSecret: remote.hasTunnelToken, replacementSecret: $replacementToken, placeholder: "Paste the tunnel token", secretName: "Tunnel token")
+                    SecretField(hasStoredSecret: remote.hasTunnelToken, replacementSecret: $replacementToken, placeholder: String(localized: "Paste the tunnel token"), secretName: String(localized: "Tunnel token"))
                 }
             }
             footnote("In Cloudflare Zero Trust, create a tunnel, add a public hostname with service http://127.0.0.1:\(portText.isEmpty ? String(RemoteAccessConfiguration.defaultPort) : portText), and turn on Protect with Access for that route. The token is kept in Limare's private secret store and passed to cloudflared only through its environment.")
@@ -101,7 +101,7 @@ struct RemoteAccessSettingsView: View {
     private static let mono = Font.system(size: 12.5, design: .monospaced)
 
     /// A labelled field: the label at a fixed width, the field filling the rest of the row.
-    private func field<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
+    private func field<Content: View>(_ label: LocalizedStringKey, @ViewBuilder content: () -> Content) -> some View {
         HStack(spacing: AppSpacing.medium) {
             Text(label)
                 .font(AppTypography.interfaceMedium)
@@ -113,7 +113,7 @@ struct RemoteAccessSettingsView: View {
         .padding(.vertical, AppSemanticSpacing.settingsRowVerticalPadding)
     }
 
-    private func footnote(_ text: String) -> some View {
+    private func footnote(_ text: LocalizedStringKey) -> some View {
         Text(text)
             .font(AppTypography.interfaceCaption)
             .foregroundStyle(AppColors.textSecondary)
@@ -127,19 +127,19 @@ struct RemoteAccessSettingsView: View {
 
     private var serverText: String {
         switch remote.serverStatus {
-        case .off: draft.isEnabled ? "Not running" : "Off"
-        case .starting: "Starting…"
-        case .serving(let port): "Listening on 127.0.0.1:\(port)"
+        case .off: draft.isEnabled ? String(localized: "Not running") : String(localized: "Off")
+        case .starting: String(localized: "Starting…")
+        case .serving(let port): String(localized: "Listening on 127.0.0.1:\(port)")
         case .failed(let reason): reason
         }
     }
 
     private var tunnelText: String {
         switch remote.tunnel.status {
-        case .stopped: "Not running"
-        case .starting, .running: remote.tunnel.lastError.map { "Connecting to Cloudflare… Last error: \($0)" } ?? "Connecting to Cloudflare…"
-        case .connected: "Connected"
-        case .restarting(let seconds): "Restarting in \(seconds) s"
+        case .stopped: String(localized: "Not running")
+        case .starting, .running: remote.tunnel.lastError.map { String(localized: "Connecting to Cloudflare… Last error: \($0)") } ?? String(localized: "Connecting to Cloudflare…")
+        case .connected: String(localized: "Connected")
+        case .restarting(let seconds): String(localized: "Restarting in \(seconds) s")
         case .failed(let reason): reason
         }
     }
@@ -167,7 +167,7 @@ struct RemoteAccessSettingsView: View {
                 draft = remote.configuration
                 portText = String(draft.port)
             } catch {
-                applyError = "Could not save the tunnel token: \(error.localizedDescription)"
+                applyError = String(localized: "Could not save the tunnel token: \(error.localizedDescription)")
             }
             isApplying = false
         }

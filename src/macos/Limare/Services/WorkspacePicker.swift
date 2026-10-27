@@ -9,9 +9,9 @@ protocol WorkspacePicking {
 struct WorkspacePicker: WorkspacePicking {
     func chooseWorkspace() -> URL? {
         let panel = NSOpenPanel()
-        panel.title = "Choose Project Folder"
-        panel.message = "Choose a project folder as the default working directory."
-        panel.prompt = "Choose Project Folder"
+        panel.title = String(localized: "Choose Project Folder")
+        panel.message = String(localized: "Choose a project folder as the default working directory.")
+        panel.prompt = String(localized: "Choose Project Folder")
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false

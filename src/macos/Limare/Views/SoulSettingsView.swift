@@ -6,11 +6,11 @@ struct SoulSettingsView: View {
 
     @State private var editor = SoulEditorState()
 
-    private static let langOptions: [(label: String, value: String)] = [
-        ("Auto", "auto"),
-        ("Chinese", "zh"),
-        ("English", "en"),
-    ]
+    /// The language Limare answers in; named in the current interface language.
+    private static var langOptions: [(label: String, value: String)] {
+        [(String(localized: "Auto"), "auto")]
+            + ["zh", "en"].map { (Locale.current.localizedString(forLanguageCode: $0) ?? $0, $0) }
+    }
 
     var body: some View {
         SettingsPage {
@@ -31,7 +31,7 @@ struct SoulSettingsView: View {
                 do {
                     try editor.confirmRestoreDefault(to: appState.soul)
                 } catch {
-                    editor.statusMessage = "Restore failed: \(error.localizedDescription)"
+                    editor.statusMessage = String(localized: "Restore failed: \(error.localizedDescription)")
                 }
             }
             Button("Cancel", role: .cancel) {
@@ -72,7 +72,7 @@ struct SoulSettingsView: View {
                             .clipShape(Capsule())
                     }
                 }
-                Text(editor.style.isEmpty ? "No custom response style set." : editor.style)
+                Text(editor.style.isEmpty ? String(localized: "No custom response style set.") : editor.style)
                     .font(.caption)
                     .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(2)
@@ -128,7 +128,7 @@ struct SoulSettingsView: View {
                 }
 
                 HStack {
-                    Text("Language")
+                    Text("Reply Language")
                         .frame(width: 80, alignment: .leading)
                         .foregroundStyle(AppColors.textSecondary)
                     Picker("", selection: $editor.lang) {
@@ -215,7 +215,7 @@ struct SoulSettingsView: View {
                 do {
                     try editor.save(to: appState.soul)
                 } catch {
-                    editor.statusMessage = "Save failed: \(error.localizedDescription)"
+                    editor.statusMessage = String(localized: "Save failed: \(error.localizedDescription)")
                 }
             }
             .buttonStyle(.charcoalProminent)
@@ -226,7 +226,7 @@ struct SoulSettingsView: View {
 
     private func selectAvatarImage() {
         let panel = NSOpenPanel()
-        panel.title = "Select Avatar Image"
+        panel.title = String(localized: "Select Avatar Image")
         panel.showsHiddenFiles = false
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false

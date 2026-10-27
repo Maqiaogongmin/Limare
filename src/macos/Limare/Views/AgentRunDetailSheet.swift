@@ -5,7 +5,7 @@ struct AgentRunDetailSheet: View {
     var presentation: DelegatedRunPresentation? = nil
     @Environment(\.dismiss) private var dismiss
 
-    private var title: String { presentation?.title ?? "Research Agent" }
+    private var title: String { presentation?.title ?? String(localized: "Research Agent") }
     private var modelAttribution: String { presentation?.modelAttribution ?? "" }
     private var status: AgentRunStatus { presentation?.status ?? .failed }
     private var startedAt: Date? { presentation?.startedAt }
@@ -46,7 +46,7 @@ struct AgentRunDetailSheet: View {
                         // Status & Timing Card
                         HStack(spacing: AppSpacing.medium) {
                             Label {
-                                Text(status.rawValue.capitalized)
+                                Text(status.displayName)
                                     .font(.subheadline.weight(.medium))
                             } icon: {
                                 statusIcon(for: status)

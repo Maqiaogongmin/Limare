@@ -106,7 +106,7 @@ enum RemoteProjection {
     ) -> RemoteConversationSummary {
         RemoteConversationSummary(
             id: record.id,
-            title: record.title,
+            title: record.displayTitle,
             updatedAt: record.updatedAt,
             projectID: record.projectID,
             projectName: projectName,

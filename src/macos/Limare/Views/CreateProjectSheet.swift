@@ -27,7 +27,7 @@ struct CreateProjectSheet: View {
 
     private var header: some View {
         HStack {
-            Text("创建项目")
+            Text("Create Project")
                 .font(.title3.weight(.bold))
 
             Spacer()
@@ -43,7 +43,7 @@ struct CreateProjectSheet: View {
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
-            .help("关闭")
+            .help("Close")
         }
     }
 
@@ -53,7 +53,7 @@ struct CreateProjectSheet: View {
                 .font(.system(size: 14))
                 .foregroundStyle(AppColors.textSecondary)
 
-            TextField("项目名称", text: $projectName)
+            TextField("Project name", text: $projectName)
                 .textFieldStyle(.plain)
                 .font(.body)
         }
@@ -68,7 +68,7 @@ struct CreateProjectSheet: View {
 
     private var folderSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("项目文件夹")
+            Text("Project Folder")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.primary)
 
@@ -89,7 +89,7 @@ struct CreateProjectSheet: View {
                     .font(.system(size: 26))
                     .foregroundStyle(AppColors.textSecondary)
 
-                Text("选择作为项目默认工作目录的文件夹")
+                Text("Choose the folder to use as the project's default working directory")
                     .font(.subheadline)
                     .foregroundStyle(AppColors.textSecondary)
             }
@@ -132,7 +132,7 @@ struct CreateProjectSheet: View {
 
             Spacer()
 
-            Button("更换") {
+            Button("Change") {
                 chooseFolder()
             }
             .buttonStyle(.plain)
@@ -151,7 +151,7 @@ struct CreateProjectSheet: View {
                     .foregroundStyle(AppColors.textSecondary)
             }
             .buttonStyle(.plain)
-            .help("移除文件夹")
+            .help("Remove Folder")
         }
         .padding(AppSpacing.medium)
         .frame(maxWidth: .infinity)
@@ -166,7 +166,7 @@ struct CreateProjectSheet: View {
         HStack(spacing: AppSpacing.medium) {
             Spacer()
 
-            Button("取消") {
+            Button("Cancel") {
                 dismiss()
             }
             .buttonStyle(.plain)
@@ -179,7 +179,7 @@ struct CreateProjectSheet: View {
             Button {
                 createProject()
             } label: {
-                Text("创建项目")
+                Text("Create Project")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(canCreate ? Color(nsColor: .windowBackgroundColor) : AppColors.textSecondary)
                     .padding(.horizontal, AppSpacing.standard)
@@ -205,7 +205,7 @@ struct CreateProjectSheet: View {
 
     private func createProject() {
         let trimmed = projectName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let finalName = trimmed.isEmpty ? (selectedWorkspace?.name ?? "New Project") : trimmed
+        let finalName = trimmed.isEmpty ? (selectedWorkspace?.name ?? String(localized: "New Project")) : trimmed
         let project = appState.conversations.newProject(name: finalName, workspace: selectedWorkspace)
         appState.showChat(in: window)
         appState.conversations.newConversation(projectID: project.id)

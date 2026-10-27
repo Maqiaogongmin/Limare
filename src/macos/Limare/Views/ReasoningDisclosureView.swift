@@ -16,7 +16,7 @@ struct ReasoningDisclosureView: View {
     }
 
     var label: String {
-        state == .streaming && !hasVisibleOutput ? "Thinking…" : "Thought process"
+        state == .streaming && !hasVisibleOutput ? String(localized: "Thinking…") : String(localized: "Thought process")
     }
 
     static func hasVisibleOutput(content: String, toolCalls: [ToolCallRecord]) -> Bool {

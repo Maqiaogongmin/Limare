@@ -120,7 +120,7 @@ struct ChatView: View {
             let prefix = appState.conversations.project(for: conversation).map {
                 Text(verbatim: "\($0.name) / ").font(.system(size: 13)).foregroundStyle(Color.secondary)
             } ?? Text(verbatim: "")
-            let title = Text(verbatim: conversation.title)
+            let title = Text(verbatim: conversation.displayTitle)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Color.primary)
             TitleBreadcrumb(text: Text("\(prefix)\(title)"), titleBar: titleBar)
@@ -205,11 +205,11 @@ struct ChatView: View {
     private var activeTitle: String {
         if let conversation = window.conversation {
             if let project = appState.conversations.project(for: conversation) {
-                return "\(project.name) / \(conversation.title)"
+                return "\(project.name) / \(conversation.displayTitle)"
             }
-            return conversation.title
+            return conversation.displayTitle
         }
-        return "Conversation"
+        return String(localized: "Conversation")
     }
 
     private var conversationContent: some View {
@@ -506,8 +506,8 @@ private struct WorkSurfaceEdgeHandle: View {
             if isHovering || isDragging { NSCursor.pop() }
         }
         .accessibilityElement()
-        .accessibilityLabel("Work Surface 宽度")
-        .accessibilityValue("\(Int(width)) 点")
+        .accessibilityLabel("Work Surface width")
+        .accessibilityValue("\(Int(width)) points")
         .accessibilityAdjustableAction { direction in
             switch direction {
             case .increment: adjust(by: KeyboardStep.accessibility)

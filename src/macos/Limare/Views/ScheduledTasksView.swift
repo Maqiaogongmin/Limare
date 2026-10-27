@@ -56,7 +56,7 @@ struct SchedulesWorkspaceView: View {
                                                 onReveal: reveal)
                         } else {
                             VStack(alignment: .leading, spacing: AppSpacing.small) {
-                                Text("从模板开始")
+                                Text("Start from a Template")
                                     .font(.system(size: 13, weight: .semibold))
                                 ScheduledTemplateGrid(onPick: create)
                             }
@@ -72,27 +72,27 @@ struct SchedulesWorkspaceView: View {
             }
         }
         .accessibilityIdentifier("scheduled.surface")
-        .navigationTitle("定时任务")
+        .navigationTitle("Scheduled Tasks")
         .toolbar(removing: .title)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(AppColors.canvas.ignoresSafeArea())
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .tint(AppColors.controlOn)
-        .confirmationDialog("删除定时任务？", isPresented: Binding(get: { panel.taskToDelete != nil }, set: { if !$0 { panel.taskToDelete = nil } }),
+        .confirmationDialog("Delete Scheduled Task?", isPresented: Binding(get: { panel.taskToDelete != nil }, set: { if !$0 { panel.taskToDelete = nil } }),
                             titleVisibility: .visible) {
-            Button("删除", role: .destructive) {
+            Button("Delete", role: .destructive) {
                 if let task = panel.taskToDelete {
                     do { try scheduler.delete(taskID: task.id) } catch { panel.errorMessage = error.localizedDescription }
                     if panel.selectedTaskID == task.id { panel.selectedTaskID = nil }
                 }
                 panel.taskToDelete = nil
             }
-            Button("取消", role: .cancel) { panel.taskToDelete = nil }
+            Button("Cancel", role: .cancel) { panel.taskToDelete = nil }
         } message: {
-            Text("任务产生的会话和消息都会保留。")
+            Text("The conversations and messages the task created are kept.")
         }
-        .alert("操作未完成", isPresented: Binding(get: { panel.errorMessage != nil }, set: { if !$0 { panel.errorMessage = nil } })) {
-            Button("好") { panel.errorMessage = nil }
+        .alert("Couldn't Complete the Action", isPresented: Binding(get: { panel.errorMessage != nil }, set: { if !$0 { panel.errorMessage = nil } })) {
+            Button("OK") { panel.errorMessage = nil }
         } message: {
             Text(panel.errorMessage ?? "")
         }
@@ -100,7 +100,7 @@ struct SchedulesWorkspaceView: View {
 
     private var titleBar: some View {
         HStack(spacing: AppSpacing.small) {
-            Text("定时任务")
+            Text("Scheduled Tasks")
                 .font(.system(size: 14, weight: .semibold))
             Spacer(minLength: AppSpacing.small)
             Button {
@@ -109,7 +109,7 @@ struct SchedulesWorkspaceView: View {
                 HStack(spacing: AppSpacing.xxSmall) {
                     Image(systemName: "plus")
                         .font(.system(size: 10.5, weight: .semibold))
-                    Text("新建任务")
+                    Text("New Task")
                 }
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundStyle(store.isReadable ? AppColors.sendGlyph : Color.secondary)
@@ -196,7 +196,7 @@ struct ScheduledTaskRow: View {
                     .foregroundStyle(Color.primary.opacity(0.65))
                     .lineLimit(1)
                 if let last = runs.first {
-                    Text("上次：" + ScheduledTaskPresentation.runSummary(last))
+                    Text("Last: \(ScheduledTaskPresentation.runSummary(last))")
                         .font(.system(size: 10.5))
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
@@ -207,7 +207,7 @@ struct ScheduledTaskRow: View {
                 .controlSize(.mini)
                 .labelsHidden()
                 .tint(AppColors.controlOn)
-                .accessibilityLabel("启用 \(task.name)")
+                .accessibilityLabel("Enable \(task.name)")
         }
         .padding(.horizontal, AppSpacing.medium)
         .frame(minHeight: 52)
@@ -249,23 +249,24 @@ struct ScheduledTaskTemplate: Identifiable, Equatable {
         let time = String(format: "%02d:%02d", hour, minute)
         switch kind {
         case .weekly:
-            let day = ScheduledRuleDraft.weekdayTitles.first { $0.0 == weekday }?.1 ?? ""
-            return "每周\(day) \(time)"
+            let day = weekday.map { Calendar.autoupdatingCurrent.shortStandaloneWeekdaySymbols[$0 - 1] } ?? ""
+            return String(localized: "Weekly on \(day) \(time)")
         default:
             return "\(kind.title) \(time)"
         }
     }
 
-    static let common: [ScheduledTaskTemplate] = [
-        ScheduledTaskTemplate(id: "codeReview", name: "每日代码巡检", prompt: "检查工作区最近一天的代码改动，列出可能的缺陷、遗留的 TODO 和需要补的测试。",
+    /// Names and instructions are in the current language; a task keeps the text it was created with.
+    static var common: [ScheduledTaskTemplate] { [
+        ScheduledTaskTemplate(id: "codeReview", name: String(localized: "Daily Code Review"), prompt: String(localized: "Review the workspace's code changes from the past day and list possible defects, leftover TODOs and tests that should be added."),
                               systemImage: "checklist", kind: .daily, weekday: nil, hour: 9, minute: 0),
-        ScheduledTaskTemplate(id: "weeklyReport", name: "每周工作周报", prompt: "汇总本周工作区里的提交和改动，整理成一份简明的周报：完成了什么、进行中的事项、下周计划。",
+        ScheduledTaskTemplate(id: "weeklyReport", name: String(localized: "Weekly Report"), prompt: String(localized: "Summarize this week's commits and changes in the workspace into a brief weekly report: what was done, what is in progress, and next week's plan."),
                               systemImage: "doc.text", kind: .weekly, weekday: 6, hour: 17, minute: 0),
-        ScheduledTaskTemplate(id: "dependencies", name: "依赖更新检查", prompt: "检查项目依赖是否有新版本或已知的安全公告，列出建议升级的依赖和升级风险。",
+        ScheduledTaskTemplate(id: "dependencies", name: String(localized: "Dependency Update Check"), prompt: String(localized: "Check the project's dependencies for new versions or known security advisories, and list the dependencies worth upgrading and the risks of upgrading."),
                               systemImage: "shippingbox", kind: .weekly, weekday: 2, hour: 10, minute: 0),
-        ScheduledTaskTemplate(id: "digest", name: "每日资讯摘要", prompt: "整理今天我关心领域的重要资讯，每条一句话概括并附来源。",
+        ScheduledTaskTemplate(id: "digest", name: String(localized: "Daily News Digest"), prompt: String(localized: "Gather today's important news in the fields I care about, summarize each item in one sentence, and cite the source."),
                               systemImage: "newspaper", kind: .weekdays, weekday: nil, hour: 8, minute: 30),
-    ]
+    ] }
 }
 
 /// No tasks yet: a clock badge, a title, the keep-running note and the templates.
@@ -287,7 +288,7 @@ private struct ScheduledTasksEmptyState: View {
             .shadow(color: .black.opacity(0.03), radius: 6, x: 0, y: 2)
 
             VStack(spacing: AppSpacing.xSmall) {
-                Text("让 Limare 按时替你做事")
+                Text("Let Limare Do Things for You on Schedule")
                     .font(.system(size: 18, weight: .semibold))
                 Text(ScheduledTaskCopy.keepRunningNote)
                     .font(.system(size: 12.5))
@@ -461,7 +462,7 @@ struct ScheduledTaskDetail: View {
             }
 
             VStack(alignment: .leading, spacing: AppSpacing.xSmall) {
-                sectionLabel("指令")
+                sectionLabel("Instruction")
                 Text(task.prompt)
                     .font(.system(size: 13))
                     .foregroundStyle(Color.primary.opacity(0.9))
@@ -474,11 +475,11 @@ struct ScheduledTaskDetail: View {
             settingsGrid
 
             VStack(alignment: .leading, spacing: AppSpacing.small) {
-                Text("运行历史")
+                Text("Run History")
                     .font(.system(size: 13, weight: .semibold))
                 VStack(spacing: 0) {
                     if runs.isEmpty {
-                        Text("还没有运行")
+                        Text("No runs yet")
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -528,25 +529,25 @@ struct ScheduledTaskDetail: View {
 
     @ViewBuilder
     private var actions: some View {
-        Button("编辑", action: onEdit)
+        Button("Edit", action: onEdit)
             .buttonStyle(GhostTextButtonStyle())
-        Button("复制") {
-            do { _ = try scheduler.duplicate(taskID: task.id, name: task.name + " 副本") } catch { onError(error.localizedDescription) }
+        Button("Duplicate") {
+            do { _ = try scheduler.duplicate(taskID: task.id, name: String(localized: "\(task.name) Copy", comment: "The name of a duplicated scheduled task")) } catch { onError(error.localizedDescription) }
         }
         .buttonStyle(GhostTextButtonStyle())
-        Button("删除", action: onDelete)
+        Button("Delete", action: onDelete)
             .buttonStyle(GhostTextButtonStyle(isDestructive: true))
         Button {
             do { try scheduler.runNow(taskID: task.id) } catch { onError(String(describing: error)) }
         } label: {
             HStack(spacing: AppSpacing.xxSmall) {
                 Image(systemName: "play.fill").font(.system(size: 9))
-                Text("立即运行")
+                Text("Run Now")
             }
         }
         .buttonStyle(ScheduledOutlineButtonStyle())
         .disabled(anotherRunActive || !scheduler.store.isReadable)
-        .help(anotherRunActive ? ScheduledTaskCopy.anotherRunActive : "按无人值守方式立即运行一次")
+        .help(anotherRunActive ? ScheduledTaskCopy.anotherRunActive : String(localized: "Run once now, unattended"))
         .accessibilityIdentifier("scheduled.runNow")
     }
 
@@ -577,23 +578,23 @@ struct ScheduledTaskDetail: View {
     private var settingsGrid: some View {
         Grid(horizontalSpacing: 0, verticalSpacing: 0) {
             GridRow {
-                cell("执行计划") {
+                cell("Schedule") {
                     Text(planText)
                     if let next = task.nextNominalAt {
-                        Text("下次：" + ScheduledTaskPresentation.timeWithZone(next, timeZoneID: task.timeZoneID))
+                        Text("Next: \(ScheduledTaskPresentation.timeWithZone(next, timeZoneID: task.timeZoneID))")
                             .font(.system(size: 11)).foregroundStyle(.secondary)
                     }
                 }
                 columnRule
-                cell("运行目标") { targetView }
+                cell("Target") { targetView }
             }
             GridRow {
                 SettingsDivider().gridCellColumns(3)
             }
             GridRow {
-                cell("模型配置") { Text(ScheduledModelLabel.text(task: task, appState: appState)) }
+                cell("Model") { Text(ScheduledModelLabel.text(task: task, appState: appState)) }
                 columnRule
-                cell("通知规则") { Text(task.notifyOn == .completionAndFailure ? "完成和失败" : "仅失败") }
+                cell("Notifications") { Text(task.notifyOn == .completionAndFailure ? "Completion and failure" : "Failure only") }
             }
         }
         .scheduledCard()
@@ -610,7 +611,7 @@ struct ScheduledTaskDetail: View {
             .gridCellUnsizedAxes(.vertical)
     }
 
-    private func cell<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+    private func cell<Content: View>(_ title: LocalizedStringKey, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: AppSpacing.xxSmall) {
             sectionLabel(title)
             VStack(alignment: .leading, spacing: AppSpacing.xxxSmall) {
@@ -623,7 +624,7 @@ struct ScheduledTaskDetail: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private func sectionLabel(_ title: String) -> some View {
+    private func sectionLabel(_ title: LocalizedStringKey) -> some View {
         Text(title)
             .font(.system(size: 11, weight: .medium))
             .foregroundStyle(.secondary)
@@ -633,18 +634,20 @@ struct ScheduledTaskDetail: View {
     private var targetView: some View {
         switch task.target {
         case .newConversation(let projectID):
-            Text("每次新建会话 · " + (projectID.flatMap { id in appState.conversations.projects.first { $0.id == id }?.name } ?? (projectID == nil ? "默认工作区" : "项目已删除")))
+            let place = projectID.flatMap { id in appState.conversations.projects.first { $0.id == id }?.name }
+                ?? (projectID == nil ? String(localized: "Default workspace") : String(localized: "Project deleted"))
+            Text("A new conversation each run · \(place)")
         case .conversation(let id):
             if let conversation = appState.conversations.conversations.first(where: { $0.id == id }) {
                 Button { onReveal(id) } label: {
                     HStack(spacing: AppSpacing.xxSmall) {
-                        Text(conversation.title).lineLimit(1)
+                        Text(conversation.displayTitle).lineLimit(1)
                         Image(systemName: "arrow.up.right").font(.system(size: 9, weight: .semibold))
                     }
                 }
                 .buttonStyle(QuietLinkButtonStyle())
             } else {
-                Text("会话已删除").foregroundStyle(.secondary)
+                Text("Conversation deleted").foregroundStyle(.secondary)
             }
         }
     }
@@ -665,7 +668,7 @@ struct ScheduledTaskDetail: View {
             if let conversationID = run.conversationID, appState.conversations.conversations.contains(where: { $0.id == conversationID }) {
                 Button { onReveal(conversationID) } label: {
                     HStack(spacing: 3) {
-                        Text("打开会话")
+                        Text("Open Conversation")
                         Image(systemName: "arrow.up.right").font(.system(size: 8.5, weight: .semibold))
                     }
                 }
@@ -688,7 +691,7 @@ struct ScheduledTaskDetail: View {
     }
 }
 
-/// "打开会话 ↗": a small charcoal outlined capsule, never the link blue.
+/// "Open Conversation ↗": a small charcoal outlined capsule, never the link blue.
 private struct OpenConversationPillStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         StyleBody(configuration: configuration)
@@ -823,13 +826,13 @@ extension ScheduledTimeField {
 /// A form row's choice as bare text with a small chevron: no control fill at rest, a faint
 /// tint under the pointer; the menu ticks the current value.
 struct ScheduledMenu<Value: Hashable>: View {
-    let title: String
+    let title: LocalizedStringKey
     @Binding var selection: Value
     let options: [(String, Value)]
 
     @State private var isHovering = false
 
-    init(_ title: String, selection: Binding<Value>, options: [(String, Value)]) {
+    init(_ title: LocalizedStringKey, selection: Binding<Value>, options: [(String, Value)]) {
         self.title = title
         self._selection = selection
         self.options = options
@@ -888,15 +891,15 @@ struct ScheduledMenu<Value: Hashable>: View {
 @MainActor
 enum ScheduledModelLabel {
     static func effort(_ level: ThinkingLevel?) -> String {
-        guard let level else { return "默认" }
-        return level.rawValue.prefix(1).uppercased() + level.rawValue.dropFirst()
+        guard let level else { return String(localized: "Default") }
+        return level.displayName
     }
 
     static func text(task: ScheduledTask, appState: AppState) -> String {
         let providers = appState.providers.providers
         switch task.target {
         case .newConversation:
-            let model = task.modelSource.map { ModelChoiceCatalog.label(for: $0, modelGroups: appState.modelGroups, providers: providers) } ?? "默认"
+            let model = task.modelSource.map { ModelChoiceCatalog.label(for: $0, modelGroups: appState.modelGroups, providers: providers) } ?? String(localized: "Default")
             return "\(model) · \(effort(task.thinkingLevel))"
         case .conversation(let id):
             let conversation = appState.conversations.conversations.first { $0.id == id }
@@ -909,7 +912,7 @@ enum ScheduledModelLabel {
 }
 
 /// The one sheet of the manager: name and instruction, repeat and time, and the rarely changed
-/// target, model, effort and notifications behind 高级.
+/// target, model, effort and notifications behind Advanced.
 struct ScheduledTaskEditor: View {
     enum Mode: Identifiable {
         /// A new task, filled in from a template when there is one.
@@ -1010,7 +1013,7 @@ struct ScheduledTaskEditor: View {
 
     private var header: some View {
         HStack {
-            Text(existing == nil ? "设置定时任务" : "编辑定时任务")
+            Text(existing == nil ? "New Scheduled Task" : "Edit Scheduled Task")
                 .font(.system(size: 16, weight: .semibold))
             Spacer()
             Button {
@@ -1021,13 +1024,13 @@ struct ScheduledTaskEditor: View {
             }
             .buttonStyle(GhostIconButtonStyle(size: 24, iconSize: 11))
             .keyboardShortcut(.cancelAction)
-            .help("关闭")
+            .help("Close")
         }
     }
 
     private var instructionCard: some View {
         VStack(spacing: 0) {
-            TextField("任务名称（如：每日代码巡检）", text: $name)
+            TextField("Task name (for example, Daily Code Review)", text: $name)
                 .textFieldStyle(.plain)
                 .font(.system(size: 14, weight: .medium))
                 .focused($nameFocused)
@@ -1037,7 +1040,7 @@ struct ScheduledTaskEditor: View {
             SettingsDivider()
             ZStack(alignment: .topLeading) {
                 if prompt.isEmpty {
-                    Text("输入需要 Limare 定时执行的指令说明...")
+                    Text("Describe what Limare should do on schedule…")
                         .font(.system(size: 13))
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, Self.textEditorInset)
@@ -1058,14 +1061,14 @@ struct ScheduledTaskEditor: View {
 
     private var scheduleCard: some View {
         VStack(spacing: 0) {
-            formRow("重复") {
-                ScheduledMenu("重复", selection: $rule.kind, options: ScheduledRuleDraft.Kind.allCases.map { ($0.title, $0) })
+            formRow("Repeat") {
+                ScheduledMenu("Repeat", selection: $rule.kind, options: ScheduledRuleDraft.Kind.allCases.map { ($0.title, $0) })
                     .accessibilityIdentifier("scheduled.form.repeat")
             }
             switch rule.kind {
             case .weekly:
                 SettingsDivider()
-                formRow("星期") {
+                formRow("Days") {
                     HStack(spacing: 3) {
                         ForEach(ScheduledRuleDraft.weekdayTitles, id: \.0) { number, title in
                             let isOn = rule.weekdays.contains(number)
@@ -1084,23 +1087,23 @@ struct ScheduledTaskEditor: View {
                 }
             case .monthly:
                 SettingsDivider()
-                formRow("日期") {
-                    Stepper("每月 \(rule.dayOfMonth) 日", value: $rule.dayOfMonth, in: 1...31)
+                formRow("Date") {
+                    Stepper("Day \(rule.dayOfMonth) of each month", value: $rule.dayOfMonth, in: 1...31)
                         .font(.system(size: 13))
                 }
             case .everyNHours:
                 SettingsDivider()
-                formRow("间隔") {
-                    Stepper("每 \(rule.intervalHours) 小时", value: $rule.intervalHours, in: 1...24)
+                formRow("Interval") {
+                    Stepper("Every \(rule.intervalHours) hours", value: $rule.intervalHours, in: 1...24)
                         .font(.system(size: 13))
                 }
             case .once, .daily, .weekdays:
                 EmptyView()
             }
             SettingsDivider()
-            formRow(rule.kind == .everyNHours ? "分钟" : "时间") {
+            formRow(rule.kind == .everyNHours ? "Minute" : "Time") {
                 HStack(spacing: AppSpacing.xSmall) {
-                    Text("\(timeZoneID) ·")
+                    Text(verbatim: "\(timeZoneID) ·")
                         .font(.system(size: 12.5))
                         .foregroundStyle(.secondary)
                     if rule.kind == .once {
@@ -1124,7 +1127,7 @@ struct ScheduledTaskEditor: View {
                 withAnimation(AppMotion.resolved(Self.disclosure)) { showsAdvanced.toggle() }
             } label: {
                 HStack(spacing: AppSpacing.xxSmall) {
-                    Text("高级")
+                    Text("Advanced")
                     Image(systemName: "chevron.down")
                         .font(.system(size: 9, weight: .semibold))
                         .rotationEffect(.degrees(showsAdvanced ? 180 : 0))
@@ -1141,34 +1144,34 @@ struct ScheduledTaskEditor: View {
 
             if showsAdvanced {
                 VStack(spacing: 0) {
-                    formRow("目标") {
-                        ScheduledMenu("目标", selection: $targetKind, options: [("新会话", .newConversation), ("指定会话", .conversation)])
+                    formRow("Target") {
+                        ScheduledMenu("Target", selection: $targetKind, options: [(String(localized: "New conversation"), .newConversation), (String(localized: "A conversation"), .conversation)])
                     }
                     SettingsDivider()
                     switch targetKind {
                     case .newConversation:
-                        formRow("项目") {
-                            ScheduledMenu("项目", selection: $projectID,
-                                          options: [("默认工作区", nil)] + appState.conversations.projects.map { ($0.name, Optional($0.id)) })
+                        formRow("Project") {
+                            ScheduledMenu("Project", selection: $projectID,
+                                          options: [(String(localized: "Default workspace"), nil)] + appState.conversations.projects.map { ($0.name, Optional($0.id)) })
                         }
                         SettingsDivider()
-                        formRow("模型") {
-                            ScheduledMenu("模型", selection: $modelSource, options: modelOptions)
+                        formRow("Model") {
+                            ScheduledMenu("Model", selection: $modelSource, options: modelOptions)
                         }
                         SettingsDivider()
-                        formRow("思考强度") {
-                            ScheduledMenu("思考强度", selection: $thinkingLevel,
-                                          options: [("默认", nil)] + ThinkingLevel.selectableCases.map { (ScheduledModelLabel.effort($0), Optional($0)) })
+                        formRow("Thinking") {
+                            ScheduledMenu("Thinking", selection: $thinkingLevel,
+                                          options: [(String(localized: "Default"), nil)] + ThinkingLevel.selectableCases.map { (ScheduledModelLabel.effort($0), Optional($0)) })
                         }
                     case .conversation:
-                        formRow("会话") {
-                            ScheduledMenu("会话", selection: $conversationID,
-                                          options: [("选择会话", nil)] + appState.conversations.conversations
+                        formRow("Conversation") {
+                            ScheduledMenu("Conversation", selection: $conversationID,
+                                          options: [(String(localized: "Choose a conversation"), nil)] + appState.conversations.conversations
                                               .filter { !$0.isArchived && !$0.isNativeDelegationChild }
-                                              .map { ($0.title, Optional($0.id)) })
+                                              .map { ($0.displayTitle, Optional($0.id)) })
                         }
                         SettingsDivider()
-                        formRow("模型 / 思考强度") {
+                        formRow("Model / Thinking") {
                             Text(followsText)
                                 .font(.system(size: 12.5))
                                 .foregroundStyle(.secondary)
@@ -1178,8 +1181,8 @@ struct ScheduledTaskEditor: View {
                         }
                     }
                     SettingsDivider()
-                    formRow("通知") {
-                        ScheduledMenu("通知", selection: $notifyOn, options: [("完成和失败", .completionAndFailure), ("仅失败", .failureOnly)])
+                    formRow("Notifications") {
+                        ScheduledMenu("Notifications", selection: $notifyOn, options: [(String(localized: "Completion and failure"), .completionAndFailure), (String(localized: "Failure only"), .failureOnly)])
                     }
                 }
                 .scheduledCard()
@@ -1210,7 +1213,7 @@ struct ScheduledTaskEditor: View {
             HStack(spacing: AppSpacing.xxSmall) {
                 Image(systemName: "exclamationmark.triangle")
                     .foregroundStyle(AppColors.cautionIcon)
-                Text("无人值守运行 · 需保持应用开启")
+                Text("Runs unattended · Keep the app open")
                     .foregroundStyle(Color.secondary)
             }
                 .font(.system(size: 11.5))
@@ -1220,9 +1223,9 @@ struct ScheduledTaskEditor: View {
                     .compactMap { $0 }.joined(separator: "\n"))
                 .accessibilityIdentifier("scheduled.form.unattendedNote")
             Spacer(minLength: AppSpacing.small)
-            Button("取消") { onClose() }
+            Button("Cancel") { onClose() }
                 .buttonStyle(ScheduledOutlineButtonStyle())
-            Button(existing == nil ? "创建" : "保存", action: save)
+            Button(existing == nil ? "Create" : "Save", action: save)
                 .buttonStyle(ScheduledCharcoalButtonStyle())
                 .keyboardShortcut(.defaultAction)
                 .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || target == nil)
@@ -1231,7 +1234,7 @@ struct ScheduledTaskEditor: View {
         .padding(.top, AppSpacing.xxSmall)
     }
 
-    private func formRow<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+    private func formRow<Content: View>(_ title: LocalizedStringKey, @ViewBuilder content: () -> Content) -> some View {
         HStack(spacing: AppSpacing.medium) {
             Text(title)
                 .font(.system(size: 13))
@@ -1246,14 +1249,14 @@ struct ScheduledTaskEditor: View {
         .frame(minHeight: Self.rowHeight)
     }
 
-    /// 默认, the selectable groups, then the visible models as `Provider / Model`.
+    /// Default, the selectable groups, then the visible models as `Provider / Model`.
     private var modelOptions: [(String, ConversationModelSource?)] {
         let providers = appState.providers.providers
         let groups = ModelChoiceCatalog.selectableGroups(modelGroups: appState.modelGroups, providers: providers)
             .map { ($0.name, Optional(ConversationModelSource.group(groupID: $0.id))) }
         let models = ModelChoiceCatalog.visibleModelEntries(providers: providers, current: modelSource)
             .map { ("\($0.providerName) / \($0.model.displayName)", Optional(ConversationModelSource.direct(providerID: $0.providerID, modelID: $0.model.id))) }
-        return [("默认", nil)] + groups + models
+        return [(String(localized: "Default"), nil)] + groups + models
     }
 
     private var followsText: String {

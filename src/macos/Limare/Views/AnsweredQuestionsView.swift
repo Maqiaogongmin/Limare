@@ -75,8 +75,8 @@ struct AnsweredQuestionsView: View {
     static func statusText(_ resolution: RecordedQuestionResolution) -> String? {
         switch resolution {
         case .answered: nil
-        case .skipped: "已跳过，没有回答"
-        case .superseded: "没有回答：你发送了新消息"
+        case .skipped: String(localized: "Skipped without an answer")
+        case .superseded: String(localized: "Not answered: you sent a new message")
         }
     }
 }

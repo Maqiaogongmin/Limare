@@ -1,4 +1,5 @@
 import { h, clear } from './dom.js';
+import { t } from './i18n.js';
 
 // A bottom sheet of choices (project, model, thinking level). One at a time, over every page.
 let layer = null;
@@ -25,7 +26,7 @@ export function openPicker({ title, build }) {
     clear(layer);
     const sections = build();
     const sheet = h('div', { class: 'sheet picker', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
-      h('div', { class: 'picker-head' }, h('h2', {}, title), h('button', { class: 'small', onclick: closePicker }, '完成')),
+      h('div', { class: 'picker-head' }, h('h2', {}, title), h('button', { class: 'small', onclick: closePicker }, t('Done'))),
       sections.map((section) => h('div', { class: 'picker-section' },
         section.title ? h('h4', {}, section.title) : null,
         section.items.map((item) => h('button', {

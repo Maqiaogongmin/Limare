@@ -23,19 +23,19 @@ public enum HookHandlerAvailability: String, Sendable, Equatable {
     public var displayText: String {
         switch self {
         case .available:
-            return "Enabled"
+            return String(localized: "Enabled")
         case .disabledByPackage:
-            return "Disabled by package configuration"
+            return String(localized: "Disabled by package configuration")
         case .disabledByUser:
-            return "Disabled"
+            return String(localized: "Disabled")
         case .unsupportedEvent:
-            return "Unavailable — Event not supported by this version of Limare"
+            return String(localized: "Unavailable — Event not supported by this version of Limare")
         case .unsupportedHandlerType:
-            return "Unavailable — Handler type not supported"
+            return String(localized: "Unavailable — Handler type not supported")
         case .unsupportedAsync:
-            return "Unavailable — Async execution not supported"
+            return String(localized: "Unavailable — Async execution not supported")
         case .invalidConfiguration:
-            return "Unavailable — Command is missing"
+            return String(localized: "Unavailable — Command is missing")
         }
     }
 }
@@ -94,35 +94,35 @@ final class HooksSettingsState {
     func friendlyEventName(for rawKey: String) -> String {
         switch rawKey {
         case HookEventName.sessionStart.rawValue:
-            return "When a conversation starts"
+            return String(localized: "When a conversation starts")
         case HookEventName.userPromptSubmit.rawValue:
-            return "When you send a message"
+            return String(localized: "When you send a message")
         case HookEventName.preToolUse.rawValue:
-            return "Before Limare uses a tool"
+            return String(localized: "Before Limare uses a tool")
         case HookEventName.postToolUse.rawValue:
-            return "After Limare uses a tool"
+            return String(localized: "After Limare uses a tool")
         case HookEventName.postToolUseFailure.rawValue:
-            return "After a tool fails"
+            return String(localized: "After a tool fails")
         case HookEventName.stop.rawValue:
-            return "When Limare finishes a response"
+            return String(localized: "When Limare finishes a response")
         case HookEventName.sessionEnd.rawValue:
-            return "When a conversation ends"
+            return String(localized: "When a conversation ends")
         case HookEventName.preCompact.rawValue:
-            return "Before history compaction"
+            return String(localized: "Before history compaction")
         case HookEventName.postCompact.rawValue:
-            return "After history compaction"
+            return String(localized: "After history compaction")
         case HookEventName.subagentStart.rawValue:
-            return "When a subagent starts"
+            return String(localized: "When a subagent starts")
         case HookEventName.subagentStop.rawValue:
-            return "When a subagent stops"
+            return String(localized: "When a subagent stops")
         case HookEventName.notification.rawValue:
-            return "On agent notification"
+            return String(localized: "On agent notification")
         case HookEventName.taskCompleted.rawValue:
-            return "When task completes"
+            return String(localized: "When task completes")
         case HookEventName.permissionRequest.rawValue:
-            return "On permission request"
+            return String(localized: "On permission request")
         case HookEventName.interrupt.rawValue:
-            return "When task interrupted"
+            return String(localized: "When task interrupted")
         default:
             return rawKey
         }
@@ -176,12 +176,12 @@ final class HooksSettingsState {
     func automationSummaryText(for source: HookSource) -> String {
         let counts = automationCounts(for: source)
         if counts.total == 0 {
-            return "No automations"
+            return String(localized: "No automations")
         }
         if counts.unavailable == 0 {
-            return "\(counts.available) \(counts.available == 1 ? "automation" : "automations")"
+            return String(localized: "\(counts.available) automations")
         }
-        return "\(counts.available) available · \(counts.unavailable) unavailable"
+        return String(localized: "\(counts.available) available · \(counts.unavailable) unavailable")
     }
 
     func overviewEventBullets(for source: HookSource) -> [String] {
@@ -206,9 +206,9 @@ final class HooksSettingsState {
 
     func trustStatusText(for source: HookSource, isTrusted: Bool) -> String {
         if source.loadError != nil {
-            return "Load Error"
+            return String(localized: "Load Error")
         }
-        return isTrusted ? "Trusted" : "Needs Review"
+        return isTrusted ? String(localized: "Trusted") : String(localized: "Needs Review")
     }
 
     func trustStatusKind(for source: HookSource, isTrusted: Bool) -> InlineStatusKind {

@@ -43,10 +43,10 @@ enum ModelChoiceCatalog {
 
     /// The model's full name: the group's name, or "Provider / Model" (with its discovery badge).
     static func label(for source: ConversationModelSource?, modelGroups: ModelGroupStore?, providers: [ProviderConfiguration]) -> String {
-        guard let source else { return "Select Model" }
+        guard let source else { return String(localized: "Select Model") }
         switch source {
         case .group(let groupID):
-            return modelGroups?.group(for: groupID)?.name ?? "Group (\(groupID))"
+            return modelGroups?.group(for: groupID)?.name ?? String(localized: "Group (\(groupID))")
         case .direct(let providerID, let modelID):
             guard let provider = providers.first(where: { $0.id == providerID }) else { return modelID }
             if let model = provider.models.first(where: { $0.id == modelID }) {
@@ -67,10 +67,10 @@ enum ModelChoiceCatalog {
         switch group.strategy {
         case .fallback:
             let name = first.provider.models.first(where: { $0.id == first.modelID })?.displayName ?? first.modelID
-            return (name, "Model group \(group.name): tries \(first.provider.name) / \(name) first (Fallback)")
+            return (name, String(localized: "Model group \(group.name): tries \(first.provider.name) / \(name) first (Fallback)"))
         case .loadBalance:
-            let count = entries.count == 1 ? "1 model" : "\(entries.count) models"
-            return (count, "Model group \(group.name): spreads conversations across \(count) (Load Balance)")
+            let count = String(localized: "\(entries.count) models")
+            return (count, String(localized: "Model group \(group.name): spreads conversations across \(count) (Load Balance)"))
         }
     }
 

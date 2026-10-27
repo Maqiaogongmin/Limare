@@ -202,7 +202,7 @@ struct HookReviewSheet: View {
     }
 
     @ViewBuilder
-    private func detailRow(label: String, value: String, isMonospaced: Bool = false) -> some View {
+    private func detailRow(label: LocalizedStringKey, value: String, isMonospaced: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
                 .font(.caption2.weight(.medium))

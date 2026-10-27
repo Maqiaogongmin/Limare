@@ -42,7 +42,7 @@ public final class MicrophoneRecorder: MicrophoneRecording, @unchecked Sendable 
         let inputFormat = inputNode.inputFormat(forBus: 0)
 
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
-            throw VoiceInputError.recordingFailed("Invalid audio input format from microphone.")
+            throw VoiceInputError.recordingFailed(String(localized: "Invalid audio input format from microphone."))
         }
 
         // Target: 16000 Hz, 1 channel (mono), Int16 PCM
@@ -52,11 +52,11 @@ public final class MicrophoneRecorder: MicrophoneRecording, @unchecked Sendable 
             channels: 1,
             interleaved: true
         ) else {
-            throw VoiceInputError.recordingFailed("Failed to create target audio format.")
+            throw VoiceInputError.recordingFailed(String(localized: "Failed to create target audio format."))
         }
 
         guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
-            throw VoiceInputError.recordingFailed("Failed to create audio converter.")
+            throw VoiceInputError.recordingFailed(String(localized: "Failed to create audio converter."))
         }
 
         self.pcmData = Data()
@@ -112,7 +112,7 @@ public final class MicrophoneRecorder: MicrophoneRecording, @unchecked Sendable 
             self.isRecording = false
             self.pcmData = Data()
             self.recordingStartTime = nil
-            throw VoiceInputError.recordingFailed("Failed to start audio engine: \(error.localizedDescription)")
+            throw VoiceInputError.recordingFailed(String(localized: "Failed to start audio engine: \(error.localizedDescription)"))
         }
     }
 
@@ -121,7 +121,7 @@ public final class MicrophoneRecorder: MicrophoneRecording, @unchecked Sendable 
         defer { lock.unlock() }
 
         guard isRecording else {
-            throw VoiceInputError.recordingFailed("Recorder was not active.")
+            throw VoiceInputError.recordingFailed(String(localized: "Recorder was not active."))
         }
 
         let recordedData = pcmData

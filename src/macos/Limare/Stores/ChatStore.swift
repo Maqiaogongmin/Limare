@@ -483,7 +483,7 @@ final class ChatStore {
             imported.forEach { attachmentStore.deleteAttachment($0) }
             logs.info("Chat", "The composer changed while mentioned images were imported; nothing was sent.")
             if isViewing(conversationID: conversationID) {
-                errorMessage = "附加图片期间输入内容有变化，未发送。请确认后再发送。"
+                errorMessage = String(localized: "The input changed while images were being attached, so nothing was sent. Check it and send again.")
             }
             return
         }
@@ -497,7 +497,7 @@ final class ChatStore {
                 logs.info("Chat", "Added attachment '\(attachment.filename)' (\(attachment.byteCount) bytes).")
             } catch {
                 imported[index...].forEach { attachmentStore.deleteAttachment($0) }
-                errorMessage = "图片未能附加：\(error.localizedDescription)"
+                errorMessage = String(localized: "The image couldn't be attached: \(error.localizedDescription)")
                 return
             }
         }
@@ -562,7 +562,7 @@ final class ChatStore {
                 pendingAttachments.removeAll()
                 draft = ""
                 restoredDraftID = nil
-                errorMessage = "上一个会话的输入内容未能保存为草稿（\(error.localizedDescription)）。内容已暂存，回到那个会话时会放回输入框；退出 Limare 前请先处理。"
+                errorMessage = String(localized: "The previous conversation's input couldn't be saved as a draft (\(error.localizedDescription)). It is held for now and goes back into the composer when you return to that conversation; deal with it before you quit Limare.")
                 composerConversationID = nextConversationID
                 restoreUnarchivedComposer(for: nextConversationID)
                 return
@@ -593,7 +593,7 @@ final class ChatStore {
             do {
                 try archive.archive(composerDraft, conversationID: conversationID)
             } catch {
-                errorMessage = "无法保存当前输入内容，未替换：\(error.localizedDescription)"
+                errorMessage = String(localized: "The current input couldn't be saved, so it wasn't replaced: \(error.localizedDescription)")
                 return false
             }
             pendingAttachments.removeAll()
@@ -746,7 +746,7 @@ final class ChatStore {
     @discardableResult
     private func submit(mode: InteractiveSendMode, outcomeDeclaration: OutcomeRunDeclaration?) -> Bool {
         guard viewedConversation?.isNativeDelegationChild != true else {
-            errorMessage = "Native Child history 由独立运行维护；请从父会话发送 steer 或 continue。"
+            errorMessage = String(localized: "A subtask's history is maintained by its own run. Steer or continue it from the parent conversation.")
             return false
         }
         guard canSend else { return false }
@@ -776,7 +776,7 @@ final class ChatStore {
             showAdmittedInput(conversationID: targetConversationID, prompt: prompt, attachments: attachmentsToSend)
             // A run that failed while starting has already reported its own error.
             if outcomeDeclaration != nil && errorMessage == nil {
-                errorMessage = "The explicit outcome run was not admitted because this conversation is busy."
+                errorMessage = String(localized: "The explicit outcome run was not admitted because this conversation is busy.")
             }
             return false
         case .refused(let refusal):
@@ -949,7 +949,7 @@ final class ChatStore {
         }
         let preview = undo.preview(conversationID: conversationID, messageID: messageID, includeLeftovers: includeLeftovers)
         if preview.isBlocked {
-            errorMessage = preview.missingBackups.isEmpty ? "有文件在之后被修改过，不能安全恢复。" : "部分备份已被清理，只能撤回消息。"
+            errorMessage = preview.missingBackups.isEmpty ? String(localized: "Some files were modified afterward and can't be restored safely.") : String(localized: "Some backups were cleaned up; only the message can be retracted.")
             return .blocked
         }
         guard preview.hasFileChanges else {
@@ -962,7 +962,9 @@ final class ChatStore {
         do {
             plan = try undo.restore(preview, selectedOptionalPaths: optionalPaths)
         } catch {
-            errorMessage = (undo.openPlan(for: conversationID) == nil ? "无法开始恢复文件：" : "恢复已暂停：") + error.localizedDescription
+            errorMessage = undo.openPlan(for: conversationID) == nil
+                ? String(localized: "Couldn't start restoring files: \(error.localizedDescription)")
+                : String(localized: "Restoring is paused: \(error.localizedDescription)")
             return undo.openPlan(for: conversationID) == nil ? .refused : .partiallyFailed
         }
         return finishUndo(plan)
@@ -995,7 +997,7 @@ final class ChatStore {
     private func finishUndo(_ plan: UndoRestorePlan) -> UndoOutcome {
         switch plan.phase {
         case .partiallyFailed:
-            errorMessage = "有 \(plan.failedSteps.count) 个文件未能恢复。"
+            errorMessage = String(localized: "\(plan.failedSteps.count) files couldn't be restored.")
             return .partiallyFailed
         case .filesRestored:
             let stillPresent = conversationStore?.conversations.first(where: { $0.id == plan.conversationID })?
@@ -1007,7 +1009,7 @@ final class ChatStore {
             do {
                 try undo?.complete(plan.id)
             } catch {
-                errorMessage = "消息已撤回，但撤销记录未能保存：\(error.localizedDescription)"
+                errorMessage = String(localized: "The message was retracted, but the undo record couldn't be saved: \(error.localizedDescription)")
                 return .retractionPending
             }
             return .completed
@@ -1085,7 +1087,7 @@ final class ChatStore {
             if let refusal = error as? ConversationRunCoordinator.RetractionRefusal {
                 errorMessage = Self.retractionMessage(for: refusal)
             } else {
-                errorMessage = "撤回失败：\(error.localizedDescription)"
+                errorMessage = String(localized: "Retracting failed: \(error.localizedDescription)")
             }
             return false
         }
@@ -1103,13 +1105,13 @@ final class ChatStore {
 
     static func retractionMessage(for refusal: ConversationRunCoordinator.RetractionRefusal) -> String {
         switch refusal {
-        case .conversationNotFound: "找不到这个会话。"
-        case .nativeChildConversation: "子任务会话由其运行维护，不能撤回。"
-        case .notLastUserMessage: "只能撤回最后一条消息。"
-        case .runActive: "运行尚未结束，不能撤回。"
-        case .pendingInputs: "还有排队或插入的消息未处理，不能撤回。"
-        case .childTasksActive: "子任务尚未结束，不能撤回。"
-        case .stopHooksRunning: "Stop Hook 仍在执行，结束后才能撤回。"
+        case .conversationNotFound: String(localized: "This conversation can't be found.")
+        case .nativeChildConversation: String(localized: "A subtask's conversation is maintained by its run and can't be retracted.")
+        case .notLastUserMessage: String(localized: "Only the last message can be retracted.")
+        case .runActive: String(localized: "The run hasn't finished, so nothing can be retracted yet.")
+        case .pendingInputs: String(localized: "Queued or inserted messages are still waiting, so nothing can be retracted yet.")
+        case .childTasksActive: String(localized: "Subtasks haven't finished, so nothing can be retracted yet.")
+        case .stopHooksRunning: String(localized: "A Stop hook is still running; retract after it finishes.")
         }
     }
 
@@ -1130,7 +1132,7 @@ final class ChatStore {
             do {
                 try archive.archive(composerDraft, conversationID: conversationID)
             } catch {
-                errorMessage = "无法保存当前草稿：\(error.localizedDescription)"
+                errorMessage = String(localized: "The current draft couldn't be saved: \(error.localizedDescription)")
                 return false
             }
         }
@@ -1142,7 +1144,7 @@ final class ChatStore {
         restoredDraftID = entry.id
         composerConversationID = conversationID
         let missing = entry.attachments.count - available.count
-        errorMessage = missing > 0 ? "有 \(missing) 个附件已不存在，其余内容已恢复。" : nil
+        errorMessage = missing > 0 ? String(localized: "\(missing) attachments no longer exist; everything else was restored.") : nil
         return true
     }
 
@@ -1153,7 +1155,7 @@ final class ChatStore {
             if restoredDraftID == draftID { restoredDraftID = nil }
             releaseAttachments(of: [removed])
         } catch {
-            errorMessage = "无法删除草稿：\(error.localizedDescription)"
+            errorMessage = String(localized: "The draft couldn't be deleted: \(error.localizedDescription)")
         }
     }
 

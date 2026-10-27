@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="__LANG__">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
@@ -14,6 +14,8 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="stylesheet" href="__ASSET_BASE__css/app.css">
   <title>Limare</title>
+  <!-- This page's strings in Limare's language, filled in by the Mac (see js/i18n.js). -->
+  <script id="limare-strings" type="application/json">__STRINGS__</script>
   <script src="__ASSET_BASE__js/boot.js" defer></script>
   <script type="module" src="__ASSET_BASE__js/main.js"></script>
   <!-- Every module at once instead of one import level per round trip; markdown-it loads later, on demand. -->
@@ -33,7 +35,7 @@
 </head>
 <body>
   <div id="banner" class="banner" role="status" hidden></div>
-  <main id="app"><div class="loading">正在载入 Limare…</div></main>
+  <main id="app"><div class="loading">{{t:Loading Limare…}}</div></main>
   <div id="approval-layer"></div>
 </body>
 </html>

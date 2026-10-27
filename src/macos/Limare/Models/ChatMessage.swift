@@ -59,6 +59,23 @@ struct ChatMessage: Identifiable, Codable, Sendable, Equatable {
         static let groupNoCandidateText = "Model group has no executable candidate."
         static let groupExecutionFailedText = "Group execution failed."
 
+        /// The texts above are stored in the reply; this is how the transcript shows them in
+        /// the current language. Any other text (a provider's error) is shown as it is.
+        static func displayText(for content: String) -> String {
+            switch content {
+            case stoppedText: String(localized: "Stopped.")
+            case interruptedText: String(localized: "Response interrupted.")
+            case requestFailedText: String(localized: "Request failed.")
+            case providerUnavailableText: String(localized: "Provider unavailable.")
+            case apiKeyErrorText: String(localized: "API key error.")
+            case groupUnavailableText: String(localized: "Model group unavailable.")
+            case groupModelsUnavailableText: String(localized: "Group models unavailable.")
+            case groupNoCandidateText: String(localized: "Model group has no executable candidate.")
+            case groupExecutionFailedText: String(localized: "Group execution failed.")
+            default: content
+            }
+        }
+
         /// Replies saved before the flag existed are recognised by the texts above.
         static func legacy(content: String, state: State) -> RuntimeNotice? {
             switch (state, content) {
@@ -793,15 +810,16 @@ enum HarnessToolDefinitions {
 
     static let browserUseDefinition: ChatToolDefinition = definition(
         name: "browser_use",
-        description: "Interact with the built-in Limare web browser. Control web pages via navigation, reading text/DOM, clicking, typing, scrolling, and taking screenshots.",
+        description: "Interact with the built-in Limare web browser. Control web pages via navigation, reading text/DOM, clicking, typing, scrolling, and taking screenshots. Each conversation has its own tabs; page actions act on the current tab. A link or script that opens a new window opens a new tab and makes it current. While several tabs are open, every result lists them.",
         properties: [
-            "action": .init(type: "string", description: "The browser action: navigate, get_page_info, get_text, get_readable, find_elements, click, type, scroll, screenshot, wait_for_dom_stable."),
-            "url": .init(type: "string", description: "URL to navigate to: http/https (a local dev server such as http://localhost:5173 included), or a local file as file:// or an absolute path (a built index.html, a report). Required for navigate."),
+            "action": .init(type: "string", description: "The browser action: navigate, get_page_info, get_text, get_readable, find_elements, click, type, scroll, screenshot, wait_for_dom_stable; tabs: list_tabs, new_tab (optional url), switch_tab (tab_id), close_tab (tab_id, default the current tab)."),
+            "url": .init(type: "string", description: "URL to navigate to: http/https (a local dev server such as http://localhost:5173 included), or a local file as file:// or an absolute path (a built index.html, a report). Required for navigate; optional for new_tab."),
             "selector": .init(type: "string", description: "CSS selector for target element. Required for click and type; optional for get_text, find_elements, scroll."),
             "text": .init(type: "string", description: "Text to input. Required for type."),
             "direction": .init(type: "string", description: "Scroll direction: 'up' or 'down'. Defaults to 'down'."),
             "amount": .init(type: "number", description: "Scroll amount in pixels (1-5000). Defaults to 600."),
             "timeout_seconds": .init(type: "number", description: "Timeout in seconds for wait_for_dom_stable (1-20, default 10)."),
+            "tab_id": .init(type: "number", description: "A tab's number from list_tabs. Required for switch_tab; optional for close_tab."),
         ],
         required: ["action"]
     )

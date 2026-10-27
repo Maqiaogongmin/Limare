@@ -3,19 +3,19 @@ import Foundation
 /// Fixed wording of the scheduled-task UI (§5.14). None of it promises that a task runs while
 /// Limare is closed, or that a run is always sandboxed.
 enum ScheduledTaskCopy {
-    static let fullAccessWarning = "当前权限模式为 Full Access：该任务无人值守运行时，可在工作区之外读写文件、执行不受沙箱限制的命令。"
-    static let unattendedNote = "运行时没有人可以批准操作：需要批准的步骤会被跳过，结果写在会话里。"
-    static let keepRunningNote = "Limare 需要保持运行，任务才会按时执行；关掉窗口不影响，退出 Limare 后不会运行。"
-    static let shortPeriodWarning = "周期比一次运行的常见时长还短，可能连续跳过。"
-    static let notificationsOff = "后台通知已关闭，不会收到提醒"
-    static let openSettings = "打开设置"
-    static let anotherRunActive = "另一个定时任务正在运行"
-    static let conversationTargetNote = "这是接着聊：每次运行把指令作为一条消息发到这个会话。"
+    static var fullAccessWarning: String { String(localized: "The permission mode is Full Access: when this task runs unattended, it can read and write files outside the workspace and run commands without sandbox limits.") }
+    static var unattendedNote: String { String(localized: "No one is there to approve actions during a run: steps that need approval are skipped, and the result is written in the conversation.") }
+    static var keepRunningNote: String { String(localized: "Limare must stay running for tasks to run on time. Closing the window is fine; after you quit Limare, tasks don't run.") }
+    static var shortPeriodWarning: String { String(localized: "The period is shorter than a typical run, so runs may be skipped one after another.") }
+    static var notificationsOff: String { String(localized: "Background notifications are off, so you won't be alerted") }
+    static var openSettings: String { String(localized: "Open Settings") }
+    static var anotherRunActive: String { String(localized: "Another scheduled task is running") }
+    static var conversationTargetNote: String { String(localized: "This continues the conversation: each run sends the instruction to it as a message.") }
     static let manyEnabledThreshold = 30
 
-    static func manyEnabled(_ count: Int) -> String { "你有 \(count) 个启用中的任务；建议暂停不再需要的。" }
-    static func unreadable(path: String) -> String { "定时任务数据无法读取，调度已暂停。文件未被修改：\(path)" }
-    static func followsConversation(model: String, effort: String) -> String { "跟随会话：\(model) · \(effort)" }
+    static func manyEnabled(_ count: Int) -> String { String(localized: "You have \(count) enabled tasks; consider pausing the ones you no longer need.") }
+    static func unreadable(path: String) -> String { String(localized: "Scheduled task data can't be read, so scheduling is paused. The file was not changed: \(path)") }
+    static func followsConversation(model: String, effort: String) -> String { String(localized: "Follows the conversation: \(model) · \(effort)") }
 }
 
 /// What the list and detail show, derived from the task and its runs; never stored (§5.2).
@@ -51,59 +51,59 @@ enum ScheduledTaskPresentation {
 
     static func statusText(_ status: Status, timeZoneID: String) -> String {
         switch status {
-        case .paused: return "已暂停"
-        case .next(let date): return "下次运行 \(shortDate(date, timeZoneID: timeZoneID))"
-        case .completed: return "已完成"
-        case .ended(let reason): return "已结束（\(reason)）"
-        case .missed: return "已错过"
-        case .running: return "运行中"
-        case .idle: return "无计划"
+        case .paused: return String(localized: "Paused")
+        case .next(let date): return String(localized: "Next run \(shortDate(date, timeZoneID: timeZoneID))")
+        case .completed: return String(localized: "Completed")
+        case .ended(let reason): return String(localized: "Ended (\(reason))")
+        case .missed: return String(localized: "Missed")
+        case .running: return String(localized: "Running")
+        case .idle: return String(localized: "Not scheduled")
         }
     }
 
     static func runStatusText(_ status: ScheduledRun.Status) -> String {
         switch status {
-        case .pending: return "运行中"
-        case .completed: return "完成"
-        case .failed: return "失败"
-        case .cancelled: return "取消"
-        case .interrupted: return "中断"
-        case .skipped: return "跳过"
+        case .pending: return String(localized: "Running")
+        case .completed: return String(localized: "Done", comment: "A scheduled run's status")
+        case .failed: return String(localized: "Failed")
+        case .cancelled: return String(localized: "Cancelled")
+        case .interrupted: return String(localized: "Interrupted")
+        case .skipped: return String(localized: "Skipped")
         }
     }
 
     static func runSummary(_ run: ScheduledRun) -> String {
         var text = runStatusText(run.status)
         if let reason = run.skipReason { text += " · " + skipReasonText(reason, missedCount: run.missedCount) }
-        if run.failureDetail == .notAdmitted { text += " · 运行未能开始" }
+        if run.failureDetail == .notAdmitted { text += " · " + String(localized: "The run could not start") }
         return text
     }
 
     static func skipReasonText(_ reason: ScheduledRun.SkipReason, missedCount: Int?) -> String {
         switch reason {
-        case .previousSlotPending: return "上一次运行还没结束"
-        case .targetConversationBusy: return "目标会话正忙"
-        case .conversationGone: return "目标会话已删除"
-        case .projectGone: return "目标项目已删除"
-        case .modelUnavailable: return "没有可用模型"
+        case .previousSlotPending: return String(localized: "The previous run hasn't finished")
+        case .targetConversationBusy: return String(localized: "The target conversation is busy")
+        case .conversationGone: return String(localized: "The target conversation was deleted")
+        case .projectGone: return String(localized: "The target project was deleted")
+        case .modelUnavailable: return String(localized: "No model is available")
         // Limare was closed or asleep, or another scheduled run held the one slot; which is not recorded.
-        case .missedSlots: return "错过 \(missedCount ?? 1) 次（Limare 未运行或另一任务正在运行）"
+        case .missedSlots: return String(localized: "Missed \(missedCount ?? 1) times (Limare wasn't running, or another task was)")
         }
     }
 
     static func triggerText(_ trigger: ScheduledRun.Trigger) -> String {
         switch trigger {
-        case .scheduled: return "按时"
-        case .catchUp: return "补跑"
-        case .manual: return "立即运行"
+        case .scheduled: return String(localized: "On schedule")
+        case .catchUp: return String(localized: "Catch-up")
+        case .manual: return String(localized: "Run Now")
         }
     }
 
-    /// `09:00 (Asia/Shanghai)`, plus `= 本地 21:00` when the system time zone differs.
+    /// `09:00 (Asia/Shanghai)`, plus `= 21:00 local` when the system time zone differs.
     static func timeWithZone(_ date: Date, timeZoneID: String, local: TimeZone = .current) -> String {
         var text = "\(clock(date, timeZone: TimeZone(identifier: timeZoneID) ?? local)) (\(timeZoneID))"
         if local.identifier != timeZoneID, (TimeZone(identifier: timeZoneID)?.secondsFromGMT(for: date) ?? 0) != local.secondsFromGMT(for: date) {
-            text += " = 本地 \(clock(date, timeZone: local))"
+            text += " = " + String(localized: "\(clock(date, timeZone: local)) local", comment: "The same time in the Mac's own time zone")
         }
         return text
     }
@@ -158,18 +158,26 @@ struct ScheduledRuleDraft: Equatable {
 
         var title: String {
             switch self {
-            case .once: "一次"
-            case .daily: "每天"
-            case .weekdays: "工作日"
-            case .weekly: "每周"
-            case .everyNHours: "每 N 小时"
-            case .monthly: "每月"
+            case .once: String(localized: "Once")
+            case .daily: String(localized: "Daily")
+            case .weekdays: String(localized: "Weekdays")
+            case .weekly: String(localized: "Weekly")
+            case .everyNHours: String(localized: "Every N Hours")
+            case .monthly: String(localized: "Monthly")
             }
         }
     }
 
-    /// 1 = Sunday … 7 = Saturday, as Calendar numbers weekdays.
-    static let weekdayTitles: [(Int, String)] = [(2, "一"), (3, "二"), (4, "三"), (5, "四"), (6, "五"), (7, "六"), (1, "日")]
+    /// 1 = Sunday … 7 = Saturday, as Calendar numbers weekdays; the names and the first day of
+    /// the week come from the current locale.
+    static var weekdayTitles: [(Int, String)] {
+        let calendar = Calendar.autoupdatingCurrent
+        let symbols = calendar.veryShortStandaloneWeekdaySymbols
+        return (0..<7).map { offset in
+            let number = (calendar.firstWeekday - 1 + offset) % 7 + 1
+            return (number, symbols[number - 1])
+        }
+    }
 
     var kind: Kind = .daily
     var hour = 9
@@ -261,18 +269,19 @@ struct ScheduledRuleDraft: Equatable {
         }
     }
 
-    /// A plain-words rule, in the task's time zone: `每天 09:00 · Asia/Shanghai`.
+    /// A plain-words rule, in the task's time zone: `Daily 09:00 · Asia/Shanghai`.
     func summary(timeZoneID: String) -> String {
         let time = String(format: "%02d:%02d", hour, minute)
         switch kind {
-        case .once: return "一次 · \(ScheduledTaskPresentation.fullDate(fireAt, timeZoneID: timeZoneID)) · \(timeZoneID)"
-        case .daily: return "每天 \(time) · \(timeZoneID)"
-        case .weekdays: return "工作日 \(time) · \(timeZoneID)"
+        case .once: return String(localized: "Once · \(ScheduledTaskPresentation.fullDate(fireAt, timeZoneID: timeZoneID)) · \(timeZoneID)")
+        case .daily: return String(localized: "Daily \(time) · \(timeZoneID)")
+        case .weekdays: return String(localized: "Weekdays \(time) · \(timeZoneID)")
         case .weekly:
-            let days = Self.weekdayTitles.filter { weekdays.contains($0.0) }.map(\.1).joined(separator: "、")
-            return "每周\(days) \(time) · \(timeZoneID)"
-        case .everyNHours: return "每 \(intervalHours) 小时（第 \(minute) 分）· \(timeZoneID)"
-        case .monthly: return "每月 \(dayOfMonth) 日 \(time) · \(timeZoneID)"
+            let symbols = Calendar.autoupdatingCurrent.shortStandaloneWeekdaySymbols
+            let days = ListFormatter.localizedString(byJoining: Self.weekdayTitles.filter { weekdays.contains($0.0) }.map { symbols[$0.0 - 1] })
+            return String(localized: "Weekly on \(days) \(time) · \(timeZoneID)")
+        case .everyNHours: return String(localized: "Every \(intervalHours) hours (at minute \(minute)) · \(timeZoneID)")
+        case .monthly: return String(localized: "Monthly on day \(dayOfMonth) \(time) · \(timeZoneID)")
         }
     }
 }

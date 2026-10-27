@@ -42,10 +42,9 @@ final class VoiceInputStore {
     }
 
     var isPermissionDenied: Bool {
-        if case .failed(let msg) = state {
-            return msg.contains("Microphone access is denied") || msg.contains("Microphone access is restricted")
-        }
-        return false
+        guard case .failed = state else { return false }
+        let status = permissionAuthorizer.authorizationStatus()
+        return status == .denied || status == .restricted
     }
 
     func clearError() {
@@ -78,19 +77,19 @@ final class VoiceInputStore {
                 if granted {
                     self.beginRecording()
                 } else {
-                    let msg = "Microphone access is denied. Enable it in System Settings → Privacy & Security → Microphone."
+                    let msg = String(localized: "Microphone access is denied. Enable it in System Settings → Privacy & Security → Microphone.")
                     self.state = .failed(msg)
                     self.errorMessage = msg
                     self.logs.error("VoiceInput", msg)
                 }
             }
         case .denied:
-            let msg = "Microphone access is denied. Enable it in System Settings → Privacy & Security → Microphone."
+            let msg = String(localized: "Microphone access is denied. Enable it in System Settings → Privacy & Security → Microphone.")
             state = .failed(msg)
             errorMessage = msg
             logs.error("VoiceInput", msg)
         case .restricted:
-            let msg = "Microphone access is restricted by system policy. Enable it in System Settings → Privacy & Security → Microphone."
+            let msg = String(localized: "Microphone access is restricted by system policy. Enable it in System Settings → Privacy & Security → Microphone.")
             state = .failed(msg)
             errorMessage = msg
             logs.error("VoiceInput", msg)

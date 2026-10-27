@@ -20,7 +20,7 @@ public struct ComposerDraftEditor: View {
 
     public init(
         text: Binding<String>,
-        placeholder: String = "Ask anything, @ to mention files or tools…",
+        placeholder: String = String(localized: "Ask anything, @ to mention files or tools…"),
         onSend: @escaping () -> Void,
         onFocusChange: ((Bool) -> Void)? = nil,
         onContentHeightChange: ((CGFloat) -> Void)? = nil,

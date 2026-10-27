@@ -123,7 +123,7 @@ struct RecoveryBannerView: View {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        panel.prompt = "Choose"
+        panel.prompt = String(localized: "Choose")
         panel.begin { response in
             guard response == .OK, let selectedURL = panel.url else { return }
             appState.conversationRuns.startRecoveryRun(

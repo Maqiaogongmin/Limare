@@ -1,5 +1,6 @@
 import { h } from '../dom.js';
 import { renderMessage, disclosure } from './message.js';
+import { t } from '../i18n.js';
 
 const UNSUCCESSFUL = new Set(['failed', 'timedOut', 'cancelled', 'denied', 'interrupted']);
 
@@ -78,8 +79,8 @@ export function renderEntry(entry, ui) {
   const history = entry.messages.slice(0, entry.rowIndex);
   const row = entry.messages[entry.rowIndex];
   const rest = entry.messages.slice(entry.rowIndex + 1);
-  const title = h('summary', {}, `执行过程 · ${history.length} 条记录`,
-    entry.unsuccessful ? h('span', { class: 'warn' }, ` · ${entry.unsuccessful} 个未成功`) : null);
+  const title = h('summary', {}, t('Execution (%lld)', history.length),
+    entry.unsuccessful ? h('span', { class: 'warn' }, t(' · %lld unsuccessful', entry.unsuccessful)) : null);
   element.append(
     disclosure({ class: 'history' }, title, ui.openHistory, entry.key,
       () => h('div', { class: 'history-body' },
@@ -97,7 +98,7 @@ function turnFiles(messages) {
 }
 
 function renderReasoning(message, ui) {
-  return disclosure({ class: 'reasoning' }, h('summary', {}, '思考过程'), ui.openReasoning, message.id,
+  return disclosure({ class: 'reasoning' }, h('summary', {}, t('Thought process')), ui.openReasoning, message.id,
     () => h('div', { class: 'reasoning-text' }, message.reasoning));
 }
 
@@ -115,18 +116,18 @@ function tokens(count) {
 /// A finished Compact command, as the Mac shows it: one quiet line.
 export function finishedCompactionLine(finished) {
   const saved = Math.max(0, finished.tokensBefore - finished.tokensAfter);
-  return h('div', { class: 'compaction', title: `模型此后读取到这里为止的摘要（约 ${tokens(finished.tokensBefore)} → ${tokens(finished.tokensAfter)} tokens），对话记录不变。` },
-    `对话已压缩 · 节省 ${tokens(saved)} tokens`);
+  return h('div', { class: 'compaction', title: t('The model now reads a summary of the conversation up to here (about %@ → %@ tokens). The transcript is unchanged.', tokens(finished.tokensBefore), tokens(finished.tokensAfter)) },
+    t('Conversation compacted · %@ tokens saved', tokens(saved)));
 }
 
 /// The Compact command running or just failed, at the end of the transcript.
 export function currentCompactionLine(current) {
   if (current.state === 'failed') {
-    return h('div', { class: 'compaction failed' }, `压缩失败：${current.message || ''}`);
+    return h('div', { class: 'compaction failed' }, t('Compact failed: %@', current.message || ''));
   }
   const label = h('span', {});
   const since = current.since ? new Date(current.since).getTime() : Date.now();
-  const tick = () => { label.textContent = `正在压缩对话… ${Math.max(0, Math.round((Date.now() - since) / 1000))}s`; };
+  const tick = () => { label.textContent = t('Compacting conversation… %llds', Math.max(0, Math.round((Date.now() - since) / 1000))); };
   tick();
   const line = h('div', { class: 'compaction running' }, h('span', { class: 'spinner' }), label);
   const timer = setInterval(() => { if (line.isConnected) tick(); else clearInterval(timer); }, 1000);

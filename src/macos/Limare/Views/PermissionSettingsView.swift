@@ -11,7 +11,7 @@ struct PermissionSettingsView: View {
                     mode: .requestApproval,
                     title: "Ask for approval",
                     badge: "Recommended",
-                    description: PermissionMode.requestApproval.detail,
+                    description: "\(PermissionMode.requestApproval.detail)",
                     reviewer: "You"
                 )
 
@@ -21,7 +21,7 @@ struct PermissionSettingsView: View {
                     mode: .helpMeApprove,
                     title: "Approve for me",
                     badge: nil,
-                    description: PermissionMode.helpMeApprove.detail + " An isolated AI reviewer decides.",
+                    description: "\(PermissionMode.helpMeApprove.detail) An isolated AI reviewer decides.",
                     reviewer: "Automatic review",
                     note: "Automatic review can make mistakes. Unclear or failed reviews fall back to you."
                 )
@@ -32,7 +32,8 @@ struct PermissionSettingsView: View {
                     mode: .fullAccess,
                     title: "Full access",
                     badge: "Danger",
-                    description: PermissionMode.fullAccess.detail,
+                    badgeTone: .danger,
+                    description: "\(PermissionMode.fullAccess.detail)",
                     reviewer: "None",
                     note: "Higher risk of data loss, leaks, or unintended system modifications."
                 )
@@ -55,11 +56,12 @@ struct PermissionSettingsView: View {
 
     private func modeRow(
         mode: PermissionMode,
-        title: String,
-        badge: String?,
-        description: String,
-        reviewer: String,
-        note: String? = nil
+        title: LocalizedStringKey,
+        badge: LocalizedStringKey?,
+        badgeTone: SettingsBadge.Tone = .neutral,
+        description: LocalizedStringKey,
+        reviewer: LocalizedStringKey,
+        note: LocalizedStringKey? = nil
     ) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Button {
@@ -75,7 +77,7 @@ struct PermissionSettingsView: View {
                     Text(title)
                         .font(.headline)
                     if let badge {
-                        SettingsBadge(badge, tone: badge == "Danger" ? .danger : .neutral)
+                        SettingsBadge(badge, tone: badgeTone)
                     }
                 }
 

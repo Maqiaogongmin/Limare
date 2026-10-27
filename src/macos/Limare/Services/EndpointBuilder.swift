@@ -8,11 +8,11 @@ enum EndpointBuilderError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .emptyBaseURL:
-            "Base URL is required."
+            String(localized: "Base URL is required.")
         case .invalidBaseURL:
-            "Base URL must be a complete URL with a host."
+            String(localized: "Base URL must be a complete URL with a host.")
         case .unsupportedScheme:
-            "Base URL must use HTTP or HTTPS."
+            String(localized: "Base URL must use HTTP or HTTPS.")
         }
     }
 }

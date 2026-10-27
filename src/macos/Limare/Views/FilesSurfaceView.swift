@@ -62,19 +62,19 @@ public struct FilesSurfaceView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .confirmationDialog(
-            "在浏览器中打开？",
+            "Open in Browser?",
             isPresented: Binding(get: { pendingBrowserExit != nil },
                                  set: { if !$0 { pendingBrowserExit = nil } }),
             titleVisibility: .visible
         ) {
-            Button("继续") {
+            Button("Continue") {
                 if let url = pendingBrowserExit { appState.openLocalFileInBrowserTab(url) }
                 pendingBrowserExit = nil
                 htmlBrowserConsent = true
             }
-            Button("取消", role: .cancel) { pendingBrowserExit = nil }
+            Button("Cancel", role: .cancel) { pendingBrowserExit = nil }
         } message: {
-            Text("这会在 Limare 的浏览器里加载该文件：页面脚本会运行，并可读取该文件所在的文件夹。被动预览不会这样做。")
+            Text("This loads the file in Limare's browser: page scripts run and can read the file's folder. The passive preview doesn't do this.")
         }
     }
 

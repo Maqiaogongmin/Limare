@@ -10,7 +10,7 @@ enum PermissionEvaluator {
         // policy: the sandbox confines it. Only running outside it (require_escalated) asks.
         if request.toolName == "shell_execute" {
             guard request.leavesSandbox else { return .allowed }
-            let trigger = PermissionTrigger(reason: .boundarySensitiveTool, detail: "Runs outside the sandbox.")
+            let trigger = PermissionTrigger(reason: .boundarySensitiveTool, detail: String(localized: "Runs outside the sandbox."))
             return .requiresApproval(reason: trigger.detail, triggers: [trigger])
         }
 
@@ -21,7 +21,7 @@ enum PermissionEvaluator {
             if isSensitivePath(url) {
                 triggers.append(PermissionTrigger(
                     reason: .sensitivePath,
-                    detail: "Targets sensitive data or credential path (\(url.lastPathComponent))."
+                    detail: String(localized: "Targets sensitive data or credential path (\(url.lastPathComponent)).")
                 ))
             }
         }
@@ -30,7 +30,7 @@ enum PermissionEvaluator {
         if request.isHighRisk {
             triggers.append(PermissionTrigger(
                 reason: .highRiskCommand,
-                detail: "Contains a high-risk or destructive command."
+                detail: String(localized: "Contains a high-risk or destructive command.")
             ))
         }
 
@@ -38,7 +38,7 @@ enum PermissionEvaluator {
         if request.requestsNetwork {
             triggers.append(PermissionTrigger(
                 reason: .networkAccess,
-                detail: "Requests access to external network resources."
+                detail: String(localized: "Requests access to external network resources.")
             ))
         }
 
@@ -58,7 +58,7 @@ enum PermissionEvaluator {
                 if !allAllowedReads && !allMemoryPaths {
                     triggers.append(PermissionTrigger(
                         reason: .outsideWorkspace,
-                        detail: "Accesses a path outside the current Project Workspace folder."
+                        detail: String(localized: "Accesses a path outside the current Project Workspace folder.")
                     ))
                 }
             }

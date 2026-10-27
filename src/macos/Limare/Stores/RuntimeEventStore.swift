@@ -74,29 +74,29 @@ struct RunTraceProjection: Sendable {
     }
 
     private static func projectStatus(events: [RuntimeEvent]) -> String {
-        guard !events.isEmpty else { return "Working" }
+        guard !events.isEmpty else { return String(localized: "Working") }
         if let terminal = events.last(where: { ["run.completed", "run.failed", "run.cancelled", "run.interrupted"].contains($0.kind) }) {
             return terminal.summary
         }
         if let request = events.last(where: { $0.kind == "permission.requested" }),
            !events.contains(where: { $0.sequence > request.sequence && ["permission.approved", "permission.denied", "permission.cancelled"].contains($0.kind) && $0.metadata["toolCallID"] == request.metadata["toolCallID"] }) {
-            return "Waiting for approval"
+            return String(localized: "Waiting for approval")
         }
         if let question = events.last(where: { $0.kind == "question.presented" }),
            !events.contains(where: { $0.sequence > question.sequence && ["question.answered", "question.skipped", "question.superseded", "question.cancelled"].contains($0.kind) && $0.metadata["toolCallID"] == question.metadata["toolCallID"] }) {
-            return "Waiting for your answer"
+            return String(localized: "Waiting for your answer")
         }
         if events.last(where: { $0.domain == .run })?.kind == "run.paused" { return "Paused" }
         if let started = events.last(where: { $0.kind == "tool.started" }),
            !events.contains(where: { $0.sequence > started.sequence && ["tool.completed", "tool.failed"].contains($0.kind) && $0.metadata["toolCallID"] == started.metadata["toolCallID"] }) {
             switch started.metadata["tool"] {
-            case "file_read": return "Reading file"
-            case "shell_execute": return "Running command"
-            case "browser_use": return "Browsing web"
-            default: return "Using connected tool"
+            case "file_read": return String(localized: "Reading file")
+            case "shell_execute": return String(localized: "Running command")
+            case "browser_use": return String(localized: "Browsing web")
+            default: return String(localized: "Using connected tool")
             }
         }
-        return "Working"
+        return String(localized: "Working")
     }
 }
 
@@ -119,7 +119,7 @@ enum RunStatusStripPolicy {
             return RunStatusStripLine(text: trace.currentStatus, symbolName: "exclamationmark.triangle", tone: .error)
         }
         if status == .paused {
-            return RunStatusStripLine(text: "Paused", symbolName: "pause.circle", tone: .warning)
+            return RunStatusStripLine(text: String(localized: "Paused"), symbolName: "pause.circle", tone: .warning)
         }
         // A model group retrying its member and a provider retrying its own request both wait to
         // send again; the line clears once the request goes out.

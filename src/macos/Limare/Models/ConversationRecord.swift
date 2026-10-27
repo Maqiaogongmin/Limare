@@ -52,6 +52,7 @@ struct CompactionMarker: Codable, Equatable, Sendable {
 
 struct ConversationRecord: Identifiable, Codable, Equatable, Sendable {
     static let currentSchemaVersion = 5
+    /// Stored as the title of a conversation that has none yet; shown as `displayTitle`.
     static let defaultTitle = "New Conversation"
 
     let id: UUID
@@ -92,6 +93,13 @@ struct ConversationRecord: Identifiable, Codable, Equatable, Sendable {
     var compactionMarkers: [CompactionMarker] = []
     var isNativeDelegationChild: Bool { nativeDelegationTaskID != nil }
     var schemaVersion: Int
+
+    /// The title as people see it: an untitled conversation reads "New Conversation" in the
+    /// current language, while `title` keeps the stored, language-independent value.
+    var displayTitle: String {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty || trimmed == Self.defaultTitle ? String(localized: "conversation.untitled", defaultValue: "New Conversation", comment: "The title of a conversation that has none yet; File > New Conversation is the command") : title
+    }
 
     var isPinned: Bool {
         pinnedAt != nil

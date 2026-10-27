@@ -13,12 +13,12 @@ public enum FilePreviewKind: Equatable, Sendable {
     public var displayName: String {
         switch self {
         case .markdown: "Markdown"
-        case .text: "Text"
-        case .code(let lang): "\(lang) Source"
-        case .image: "Image"
-        case .pdf: "PDF Document"
+        case .text: String(localized: "Text")
+        case .code(let lang): String(localized: "\(lang) Source")
+        case .image: String(localized: "Image")
+        case .pdf: String(localized: "PDF Document")
         case .html: "HTML"
-        case .unsupported: "Unsupported"
+        case .unsupported: String(localized: "Unsupported")
         }
     }
 }
@@ -58,7 +58,7 @@ public struct FileMetadata: Equatable, Sendable {
     public var formattedSubtitle: String {
         var parts: [String] = []
         if let lineCount {
-            parts.append("\(lineCount) line\(lineCount == 1 ? "" : "s")")
+            parts.append(String(localized: "\(lineCount) lines"))
         }
         if let dimensions {
             parts.append("\(Int(dimensions.width)) × \(Int(dimensions.height))")

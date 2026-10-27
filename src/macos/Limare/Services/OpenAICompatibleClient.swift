@@ -50,21 +50,21 @@ enum ProviderClientError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
-            "The provider returned an invalid HTTP response."
+            String(localized: "The provider returned an invalid HTTP response.")
         case .http(let status, let message):
-            message.isEmpty ? "Provider request failed with HTTP \(status)." : "HTTP \(status): \(message)"
+            message.isEmpty ? String(localized: "Provider request failed with HTTP \(status).") : String(localized: "HTTP \(status): \(message)")
         case .invalidModelsPayload:
-            "The provider response did not contain a models data array."
+            String(localized: "The provider response did not contain a models data array.")
         case .emptyStream:
-            "The provider completed the stream without returning text."
+            String(localized: "The provider completed the stream without returning text.")
         case .incompleteToolCall(let message):
-            "Provider stream returned an incomplete tool call: \(message)"
+            String(localized: "Provider stream returned an incomplete tool call: \(message)")
         case .responsesFailed(let code, let message):
-            message.isEmpty ? "Responses API request failed with code \(code)." : "Responses API error [\(code)]: \(message)"
+            message.isEmpty ? String(localized: "Responses API request failed with code \(code).") : String(localized: "Responses API error [\(code)]: \(message)")
         case .responsesIncomplete(let reason):
-            "Responses stream incomplete: \(reason)"
+            String(localized: "Responses stream incomplete: \(reason)")
         case .streamError(let code, let message):
-            code.map { "Provider stream error [\($0)]: \(message)" } ?? "Provider stream error: \(message)"
+            code.map { String(localized: "Provider stream error [\($0)]: \(message)") } ?? String(localized: "Provider stream error: \(message)")
         }
     }
 }
@@ -238,7 +238,7 @@ struct OpenAICompatibleClient: ProviderClient {
                         let apiKey = provider.authenticationSelection.credentialKind == .oauthAccessToken
             ? try await credentialResolver?(provider) ?? apiKey : apiKey
                         guard options.thinkingLevel != .ultra else {
-                            throw ProviderConnectionError.invalidThinking("Ultra requires a separate harness orchestration feature. Select a supported reasoning tier.")
+                            throw ProviderConnectionError.invalidThinking(String(localized: "Ultra requires a separate harness orchestration feature. Select a supported reasoning tier."))
                         }
                         switch provider.apiFormat {
                         case .anthropicMessages, .geminiNative:
