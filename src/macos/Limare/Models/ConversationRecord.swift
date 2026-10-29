@@ -51,7 +51,7 @@ struct CompactionMarker: Codable, Equatable, Sendable {
 }
 
 struct ConversationRecord: Identifiable, Codable, Equatable, Sendable {
-    static let currentSchemaVersion = 5
+    static let currentSchemaVersion = 6
     /// Stored as the title of a conversation that has none yet; shown as `displayTitle`.
     static let defaultTitle = "New Conversation"
 
@@ -61,6 +61,7 @@ struct ConversationRecord: Identifiable, Codable, Equatable, Sendable {
     var updatedAt: Date
     var projectID: UUID?
     var workspace: WorkspaceConfiguration?
+    var worktree: ConversationWorktree?
     var providerID: UUID?
     var modelID: String?
     var modelSource: ConversationModelSource?
@@ -132,6 +133,7 @@ struct ConversationRecord: Identifiable, Codable, Equatable, Sendable {
         updatedAt: Date = Date(),
         projectID: UUID? = nil,
         workspace: WorkspaceConfiguration? = nil,
+        worktree: ConversationWorktree? = nil,
         providerID: UUID? = nil,
         modelID: String? = nil,
         modelSource: ConversationModelSource? = nil,
@@ -155,6 +157,7 @@ struct ConversationRecord: Identifiable, Codable, Equatable, Sendable {
         self.updatedAt = updatedAt
         self.projectID = projectID
         self.workspace = workspace
+        self.worktree = worktree
         if case .direct(let pID, let mID) = modelSource {
             self.providerID = providerID ?? pID
             self.modelID = modelID ?? mID
@@ -180,13 +183,14 @@ struct ConversationRecord: Identifiable, Codable, Equatable, Sendable {
 
     var isDisposablePlaceholder: Bool {
         !isNativeDelegationChild && messages.isEmpty
+            && worktree == nil
             && (title.isEmpty || title == Self.defaultTitle)
             && pinnedAt == nil
             && archivedAt == nil
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, createdAt, updatedAt, projectID, workspace, providerID, modelID, modelSource, subModelSource, subagentEnabled
+        case id, title, createdAt, updatedAt, projectID, workspace, worktree, providerID, modelID, modelSource, subModelSource, subagentEnabled
         case thinkingLevelOverride, messages, memoryEnabled, status, pinnedAt, archivedAt, schemaVersion
         case nativeDelegationTaskID, nativeDelegationParentID, generatedTitleSourceMessageID
         case retractedRecoveryRunID, compactionMarkers
@@ -200,6 +204,7 @@ struct ConversationRecord: Identifiable, Codable, Equatable, Sendable {
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
         projectID = try container.decodeIfPresent(UUID.self, forKey: .projectID)
         workspace = try container.decodeIfPresent(WorkspaceConfiguration.self, forKey: .workspace)
+        worktree = try container.decodeIfPresent(ConversationWorktree.self, forKey: .worktree)
         providerID = try container.decodeIfPresent(UUID.self, forKey: .providerID)
         modelID = try container.decodeIfPresent(String.self, forKey: .modelID)
         modelSource = try container.decodeIfPresent(ConversationModelSource.self, forKey: .modelSource)

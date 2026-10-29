@@ -115,7 +115,7 @@ struct ArchivedConversationsSettingsView: View {
             presenting: conversationToDelete
         ) { conv in
             Button("Delete Permanently", role: .destructive) {
-                appState.conversations.deleteConversation(id: conv.id)
+                appState.requestDeleteConversations([conv.id], in: window)
             }
             Button("Cancel", role: .cancel) {}
         } message: { conv in
@@ -127,9 +127,7 @@ struct ArchivedConversationsSettingsView: View {
             titleVisibility: .visible
         ) {
             Button("Delete All Permanently", role: .destructive) {
-                for conv in archivedList {
-                    appState.conversations.deleteConversation(id: conv.id)
-                }
+                appState.requestDeleteConversations(archivedList.map(\.id), in: window)
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -285,6 +283,7 @@ struct ArchivedConversationsSettingsView: View {
                     }
                     ArchivedConversationRow(
                         conversation: conv,
+                        notice: appState.worktrees.notices[conv.id],
                         onOpen: {
                             appState.focus(window)
                             appState.conversations.restoreConversation(id: conv.id)
@@ -296,6 +295,9 @@ struct ArchivedConversationsSettingsView: View {
                         },
                         onDelete: {
                             conversationToDelete = conv
+                        },
+                        onWorktree: conv.worktree == nil ? nil : {
+                            window.worktreeDetails = conv.id
                         }
                     )
                 }
@@ -346,9 +348,11 @@ private extension View {
 /// Title over the archive time; clicking the title restores the conversation and opens it.
 private struct ArchivedConversationRow: View {
     let conversation: ConversationRecord
+    let notice: String?
     let onOpen: () -> Void
     let onRestore: () -> Void
     let onDelete: () -> Void
+    let onWorktree: (() -> Void)?
 
     @State private var isHoveringTitle = false
     @State private var isHoveringTrash = false
@@ -370,6 +374,9 @@ private struct ArchivedConversationRow: View {
                             .foregroundStyle(Color.secondary)
                             .lineLimit(1)
                     }
+                    if let notice {
+                        Text(notice).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -377,6 +384,10 @@ private struct ArchivedConversationRow: View {
             .buttonStyle(.plain)
             .onHover { isHoveringTitle = $0 }
             .help("Restore and open")
+
+            if let onWorktree {
+                Button("Worktree…", action: onWorktree).controlSize(.small)
+            }
 
             Button(action: onDelete) {
                 Image(systemName: "trash")
@@ -413,6 +424,7 @@ private struct ArchivedConversationRow: View {
             Button("Restore and open", action: onOpen)
             Button("Restore to Sidebar", action: onRestore)
             Button("Delete permanently", action: onDelete)
+            if let onWorktree { Button("Worktree…", action: onWorktree) }
         }
     }
 }

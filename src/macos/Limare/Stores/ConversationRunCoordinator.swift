@@ -458,6 +458,13 @@ final class ConversationRunCoordinator {
         }
 
         let targetDir = overrideWorkingDirectory ?? record.workingDirectorySnapshot
+        // Both the recorded directory and any override must identify this same worktree.
+        if case .refused(let path, let reason) = worktreeAdmission(conversationID: conversationID, workingDirectory: record.workingDirectorySnapshot) {
+            return RecoveryValidationResult(isValid: false, blockedReason: "Worktree unavailable at \(path): \(reason)", isDirectoryMissing: true, isModelUnavailable: false, resolvedWorkingDirectory: nil, resolvedModelSource: nil)
+        }
+        if case .refused(let path, let reason) = worktreeAdmission(conversationID: conversationID, workingDirectory: targetDir) {
+            return RecoveryValidationResult(isValid: false, blockedReason: "Worktree unavailable at \(path): \(reason)", isDirectoryMissing: true, isModelUnavailable: false, resolvedWorkingDirectory: nil, resolvedModelSource: nil)
+        }
         var isDir: ObjCBool = false
         let dirExists = FileManager.default.fileExists(atPath: targetDir.path, isDirectory: &isDir)
         let isDirMissing = !dirExists || !isDir.boolValue
@@ -526,6 +533,11 @@ final class ConversationRunCoordinator {
             logs.error("ConversationRun", "Cannot start recovery run for '\(conversationID)': \(validation.blockedReason ?? "Validation failed"). Interrupted record preserved.")
             return false
         }
+        guard canStartRun(conversationID: conversationID), admissionHoldReason(conversationID: conversationID) == nil,
+              case .admitted = worktreeAdmission(conversationID: conversationID, workingDirectory: targetDir) else {
+            logs.error("ConversationRun", "Recovery admission was refused; the interrupted record was preserved.")
+            return false
+        }
 
         let msgs = conversationMessages(for: conversationID)
         let hasInterruptedTool = msgs.contains(where: { m in
@@ -555,19 +567,7 @@ final class ConversationRunCoordinator {
 
         recoveryContexts[conversationID] = recoveryContext
 
-        // Consume interrupted recovery record atomically with continuation run creation
-        if let recoveryStore {
-            do {
-                try recoveryStore.discardInterruptedRecovery(conversationID: conversationID)
-            } catch {
-                logs.error("ConversationRun", "Failed to discard interrupted recovery record for conversation '\(conversationID)': \(error.localizedDescription)")
-                runtimeEvents.record(conversationID: conversationID, runID: interrupted.runID, domain: .recovery, kind: "recovery.continueFailed", severity: .error, summary: "Failed to clear prior recovery record before continuation: \(error.localizedDescription)")
-                recoveryContexts.removeValue(forKey: conversationID)
-                return false
-            }
-        }
-        interruptedRuns.removeValue(forKey: conversationID)
-
+        // recordRunStart replaces the interrupted record in the same durable snapshot.
         startRun(
             conversationID: conversationID,
             modelSource: targetModel,
@@ -577,6 +577,11 @@ final class ConversationRunCoordinator {
             recoveredFromRunID: interrupted.runID,
             explicitWorkingDirectory: targetDir
         )
+        guard let started = activeRuns[conversationID], !started.status.isTerminal,
+              started.recoveredFromRunID == interrupted.runID else {
+            recoveryContexts.removeValue(forKey: conversationID)
+            return false
+        }
         return true
     }
 
@@ -741,6 +746,18 @@ final class ConversationRunCoordinator {
 
     /// Change journal for undo; set by the composition root.
     @ObservationIgnored var undoJournal: UndoJournalStore?
+
+    @ObservationIgnored weak var worktreeStore: WorktreeStore?
+
+    func worktreeAdmission(conversationID: UUID, workingDirectory: URL? = nil) -> WorktreeAdmission {
+        if let worktreeStore { return worktreeStore.admit(conversationID: conversationID, workingDirectory: workingDirectory) }
+        let conversation = conversationStore?.conversations.first(where: { $0.id == conversationID })
+        let owner = conversation?.nativeDelegationParentID.flatMap { id in conversationStore?.conversations.first(where: { $0.id == id }) } ?? conversation
+        if let worktree = owner?.worktree {
+            return .refused(path: worktree.workspace.path, reason: "Worktree admission is unavailable.")
+        }
+        return .admitted
+    }
 
     /// Whether a run id has a pending scheduled-run record (ScheduledStateStore); set by the
     /// composition root. Nil means no run is ever unattended.
@@ -1179,6 +1196,10 @@ final class ConversationRunCoordinator {
         subagentInstruction: String? = nil,
         onRunAdmitted: ((_ conversationID: UUID, _ runID: UUID) throws -> Void)? = nil
     ) {
+        if case .refused(let path, let reason) = worktreeAdmission(conversationID: conversationID, workingDirectory: explicitWorkingDirectory) {
+            logs.error("ConversationRun", "Worktree unavailable at \(path): \(reason)")
+            return
+        }
         guard canStartRun(conversationID: conversationID) else { return }
         if let reason = admissionHoldReason(conversationID: conversationID) {
             logs.info("ConversationRun", "Run start in conversation '\(conversationID)' held: \(reason)")
@@ -1190,8 +1211,6 @@ final class ConversationRunCoordinator {
             guard let id = subagentRunID, subagentRuns[id]?.childConversationID == conversationID else { return }
         } else if subagentRunID != nil { return }
         if runStartReason == .userPrompt { subagents?.userRunStarted(conversationID: conversationID) }
-        interruptedRuns.removeValue(forKey: conversationID)
-
         let existingMessages = conversationStore?.conversations.first(where: { $0.id == conversationID })?.messages ?? initialMessages
         runMessages[conversationID] = existingMessages
 
@@ -1253,6 +1272,14 @@ final class ConversationRunCoordinator {
             scopedWorkspace.restoreWorkspaceConfiguration(defaultWorkspaceConfiguration(conversationID: conversationID))
         }
 
+        // Bookmarks are resolved when the scoped store is restored. Check the actual resulting
+        // root again before any recovery record, hook, tool, or provider request can start.
+        if case .refused(let path, let reason) = worktreeAdmission(conversationID: conversationID, workingDirectory: scopedWorkspace.url) {
+            finishRun(conversationID: conversationID, runID: run.id, status: .failed,
+                      error: "Worktree unavailable at \(path): \(reason)")
+            return
+        }
+
         let workingDirToPersist = scopedWorkspace.url ?? conversationStore?.managedWorkingDirectory(for: conversationID) ?? URL(fileURLWithPath: "/")
         if let recoveryStore {
             do {
@@ -1280,6 +1307,7 @@ final class ConversationRunCoordinator {
                 return
             }
         }
+        interruptedRuns.removeValue(forKey: conversationID)
 
         // The caller's durable binding of this run (a scheduled run's ledger record). It runs
         // before the execution Task exists, so a failed write fails the run with no hook, tool or
@@ -1314,7 +1342,7 @@ final class ConversationRunCoordinator {
         case .full: allowSkills = true
         case .textOnly: allowSkills = false
         }
-        let skillSnapshot = allowSkills ? (skills?.runSnapshot(runID: run.id) ?? .init(promptFragment: "", readableDirectories: [])) : .init(promptFragment: "", readableDirectories: [])
+        let skillSnapshot = allowSkills ? (skills?.runSnapshot(workspaceURL: scopedWorkspace.url, runID: run.id) ?? .init(promptFragment: "", readableDirectories: [])) : .init(promptFragment: "", readableDirectories: [])
         runSkillSnapshots[run.id] = skillSnapshot
         runMemorySnapshots[run.id] = captureMemorySnapshot(conversationID: conversationID, enabled: allowSkills)
         let scopedExecutor = toolExecutor.scoped(
@@ -1438,6 +1466,9 @@ final class ConversationRunCoordinator {
     /// Starts a subagent's run on its child conversation: an ordinary run whose tools the
     /// SubagentCoordinator narrows by role and whose model requests it counts.
     func startSubagentRun(_ binding: SubagentRunBinding, modelSource: ConversationModelSource, workspace: URL, instruction: String?) throws {
+        guard case .admitted = worktreeAdmission(conversationID: binding.parentConversationID, workingDirectory: workspace) else {
+            throw DelegationFailure.admissionRejected
+        }
         guard conversationStore?.conversations.first(where: { $0.id == binding.childConversationID })?.nativeDelegationTaskID == binding.taskID,
               canStartRun(conversationID: binding.childConversationID) else { throw DelegationFailure.admissionRejected }
         subagentRuns[binding.runID] = binding
@@ -1472,6 +1503,7 @@ final class ConversationRunCoordinator {
     }
 
     private func beginCompaction(conversationID: UUID) -> Bool {
+        guard case .admitted = worktreeAdmission(conversationID: conversationID) else { return false }
         guard canStartRun(conversationID: conversationID), compactions[conversationID]?.isRunning != true else { return false }
         compactions[conversationID] = .running(since: Date())
         return true
@@ -3261,6 +3293,11 @@ final class ConversationRunCoordinator {
         guard !isActive(conversationID: conversationID),
               var queue = queuedInputs[conversationID],
               !queue.isEmpty else { return }
+        if case .refused(let path, let reason) = worktreeAdmission(conversationID: conversationID) {
+            isQueueSuspended[conversationID] = true
+            worktreeStore?.setNotice(String(localized: "Queued input is paused because the worktree is unavailable at \(path): \(reason)"), for: conversationID)
+            return
+        }
         // A held conversation keeps its queue intact until the hold clears (see `resumeQueue`).
         guard admissionHoldReason(conversationID: conversationID) == nil else { return }
         let next = queue.removeFirst()
@@ -3722,10 +3759,8 @@ final class ConversationRunCoordinator {
     func promptWorkingDirectory(conversationID: UUID, workspaceURL: URL?) -> (url: URL?, hasProject: Bool) {
         let record = conversationStore?.conversations.first(where: { $0.id == conversationID })
         let project = record.flatMap { conversationStore?.project(for: $0) }
-        let hasProject = record?.workspace != nil || project?.workspace != nil
-        let url = hasProject
-            ? (record?.workspace?.url ?? project?.workspace?.url ?? workspaceURL)
-            : (workspaceURL ?? conversationStore?.managedWorkingDirectory(for: conversationID))
+        let hasProject = record?.worktree != nil || ((record?.projectID == nil || record?.isNativeDelegationChild == true) && record?.workspace != nil) || project?.workspace != nil
+        let url = workspaceURL ?? conversationStore?.effectiveWorkingDirectory(for: conversationID)
         return (url, hasProject)
     }
 
@@ -3808,7 +3843,7 @@ No tools, shell, browser, or file system access are available for this turn. Res
             }
         } else {
             // Non-run preview / initial prompt calculation
-            if let snap = skills?.runSnapshot(runID: nil) {
+            if let snap = skills?.runSnapshot(workspaceURL: workingURL, runID: nil) {
                 rawContributions.append(contentsOf: snap.contributions)
             }
         }
@@ -4253,13 +4288,11 @@ No tools, shell, browser, or file system access are available for this turn. Res
     }
 
     /// The workspace a run in `conversationID` uses when none is given explicitly: the
-    /// conversation's own, its project's, its effective directory, then the app's.
+    /// conversation's effective configured root, falling back to its managed scratch directory.
     private func defaultWorkspaceConfiguration(conversationID: UUID) -> WorkspaceConfiguration? {
-        let convRecord = conversationStore?.conversations.first(where: { $0.id == conversationID })
-        if let direct = convRecord?.workspace { return direct }
-        if let parent = convRecord.flatMap({ conversationStore?.project(for: $0) })?.workspace { return parent }
-        if let effectiveURL = conversationStore?.effectiveWorkingDirectory(for: conversationID) {
-            return WorkspaceConfiguration.from(url: effectiveURL)
+        if let conversationStore {
+            return conversationStore.effectiveWorkspaceConfiguration(for: conversationID)
+                ?? WorkspaceConfiguration.from(url: conversationStore.managedWorkingDirectory(for: conversationID))
         }
         return workspace.configuration
     }

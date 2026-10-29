@@ -36,7 +36,7 @@ on those tools; no text is copied there.
 | Helper | Version | Packaged by | License |
 |---|---|---|---|
 | [cua-driver](https://github.com/trycua/cua) | 0.28.2, `Contents/Helpers/cua-driver` | `script/package_cua_driver.sh` (pinned, SHA-256 verified); license shipped as `Contents/Resources/CUA_DRIVER_LICENSE.txt` | **MIT** |
-| [cloudflared](https://github.com/cloudflare/cloudflared) | 2026.10.0, `Contents/Helpers/cloudflared` | `script/package_cloudflared.sh` (pinned, SHA-256 verified); license shipped as `Contents/Resources/CLOUDFLARED_LICENSE.txt` | **Apache-2.0** |
+| [cloudflared](https://github.com/cloudflare/cloudflared) | 2026.10.4, `Contents/Helpers/cloudflared` | `script/package_cloudflared.sh` (pinned, SHA-256 verified); license shipped as `Contents/Resources/CLOUDFLARED_LICENSE.txt` | **Apache-2.0** |
 
 ## Bundled fonts
 

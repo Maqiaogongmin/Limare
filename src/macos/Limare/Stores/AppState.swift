@@ -45,6 +45,9 @@ final class AppState {
     let conversations: ConversationStore
     let toolExecutor: ToolExecutor
     let conversationRuns: ConversationRunCoordinator
+    let worktrees: WorktreeStore
+    /// Review comments not yet added to a message, shared by every window.
+    let reviewComments: ReviewCommentStore
     let recoveryStore: RuntimeRecoveryStore
     let attachments: AttachmentStore
     /// Files tools registered or produced for a conversation; nil when its storage failed to open.
@@ -292,6 +295,15 @@ final class AppState {
         )
         chat.setConversationStore(conversations)
         chat.setDraftArchive(draftArchive)
+        // An isolated storage root (tests) keeps its worktrees there too, out of ~/.limare.
+        let worktrees = storageRootURL.map {
+            WorktreeStore(conversations: conversations, runs: chat.runCoordinator, settingsRoot: persistence.rootURL,
+                          defaultManagedRoot: $0.appendingPathComponent("worktrees", isDirectory: true))
+        } ?? WorktreeStore(conversations: conversations, runs: chat.runCoordinator, settingsRoot: persistence.rootURL)
+        chat.prepareBeforeSend = { [weak worktrees] id in try await worktrees?.prepareBeforeSend(conversationID: id) }
+        let reviewComments = ReviewCommentStore(fileURL: persistence.rootURL.appendingPathComponent("review_comments_v1.json"))
+        reviewComments.log = { [weak logs] line in logs?.error("Changes", line) }
+        self.reviewComments = reviewComments
         let undoJournal = UndoJournalStore(storageRootURL: persistence.rootURL, logs: logs)
         let undo = UndoCoordinator(journal: undoJournal, conversationStore: conversations, logs: logs)
         chat.setUndoCoordinator(undo)
@@ -302,11 +314,15 @@ final class AppState {
             undo?.admissionHoldReason(conversationID: conversationID)
         }
         self.undo = undo
+        worktrees.undoJournal = undoJournal
         undo.onHoldCleared = { [weak coordinator = chat.runCoordinator] id in coordinator?.startQueuedAfterHold(conversationID: id) }
         self.draftArchive = draftArchive
         self.chat = chat
-        self.primaryWindow = WindowSession(chat: chat)
+        self.primaryWindow = WindowSession(chat: chat, reviewComments: reviewComments)
         self.conversationRuns = chat.runCoordinator
+        self.worktrees = worktrees
+        chat.runCoordinator.worktreeStore = worktrees
+        conversations.worktreeOperationInProgress = { [weak worktrees] id in worktrees?.operations[id] != nil }
         browser.hasActiveRun = { [weak coordinator = chat.runCoordinator] conversationID in coordinator?.isActive(conversationID: conversationID) == true }
         conversations.onConversationDeleted = { [weak browser, weak chat, weak undoJournal, weak runtimeEvents, weak computerUseAppAuthorization] conversationID in
             browser?.releaseSession(ownedBy: conversationID)
@@ -325,6 +341,7 @@ final class AppState {
         let subagents = SubagentCoordinator(store: SubagentStore(storageRootURL: storageRootURL, logs: logs),
             conversations: conversations, runs: chat.runCoordinator, logs: logs)
         self.subagents = subagents
+        worktrees.subagents = subagents
         toolExecutor.setSubagentCoordinator(subagents)
         chat.runCoordinator.subagents = subagents
         conversations.onDelegationRelationshipDeletion = { [weak subagents] id in subagents?.conversationDeleted(id) }
@@ -419,6 +436,7 @@ final class AppState {
         let forgetDeleted = conversations.onConversationDeleted
         conversations.onConversationDeleted = { [weak self] conversationID in
             self?.windowsLost(conversationID: conversationID)
+            self?.reviewComments.removeAll(conversationID: conversationID)
             forgetDeleted?(conversationID)
         }
         computerUseActivation.conversationIsRunning = { [weak coordinator = chat.runCoordinator] id in
@@ -447,6 +465,14 @@ final class AppState {
 
         conversations.onWorkspaceChanged = { [weak self] in
             self?.syncEffectiveWorkspace()
+        }
+
+        worktrees.discardComments = { [weak self] id in
+            guard let self else { return }
+            self.reviewComments.removeAll(conversationID: id)
+            for window in self.windows.isEmpty ? [self.primaryWindow] : self.windows {
+                window.changes.discardEditor(for: id)
+            }
         }
 
         workspace.onWorkspaceChange = { [weak self] _ in
@@ -490,7 +516,7 @@ final class AppState {
     func openWindowSession() -> WindowSession {
         let session: WindowSession
         if windows.contains(where: { $0 === primaryWindow }) {
-            session = WindowSession(chat: chat.makeWindowCompanion())
+            session = WindowSession(chat: chat.makeWindowCompanion(), reviewComments: reviewComments)
             session.app = self
         } else {
             session = primaryWindow
@@ -515,12 +541,14 @@ final class AppState {
             conversations.activeConversationID = id
             skills.setWorkspaceURL(conversations.effectiveWorkingDirectory(for: id))
         }
+        session.refreshChanges(.windowActivated)
     }
 
     func windowClosed(_ session: WindowSession) {
         guard let index = windows.firstIndex(where: { $0 === session }) else { return }
         windows.remove(at: index)
         session.chat.closeWindow(releasingRuns: session !== primaryWindow)
+        session.closeChanges()
         if focusedWindowID == session.id {
             focusedWindowID = nil
         }
@@ -630,5 +658,45 @@ final class AppState {
         }
         let effectiveRoot = conversations.activeConversationID.map { conversations.effectiveWorkingDirectory(for: $0) }
         skills.setWorkspaceURL(effectiveRoot ?? workspace.url)
+    }
+
+    /// Deletes conversations. A worktree of theirs is removed first; when one holds work that
+    /// exists nowhere else, the window asks once for all of them.
+    func requestDeleteConversations(_ ids: [UUID], in window: WindowSession) {
+        var bound: [UUID] = []
+        for id in ids {
+            guard let conversation = conversations.conversations.first(where: { $0.id == id }) else { continue }
+            if conversation.worktree == nil { conversations.deleteConversation(id: id) } else { bound.append(id) }
+        }
+        if !bound.isEmpty { requestWorktreeRemoval(bound, deletingConversations: true, in: window) }
+    }
+
+    /// Removes a conversation's worktree and keeps the conversation, which then works in its
+    /// project folder.
+    func requestRemoveWorktree(_ id: UUID, in window: WindowSession) {
+        requestWorktreeRemoval([id], deletingConversations: false, in: window)
+    }
+
+    private func requestWorktreeRemoval(_ ids: [UUID], deletingConversations: Bool, in window: WindowSession) {
+        Task {
+            var unsaved = 0
+            for id in ids {
+                if await worktrees.hasUnsavedWork(conversationID: id) { unsaved += 1 }
+            }
+            let prompt = WorktreeRemovalPrompt(conversationIDs: ids, unsavedCount: unsaved, deletesConversations: deletingConversations)
+            if unsaved == 0 { await finishWorktreeRemoval(prompt, keepingFolders: false) }
+            else { window.worktreeRemovalPrompt = prompt }
+        }
+    }
+
+    func finishWorktreeRemoval(_ prompt: WorktreeRemovalPrompt, keepingFolders: Bool) async {
+        for id in prompt.conversationIDs {
+            do {
+                try await worktrees.remove(conversationID: id, keepFolder: keepingFolders, stopping: prompt.deletesConversations)
+                if prompt.deletesConversations { conversations.deleteConversation(id: id) }
+            } catch {
+                worktrees.setNotice(String(localized: "The worktree couldn't be removed: \(error.localizedDescription)"), for: id)
+            }
+        }
     }
 }

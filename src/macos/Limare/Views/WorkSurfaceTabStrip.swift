@@ -88,7 +88,7 @@ public struct WorkSurfaceTabStrip: View {
         .menuStyle(.button)
         .menuIndicator(.hidden)
         .buttonStyle(GhostIconButtonStyle(size: 24, iconSize: 12))
-        .help("Add Surface (Browser, Files)")
+        .help("Add Surface")
     }
 
     private func reveal(_ tabID: WorkSurfaceTab.ID?, with proxy: ScrollViewProxy) {

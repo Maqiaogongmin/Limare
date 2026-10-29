@@ -54,6 +54,18 @@ final class SubagentStore {
         save()
     }
 
+    func removeFinished(_ id: UUID) throws {
+        guard let task = tasks[id], task.status.isFinished else { throw DelegationFailure.admissionRejected }
+        var candidate = tasks
+        candidate.removeValue(forKey: id)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try encoder.encode(candidate.values.sorted { $0.createdAt < $1.createdAt }).write(to: fileURL, options: .atomic)
+        tasks = candidate
+    }
+
     private func save() {
         do {
             let encoder = JSONEncoder()

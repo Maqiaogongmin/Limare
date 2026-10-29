@@ -1162,10 +1162,13 @@ enum TranscriptTurnGrouping {
             guard let final = turn.last else { return }
             let isFinished = final.state == .complete && final.toolCalls.isEmpty
                 && !final.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            if let frozenFold, frozenFold.anchorID == turn[0].id {
+            // A reader away from the bottom keeps a running turn's fold where it was, so no step
+            // they are reading moves away. A finished turn folds anyway: an answer whose steps
+            // stayed open until the reader scrolled back down looked unfinished (2026-10-27).
+            if !isFinished, let frozenFold, frozenFold.anchorID == turn[0].id {
                 let rowIndex = min(frozenFold.foldedCount, turn.count - 1)
                 if rowIndex > 0 {
-                    result.append(folded(rowIndex: rowIndex, hidesReasoning: isFinished && rowIndex == turn.count - 1))
+                    result.append(folded(rowIndex: rowIndex, hidesReasoning: false))
                     result.append(contentsOf: turn[(rowIndex + 1)...].map { plain($0, startsTurn: false) })
                 } else {
                     result.append(contentsOf: turn.enumerated().map { plain($1, startsTurn: $0 == 0) })

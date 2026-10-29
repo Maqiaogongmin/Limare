@@ -14,6 +14,7 @@ struct RecoveryBannerView: View {
            appState.conversationRuns.hasInterruptedRun(for: convID) {
             let record = appState.conversationRuns.interruptedRunRecord(for: convID)
             let blocked = appState.conversationRuns.isRecoveryBlocked(for: convID)
+            let worktreeBlocked = blocked.isBlocked && window.conversation?.worktree != nil && blocked.isDirectoryMissing
 
             VStack(spacing: 0) {
                 HStack(alignment: .center, spacing: AppSpacing.small) {
@@ -21,7 +22,15 @@ struct RecoveryBannerView: View {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Color.orange)
 
-                    if blocked.isDirectoryMissing {
+                    if worktreeBlocked {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Worktree unavailable.")
+                                .font(.subheadline.weight(.medium))
+                            if let reason = blocked.reason {
+                                Text(reason).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                            }
+                        }
+                    } else if blocked.isDirectoryMissing {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Previous working directory is unavailable.")
                                 .font(.subheadline.weight(.medium))
@@ -46,7 +55,12 @@ struct RecoveryBannerView: View {
 
                     Spacer()
 
-                    if blocked.isDirectoryMissing {
+                    if worktreeBlocked {
+                        Button("Remove Worktree…") { appState.requestRemoveWorktree(convID, in: window) }
+                            .controlSize(.small)
+                        Button("Discard") { appState.conversationRuns.discardRecovery(conversationID: convID) }
+                            .controlSize(.small)
+                    } else if blocked.isDirectoryMissing {
                         Button("Choose Folder…") {
                             chooseDirectory(for: convID)
                         }
@@ -113,9 +127,7 @@ struct RecoveryBannerView: View {
     }
 
     private func currentWorkspaceURL(for conversationID: UUID) -> URL? {
-        let conv = appState.conversations.conversations.first(where: { $0.id == conversationID })
-        let parentProj = conv.flatMap { appState.conversations.project(for: $0) }
-        return conv?.workspace?.url ?? parentProj?.workspace?.url
+        return appState.conversations.effectiveWorkingDirectory(for: conversationID)
     }
 
     private func chooseDirectory(for conversationID: UUID) {

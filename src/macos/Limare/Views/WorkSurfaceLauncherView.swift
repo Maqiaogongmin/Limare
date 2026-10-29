@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Quiet Start / Launcher Surface displayed when the Right Work Surface is presented but has zero open tabs.
-/// Only lists registered, fully available surface definitions (currently Browser).
+/// Lists the surfaces `WorkSurfaceRegistry` defines.
 public struct WorkSurfaceLauncherView: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowSession.self) private var window

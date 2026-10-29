@@ -193,7 +193,7 @@ final class RuntimeRecoveryStore {
         recoveredFromRunID: UUID? = nil,
         phase: String? = nil
     ) throws {
-        interruptedRuns.removeValue(forKey: conversationID)
+        let previousInterrupted = interruptedRuns.removeValue(forKey: conversationID)
         let record = ActiveRunRecoveryRecord(
             runID: runID,
             conversationID: conversationID,
@@ -213,6 +213,7 @@ final class RuntimeRecoveryStore {
             logs.info("RecoveryStore", "Persisted active run '\(runID)' for conversation '\(conversationID)' before provider execution.")
         } catch {
             activeRuns.removeValue(forKey: conversationID)
+            if let previousInterrupted { interruptedRuns[conversationID] = previousInterrupted }
             throw error
         }
     }

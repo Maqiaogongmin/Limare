@@ -110,6 +110,7 @@ struct ScheduledRun: Codable, Identifiable, Equatable, Sendable {
         case projectGone
         case modelUnavailable
         case missedSlots
+        case worktreeUnavailable
     }
 
     enum FailureDetail: String, Codable, Sendable {

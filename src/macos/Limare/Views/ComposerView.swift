@@ -247,6 +247,7 @@ struct ComposerView: View {
                     }
 
                     ComposerSubagentControl()
+                    ComposerWorktreeControl()
 
                     // No minimum: the buttons and pills on either side carry their own air.
                     Spacer(minLength: 0)

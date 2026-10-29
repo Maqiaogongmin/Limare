@@ -72,6 +72,23 @@
         }
       }
     },
+    "%@ Check %@ and branch %@; Git may have left an unbound worktree." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ Check %2$@ and branch %3$@; Git may have left an unbound worktree."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 请检查 %2$@ 和分支 %3$@；Git 可能留下未绑定的工作树。"
+          }
+        }
+      }
+    },
     "%@ Copy" : {
       "comment" : "The name of a duplicated scheduled task",
       "localizations" : {
@@ -93,6 +110,23 @@
         }
       }
     },
+    "%@ Merge abort also failed: %@. Local may still be merging; inspect it in Terminal." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ Merge abort also failed: %2$@. Local may still be merging; inspect it in Terminal."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 取消合并也失败：%2$@。本地可能仍处于合并中，请在终端检查。"
+          }
+        }
+      }
+    },
     "%@ Probe" : {
       "localizations" : {
         "zh-Hans" : {
@@ -109,6 +143,51 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 源代码"
+          }
+        }
+      }
+    },
+    "%@ The created worktree may remain unbound at %@ on branch %@." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ The created worktree may remain unbound at %2$@ on branch %3$@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 已创建的工作树可能仍未绑定，位于 %2$@，分支为 %3$@。"
+          }
+        }
+      }
+    },
+    "%@ The unbound worktree and branch remain at %@ (%@); inspect them before removing them." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ The unbound worktree and branch remain at %2$@ (%3$@); inspect them before removing them."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 未绑定的工作树和分支仍保留在 %2$@（%3$@）；删除前请先检查。"
+          }
+        }
+      }
+    },
+    "%@ Undo, comments and recovery were already cleared; the binding remains." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 撤销记录、评论和恢复记录已清除；绑定仍然保留。"
           }
         }
       }
@@ -185,6 +264,16 @@
     "%@ · %@" : {
       "shouldTranslate" : false
     },
+    "%@ · Git shows no lines for it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · Git 不显示它的行内容。"
+          }
+        }
+      }
+    },
     "%@ · development build" : {
       "localizations" : {
         "zh-Hans" : {
@@ -211,8 +300,38 @@
         }
       }
     },
+    "%@ · new, untracked." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · 新文件，未跟踪。"
+          }
+        }
+      }
+    },
+    "%@ · no commits yet" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · 尚无提交"
+          }
+        }
+      }
+    },
     "%@%@" : {
       "shouldTranslate" : false
+    },
+    "%@. Open the file in Files to read it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@。请在“文件”中打开查看。"
+          }
+        }
+      }
     },
     "%@: %@, retrying (attempt %lld) · %@" : {
       "localizations" : {
@@ -262,6 +381,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 个进行中"
+          }
+        }
+      }
+    },
+    "%lld ahead · %lld behind task base" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld ahead · %2$lld behind task base"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "相对任务基准领先 %1$lld · 落后 %2$lld"
           }
         }
       }
@@ -358,6 +494,89 @@
         }
       }
     },
+    "%lld comments" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld comment"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld comments"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 条评论"
+          }
+        }
+      }
+    },
+    "%lld comments point at lines that have changed since. They are added with the text and line numbers they had." : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld comment points at a line that has changed since. It is added with the text and line number it had."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld comments point at lines that have changed since. They are added with the text and line numbers they had."
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 条评论所指的行之后已经变化。它们会按写下时的原文和行号加入。"
+          }
+        }
+      }
+    },
+    "%lld commits are not in Local." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Local 中尚无 %lld 个提交。"
+          }
+        }
+      }
+    },
+    "%lld commits will be merged into %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld commits will be merged into %2$@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将把 %1$lld 个提交合并到 %2$@。"
+          }
+        }
+      }
+    },
     "%lld connections configured" : {
       "localizations" : {
         "zh-Hans" : {
@@ -406,12 +625,51 @@
         }
       }
     },
+    "%lld files" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld file"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld files"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个文件"
+          }
+        }
+      }
+    },
     "%lld files couldn't be restored." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "有 %lld 个文件未能恢复。"
+          }
+        }
+      }
+    },
+    "%lld finished subtasks" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个已完成子任务"
           }
         }
       }
@@ -440,6 +698,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 个模型组"
+          }
+        }
+      }
+    },
+    "%lld ignored paths" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个忽略路径"
+          }
+        }
+      }
+    },
+    "%lld ignored paths · %lld submodules" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld ignored paths · %2$lld submodules"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld 个忽略路径 · %2$lld 个子模块"
           }
         }
       }
@@ -496,6 +782,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 行"
+          }
+        }
+      }
+    },
+    "%lld lines changed. Open the file in Files to read it." : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld line changed. Open the file in Files to read it."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld lines changed. Open the file in Files to read it."
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "改动了 %lld 行。请在“文件”中打开查看。"
           }
         }
       }
@@ -598,6 +912,17 @@
         }
       }
     },
+    "%lld paths will change." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将更改 %lld 个路径。"
+          }
+        }
+      }
+    },
     "%lld points" : {
       "localizations" : {
         "en" : {
@@ -658,12 +983,58 @@
         }
       }
     },
+    "%lld review comments haven't been added to a message. They are kept only while the window is open." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld review comment hasn't been added to a message. It is kept only while the window is open."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld review comments haven't been added to a message. They are kept only while the window is open."
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有 %lld 条审查评论还没有加入消息。它们只在窗口打开期间保留。"
+          }
+        }
+      }
+    },
     "%lld skills available" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 个技能可用"
+          }
+        }
+      }
+    },
+    "%lld staged · %lld unstaged · %lld untracked · %lld conflicted" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld staged · %2$lld unstaged · %3$lld untracked · %4$lld conflicted"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld 已暂存 · %2$lld 未暂存 · %3$lld 未跟踪 · %4$lld 冲突"
           }
         }
       }
@@ -742,6 +1113,49 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 个工具可供 Agent 执行。"
+          }
+        }
+      }
+    },
+    "%lld uncommitted changes are committed first, with this message:" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会先用下面的提交说明提交 %lld 处未提交的改动："
+          }
+        }
+      }
+    },
+    "%lld uncommitted · %lld new files · %lld commits since the base" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld uncommitted · %2$lld new files · %3$lld commits since the base"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld 处未提交 · %2$lld 个新文件 · 自基准以来 %3$lld 个提交"
+          }
+        }
+      }
+    },
+    "%lld undo records · %lld unsent comments" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld undo records · %2$lld unsent comments"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld 条撤销记录 · %2$lld 条未发送评论"
           }
         }
       }
@@ -860,6 +1274,32 @@
         }
       }
     },
+    ".worktreeinclude: %lld files couldn't be copied (%@)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : ".worktreeinclude: %1$lld files couldn't be copied (%2$@)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ".worktreeinclude：%1$lld 个文件未能复制（%2$@）。"
+          }
+        }
+      }
+    },
+    ".worktreeinclude: nothing was copied (%@)." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ".worktreeinclude：没有复制任何文件（%@）。"
+          }
+        }
+      }
+    },
     "0 bytes • Empty file" : {
       "localizations" : {
         "zh-Hans" : {
@@ -903,6 +1343,28 @@
         }
       }
     },
+    "A branch with this name already exists." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同名分支已存在。"
+          }
+        }
+      }
+    },
+    "A changed path is not valid UTF-8; its contents cannot be listed safely." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一个改动路径不是有效的 UTF-8，无法安全列出其内容。"
+          }
+        }
+      }
+    },
     "A client secret needs the OAuth client ID it belongs to." : {
       "localizations" : {
         "zh-Hans" : {
@@ -919,6 +1381,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "指定对话"
+          }
+        }
+      }
+    },
+    "A creation was interrupted or could not be safely rolled back. Inspect the directory and Git registration before removing anything." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建已中断或无法安全回滚。删除任何内容前，请检查目录和 Git 注册信息。"
           }
         }
       }
@@ -943,12 +1416,34 @@
         }
       }
     },
+    "A new worktree each run" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每次运行创建一个新工作树"
+          }
+        }
+      }
+    },
     "A parent folder was replaced by a symbolic link or file, so restoring would write elsewhere" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "上级目录被替换成了符号链接或文件，恢复会写到别处"
+          }
+        }
+      }
+    },
+    "A stale Limare run lock will be released first." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将先释放已失效的 Limare 运行锁。"
           }
         }
       }
@@ -979,6 +1474,72 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "需要有效的 http 或 https 网址。"
+          }
+        }
+      }
+    },
+    "A worktree cannot be nested in an existing worktree." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不能在现有工作树内部创建工作树。"
+          }
+        }
+      }
+    },
+    "A worktree isolates a working directory, not a security sandbox. MCP, Computer Use, absolute paths, network access, and Git's shared data remain outside this isolation." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树只隔离工作目录，并非安全沙箱。MCP、Computer Use、绝对路径、网络访问和 Git 共享数据不在隔离范围内。"
+          }
+        }
+      }
+    },
+    "A worktree isolates the working directory only. MCP, Computer Use, absolute paths, network access, and shared Git data are not sandboxed." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树只隔离工作目录。MCP、Computer Use、绝对路径、网络访问和 Git 共享数据不受沙箱保护。"
+          }
+        }
+      }
+    },
+    "A worktree operation is already in progress." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已有工作树操作正在进行。"
+          }
+        }
+      }
+    },
+    "A worktree operation is in progress (%@)." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树操作正在进行（%@）。"
+          }
+        }
+      }
+    },
+    "A worktree path is not valid UTF-8." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树路径不是有效的 UTF-8。"
           }
         }
       }
@@ -1315,16 +1876,6 @@
         }
       }
     },
-    "Add Surface (Browser, Files)" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "添加工作台（浏览器、文件）"
-          }
-        }
-      }
-    },
     "Add a new AI model provider" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1361,6 +1912,46 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "添加模型来定义此模型组的工作方式。"
+          }
+        }
+      }
+    },
+    "Add the comments to the message you're writing; nothing is sent until you send it" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把评论加入正在编写的消息；你按发送之前不会发出任何内容"
+          }
+        }
+      }
+    },
+    "Add to Message" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加入消息"
+          }
+        }
+      }
+    },
+    "Added" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新增"
+          }
+        }
+      }
+    },
+    "Added line %lld, comment" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新增的第 %lld 行，评论"
           }
         }
       }
@@ -1527,6 +2118,16 @@
         }
       }
     },
+    "All changes (uncommitted)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部改动（未提交）"
+          }
+        }
+      }
+    },
     "All member providers are unconfigured or missing credentials." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1623,6 +2224,28 @@
         }
       }
     },
+    "Also delete %lld finished subtasks" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同时删除 %lld 个已结束的子任务"
+          }
+        }
+      }
+    },
+    "Also delete finished subtasks" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同时删除已完成的子任务"
+          }
+        }
+      }
+    },
     "Also restore file changes left by retracted messages" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1643,12 +2266,66 @@
         }
       }
     },
+    "An ignored path is not valid UTF-8." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一个忽略路径不是有效的 UTF-8。"
+          }
+        }
+      }
+    },
+    "An included file exceeds the per-file size limit." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一个清单文件超过单文件大小限制。"
+          }
+        }
+      }
+    },
+    "An included path is not UTF-8." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一个清单路径不是 UTF-8。"
+          }
+        }
+      }
+    },
+    "An incoming path is not valid UTF-8." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一个传入路径不是有效的 UTF-8。"
+          }
+        }
+      }
+    },
     "An unexpected error occurred." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "发生了意外错误。"
+          }
+        }
+      }
+    },
+    "An untracked folder Git lists as a whole, often a repository of its own." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 整体列出的未跟踪文件夹，通常是一个独立的仓库。"
           }
         }
       }
@@ -1819,6 +2496,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "归档对话"
+          }
+        }
+      }
+    },
+    "Archive Keeping Worktree" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保留工作树并归档"
           }
         }
       }
@@ -2291,6 +2979,16 @@
         }
       }
     },
+    "Back to the file list" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返回文件列表"
+          }
+        }
+      }
+    },
     "Background Alerts" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2317,6 +3015,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "备份已清理，只能撤回消息"
+          }
+        }
+      }
+    },
+    "Bare repositories are not supported; open a working checkout." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不支持裸仓库；请打开包含工作目录的检出。"
           }
         }
       }
@@ -2361,6 +3070,16 @@
         }
       }
     },
+    "Base branch" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "基准分支"
+          }
+        }
+      }
+    },
     "Bearer API Key" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2391,12 +3110,64 @@
         }
       }
     },
+    "Binary file" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "二进制文件"
+          }
+        }
+      }
+    },
     "Block for this conversation" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "在此对话中阻止"
+          }
+        }
+      }
+    },
+    "Branch" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分支"
+          }
+        }
+      }
+    },
+    "Branch name" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分支名称"
+          }
+        }
+      }
+    },
+    "Branch prefix" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分支前缀"
+          }
+        }
+      }
+    },
+    "Branch: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分支：%@"
           }
         }
       }
@@ -2733,6 +3504,17 @@
         }
       }
     },
+    "Change Project Folder?" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更改项目文件夹？"
+          }
+        }
+      }
+    },
     "Change Project Folder…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2749,6 +3531,47 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "修改定时任务“%@”"
+          }
+        }
+      }
+    },
+    "Changed: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已修改：%@"
+          }
+        }
+      }
+    },
+    "Changes" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "改动"
+          }
+        }
+      }
+    },
+    "Changes apply only to newly created worktrees." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更改只影响新创建的工作树。"
+          }
+        }
+      }
+    },
+    "Changes needs the Command Line Tools. Install them by running xcode-select --install in Terminal, then try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“改动”需要命令行工具。请在终端中运行 xcode-select --install 安装后再试。"
           }
         }
       }
@@ -2839,6 +3662,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ChatGPT 账户"
+          }
+        }
+      }
+    },
+    "Check Again" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新检查"
           }
         }
       }
@@ -2943,12 +3776,34 @@
         }
       }
     },
+    "Checking merge…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在检查合并…"
+          }
+        }
+      }
+    },
     "Choose" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择"
+          }
+        }
+      }
+    },
+    "Choose Destination…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择保存位置…"
           }
         }
       }
@@ -2993,6 +3848,26 @@
         }
       }
     },
+    "Choose a base" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择基准"
+          }
+        }
+      }
+    },
+    "Choose a base to compare against." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请选择要对比的基准。"
+          }
+        }
+      }
+    },
     "Choose a conversation" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3033,12 +3908,65 @@
         }
       }
     },
+    "Choose a project folder before enabling scheduled worktrees." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启用定时工作树前，请先选择项目文件夹。"
+          }
+        }
+      }
+    },
+    "Choose a project folder first." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先选择项目文件夹。"
+          }
+        }
+      }
+    },
+    "Choose a project with a Git folder for scheduled worktrees." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请为定时工作树选择带有 Git 文件夹的项目。"
+          }
+        }
+      }
+    },
     "Choose a provider from the list to manage settings and models, or click + to add a new provider." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "从列表中选择一个服务商来管理设置和模型，或点击 + 添加新的服务商。"
+          }
+        }
+      }
+    },
+    "Choose a writable folder." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请选择一个可写的文件夹。"
+          }
+        }
+      }
+    },
+    "Choose a writable worktree root folder." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请选择可写的工作树根文件夹。"
           }
         }
       }
@@ -3093,6 +4021,49 @@
         }
       }
     },
+    "Clear All" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部清除"
+          }
+        }
+      }
+    },
+    "Clear Record" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除记录"
+          }
+        }
+      }
+    },
+    "Clear Record…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除记录…"
+          }
+        }
+      }
+    },
+    "Clear creation record?" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除创建记录？"
+          }
+        }
+      }
+    },
     "Clear the list (the log file on disk keeps every record)" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3129,6 +4100,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "关闭 %@"
+          }
+        }
+      }
+    },
+    "Close without adding your review comments?" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭窗口而不加入审查评论吗？"
           }
         }
       }
@@ -3335,6 +4317,56 @@
         }
       }
     },
+    "Comment" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "评论"
+          }
+        }
+      }
+    },
+    "Comment on this line" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "评论这一行"
+          }
+        }
+      }
+    },
+    "Commit message" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提交说明"
+          }
+        }
+      }
+    },
+    "Committed vs %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已提交，对比 %@"
+          }
+        }
+      }
+    },
+    "Committed vs base" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已提交，对比基准"
+          }
+        }
+      }
+    },
     "Common Tasks" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3381,6 +4413,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在压缩对话… %lld 秒"
+          }
+        }
+      }
+    },
+    "Compare" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对比"
           }
         }
       }
@@ -3625,12 +4667,44 @@
         }
       }
     },
+    "Confirm the detached HEAD before removing this worktree." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除此工作树前，请确认游离 HEAD 的风险。"
+          }
+        }
+      }
+    },
     "Conflict: a parent folder was replaced by a symbolic link or file, so restoring would write elsewhere" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "冲突：上级目录被替换成了符号链接或文件，恢复会写到别处"
+          }
+        }
+      }
+    },
+    "Conflicted: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "冲突：%@"
+          }
+        }
+      }
+    },
+    "Conflicts" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "冲突"
           }
         }
       }
@@ -4119,6 +5193,17 @@
         }
       }
     },
+    "Conversation and messages will be deleted." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话及消息将被删除。"
+          }
+        }
+      }
+    },
     "Conversation compacted · %@ tokens saved" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4209,6 +5294,43 @@
         }
       }
     },
+    "Conversations will become standalone. Existing worktrees remain bound to their original repository and are not moved." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话将成为独立会话。已有工作树仍绑定原仓库，不会被移动。"
+          }
+        }
+      }
+    },
+    "Copied from %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制自 %@"
+          }
+        }
+      }
+    },
+    "Copied from %@ (%lld%% similar)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Copied from %1$@ (%2$lld%% similar)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制自 %@（相似度 %lld%%）"
+          }
+        }
+      }
+    },
     "Copy" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4229,12 +5351,45 @@
         }
       }
     },
+    "Copy Inspection Command" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制检查命令"
+          }
+        }
+      }
+    },
+    "Copy Merge Commands" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制合并命令"
+          }
+        }
+      }
+    },
     "Copy Message" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "复制消息"
+          }
+        }
+      }
+    },
+    "Copy Path" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制路径"
           }
         }
       }
@@ -4289,6 +5444,17 @@
         }
       }
     },
+    "Could not inspect this repository." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取此仓库。"
+          }
+        }
+      }
+    },
     "Could not listen on 127.0.0.1:%lld: %@" : {
       "localizations" : {
         "en" : {
@@ -4331,6 +5497,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法连接模型"
+          }
+        }
+      }
+    },
+    "Could not read the unmerged commit count." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取未合并的提交数。"
+          }
+        }
+      }
+    },
+    "Could not read the worktree." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取工作树。"
+          }
+        }
+      }
+    },
+    "Could not release a Limare worktree lock: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法释放 Limare 工作树锁：%@"
+          }
+        }
+      }
+    },
+    "Could not release an old Limare worktree lock: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法释放旧的 Limare 工作树锁：%@"
           }
         }
       }
@@ -4413,6 +5623,16 @@
         }
       }
     },
+    "Couldn't read the file" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取文件"
+          }
+        }
+      }
+    },
     "Couldn't read the parent folder's identity" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4429,6 +5649,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法读取根目录身份"
+          }
+        }
+      }
+    },
+    "Couldn't refresh: %@ Showing what was read at %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Couldn't refresh: %1$@ Showing what was read at %2$@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刷新失败：%@ 正在显示 %@ 读取的内容。"
           }
         }
       }
@@ -4547,12 +5783,97 @@
         }
       }
     },
+    "Create a worktree for this new conversation" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为这个新会话创建工作树"
+          }
+        }
+      }
+    },
     "Create scheduled task '%@'" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "创建定时任务“%@”"
+          }
+        }
+      }
+    },
+    "Create the repository's first commit before creating a worktree." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建工作树前，请先创建仓库的首个提交。"
+          }
+        }
+      }
+    },
+    "Create worktree" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建工作树"
+          }
+        }
+      }
+    },
+    "Created" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建时间"
+          }
+        }
+      }
+    },
+    "Created worktree could not be verified; it remains unbound at %@." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法验证已创建的工作树；它仍未绑定，位于 %@。"
+          }
+        }
+      }
+    },
+    "Created worktree identity could not be verified; it remains unbound at %@." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法验证已创建工作树的身份；它仍未绑定，位于 %@。"
+          }
+        }
+      }
+    },
+    "Creates a merge commit on Local's current branch. Nothing is pushed; the worktree and its branch stay." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会在本地当前分支上创建一个合并提交。不会推送；工作树和它的分支都会保留。"
+          }
+        }
+      }
+    },
+    "Creating worktree…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在创建工作树…"
           }
         }
       }
@@ -4623,6 +5944,37 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "携带凭据的远程 MCP 连接必须使用 HTTPS。"
+          }
+        }
+      }
+    },
+    "Current" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前状态"
+          }
+        }
+      }
+    },
+    "Current branch (%@)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前分支（%@）"
+          }
+        }
+      }
+    },
+    "Current commit" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前提交"
           }
         }
       }
@@ -4923,6 +6275,17 @@
         }
       }
     },
+    "Delete Anyway" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仍然删除"
+          }
+        }
+      }
+    },
     "Delete Conversation" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4949,6 +6312,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "删除对话？"
+          }
+        }
+      }
+    },
+    "Delete Conversations and Worktrees?" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除会话和工作树？"
           }
         }
       }
@@ -5113,12 +6487,43 @@
         }
       }
     },
+    "Delete Reviewed Items" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除已审阅项目"
+          }
+        }
+      }
+    },
     "Delete Scheduled Task?" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "删除定时任务？"
+          }
+        }
+      }
+    },
+    "Delete Subtask" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除子任务"
+          }
+        }
+      }
+    },
+    "Delete Task…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除任务…"
           }
         }
       }
@@ -5133,6 +6538,26 @@
         }
       }
     },
+    "Delete Worktree" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除工作树"
+          }
+        }
+      }
+    },
+    "Delete Worktrees" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除这些工作树"
+          }
+        }
+      }
+    },
     "Delete all archived conversations?" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5143,12 +6568,43 @@
         }
       }
     },
+    "Delete all review comments?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除全部审查评论吗？"
+          }
+        }
+      }
+    },
     "Delete every archived conversation permanently" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "永久删除所有已归档的对话"
+          }
+        }
+      }
+    },
+    "Delete finished subtask?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除已结束的子任务？"
+          }
+        }
+      }
+    },
+    "Delete merged task branch" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除已合并的任务分支"
           }
         }
       }
@@ -5169,6 +6625,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "删除定时任务“%@”"
+          }
+        }
+      }
+    },
+    "Delete the conversation and its worktree?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除对话及其工作树？"
           }
         }
       }
@@ -5199,6 +6665,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "删除“%@”？\n\n这会移除该模型组，但不会删除其中的模型。所有使用此模型组的默认设置都会被清除。"
+          }
+        }
+      }
+    },
+    "Deleted" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已删除"
+          }
+        }
+      }
+    },
+    "Deleted empty file" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已删除的空文件"
           }
         }
       }
@@ -5249,6 +6735,49 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "输入需要 Limare 定时执行的指令说明…"
+          }
+        }
+      }
+    },
+    "Detached HEAD %@: commits may lose their reference when this worktree is removed." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游离 HEAD %@：删除工作树后，这些提交可能失去引用。"
+          }
+        }
+      }
+    },
+    "Detached HEAD: commits may lose their reference." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HEAD 已分离：提交可能失去引用。"
+          }
+        }
+      }
+    },
+    "Detached HEAD: create a branch before pushing." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前 HEAD 处于游离状态；推送前请先创建分支。"
+          }
+        }
+      }
+    },
+    "Detached at %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游离于 %@"
           }
         }
       }
@@ -5369,6 +6898,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "发现来源"
+          }
+        }
+      }
+    },
+    "Dismiss" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭"
           }
         }
       }
@@ -5800,6 +7339,27 @@
         }
       }
     },
+    "Enter a valid branch prefix." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请输入有效的分支前缀。"
+          }
+        }
+      }
+    },
+    "Enter a valid worktree branch prefix." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请输入有效的工作树分支前缀。"
+          }
+        }
+      }
+    },
     "Enter the credential for this explicit generic bearer connection in Limare's secure UI." : {
       "localizations" : {
         "zh-Hans" : {
@@ -5956,6 +7516,16 @@
         }
       }
     },
+    "Everything is committed." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所有改动都已提交。"
+          }
+        }
+      }
+    },
     "Executable not found at path '%@'" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6042,6 +7612,17 @@
         }
       }
     },
+    "Existing worktrees remain bound to their original repository and are not moved. New conversations use the updated project folder." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已有工作树仍绑定原仓库，不会被移动。新会话将使用更新后的项目文件夹。"
+          }
+        }
+      }
+    },
     "Expand Composer" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6078,6 +7659,27 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "展开以填满窗口"
+          }
+        }
+      }
+    },
+    "Export Patch…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出补丁…"
+          }
+        }
+      }
+    },
+    "Export tracked changes?" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出已跟踪文件的改动？"
           }
         }
       }
@@ -6518,12 +8120,34 @@
         }
       }
     },
+    "Finish or commit the task worktree's changes and Git operations before merging." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合并前，请完成任务工作树中的 Git 操作并提交改动。"
+          }
+        }
+      }
+    },
     "Finish recording and transcribe" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "结束录音并转写"
+          }
+        }
+      }
+    },
+    "Finish the current Git operation in Local first (%@)." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先完成本地正在进行的 Git 操作（%@）。"
           }
         }
       }
@@ -6554,6 +8178,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "聚焦输入框"
+          }
+        }
+      }
+    },
+    "Folder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件夹"
           }
         }
       }
@@ -6692,6 +8326,191 @@
         }
       }
     },
+    "Git couldn't be started." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法启动 Git。"
+          }
+        }
+      }
+    },
+    "Git couldn't be started: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法启动 Git：%@"
+          }
+        }
+      }
+    },
+    "Git couldn't read the changes" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 无法读取改动"
+          }
+        }
+      }
+    },
+    "Git couldn't read this folder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 无法读取此文件夹"
+          }
+        }
+      }
+    },
+    "Git couldn't show this file" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 无法显示此文件"
+          }
+        }
+      }
+    },
+    "Git is unavailable. Install the Xcode Command Line Tools first." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 不可用。请先安装 Xcode 命令行工具。"
+          }
+        }
+      }
+    },
+    "Git isn't available" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 不可用"
+          }
+        }
+      }
+    },
+    "Git may run configured merge drivers or commit signing. The task branch and worktree are kept; nothing is pushed." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 可能运行配置的合并驱动程序或提交签名。任务分支和工作树会保留，不会推送。"
+          }
+        }
+      }
+    },
+    "Git operation state could not be read." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取 Git 操作状态。"
+          }
+        }
+      }
+    },
+    "Git output was truncated." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 输出被截断。"
+          }
+        }
+      }
+    },
+    "Git reported an error." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 报告了一个错误。"
+          }
+        }
+      }
+    },
+    "Git shows no lines for it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 不显示它的行内容。"
+          }
+        }
+      }
+    },
+    "Git still lists this worktree. Inspect its registration before clearing the record." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 仍列出此工作树。清除记录前请检查其注册状态。"
+          }
+        }
+      }
+    },
+    "Git timed out; the operation may have an unknown outcome." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 操作超时，执行结果可能未知。"
+          }
+        }
+      }
+    },
+    "Git took too long to answer." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 响应超时。"
+          }
+        }
+      }
+    },
+    "Git's file list is too large to show." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 的文件列表太大，无法显示。"
+          }
+        }
+      }
+    },
+    "Git's output couldn't be read: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取 Git 的输出：%@"
+          }
+        }
+      }
+    },
+    "Git's output was too large." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 的输出过大。"
+          }
+        }
+      }
+    },
     "GitHub (own GitHub App)" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6810,6 +8629,27 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "配置为专用的模型组。当凭据和操作条件满足时，这些模型组中的模型可被 Agent 运行环境执行。"
+          }
+        }
+      }
+    },
+    "HEAD and the working tree hold the same content: what is staged was undone in the working tree. See Staged or Unstaged." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HEAD 与工作区内容相同：已暂存的改动在工作区中又被撤回了。请查看“已暂存”或“未暂存”。"
+          }
+        }
+      }
+    },
+    "HEAD has no commit to compare." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HEAD 没有可对比的提交。"
           }
         }
       }
@@ -7132,12 +8972,56 @@
         }
       }
     },
+    "I understand detached commits may lose their reference" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我了解游离提交可能失去引用"
+          }
+        }
+      }
+    },
     "Identity" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "身份"
+          }
+        }
+      }
+    },
+    "Ignored Local paths could be overwritten: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地被忽略的路径可能被覆盖：%@"
+          }
+        }
+      }
+    },
+    "Ignored files could not be read." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取忽略文件。"
+          }
+        }
+      }
+    },
+    "Ignored paths: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "忽略路径：%@"
           }
         }
       }
@@ -7292,6 +9176,17 @@
         }
       }
     },
+    "Included files exceed the total size limit." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清单文件的总大小超过限制。"
+          }
+        }
+      }
+    },
     "Incomplete" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7338,6 +9233,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "根据服务商目录和模型元数据推断。"
+          }
+        }
+      }
+    },
+    "Initialized submodule working directories: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已初始化的子模块工作目录：%@"
           }
         }
       }
@@ -7622,6 +9528,16 @@
         }
       }
     },
+    "Its conversation and task history will be deleted." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该子任务的会话和任务历史将被删除。"
+          }
+        }
+      }
+    },
     "JSON must be an object" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7658,6 +9574,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保留已恢复的文件并撤回消息"
+          }
+        }
+      }
+    },
+    "Keep Worktree Folder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保留工作树文件夹"
+          }
+        }
+      }
+    },
+    "Keep Worktree Folders" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保留这些工作树文件夹"
           }
         }
       }
@@ -7876,6 +9812,16 @@
         }
       }
     },
+    "Line %lld, comment" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第 %lld 行，评论"
+          }
+        }
+      }
+    },
     "Lines %lld–%lld" : {
       "localizations" : {
         "en" : {
@@ -8000,6 +9946,16 @@
         }
       }
     },
+    "Local" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地检出目录"
+          }
+        }
+      }
+    },
     "Local Command" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8020,12 +9976,178 @@
         }
       }
     },
+    "Local already has a merge in progress." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地已有合并正在进行。"
+          }
+        }
+      }
+    },
+    "Local already has everything in this worktree." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地已经包含这个工作树的全部内容。"
+          }
+        }
+      }
+    },
+    "Local changes stay in Local" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地改动保留在原目录"
+          }
+        }
+      }
+    },
+    "Local files are not moved, stashed, or checked out. .worktreeinclude can copy matching ignored files into the new worktree; dependency and build directories are excluded. Other uncommitted files are not copied, and submodules are not initialized." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不会移动、暂存或检出原目录文件。.worktreeinclude 可以将匹配的忽略文件复制到新工作树，但会排除依赖和构建目录；其他未提交文件不会复制，子模块也不会初始化。"
+          }
+        }
+      }
+    },
+    "Local files are not moved, stashed, or checked out. Uncommitted and ignored files, including .env, are not copied. Submodules and dependencies are not initialized." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不会移动、暂存或检出原目录中的文件。未提交和被忽略的文件（包括 .env）不会复制；子模块和依赖不会初始化。"
+          }
+        }
+      }
+    },
+    "Local folder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地文件夹"
+          }
+        }
+      }
+    },
+    "Local isn't on a branch; check out a branch in Local first." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地不在任何分支上，请先在本地检出一个分支。"
+          }
+        }
+      }
+    },
+    "Local isn't on a branch; check out a branch in Local to merge." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地不在任何分支上，检出一个分支后才能合并。"
+          }
+        }
+      }
+    },
+    "Local must be clean, with readable ignored-file status, before merging." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合并前，本地目录必须干净，且忽略文件状态必须可读。"
+          }
+        }
+      }
+    },
+    "Local must exist and be on a branch before merging." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合并前，本地目录必须存在并处于某个分支。"
+          }
+        }
+      }
+    },
     "Local port" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "本地端口"
+          }
+        }
+      }
+    },
+    "Local project folder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地项目文件夹"
+          }
+        }
+      }
+    },
+    "Local repository" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地仓库"
+          }
+        }
+      }
+    },
+    "Local status could not be read completely; retry before creating a worktree." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法完整读取本地状态，请重试后再创建工作树。"
+          }
+        }
+      }
+    },
+    "Local: %@ · %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Local: %1$@ · %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地：%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "Locked: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已锁定：%@"
           }
         }
       }
@@ -8360,6 +10482,99 @@
         }
       }
     },
+    "Merge" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合并"
+          }
+        }
+      }
+    },
+    "Merge conflict" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合并冲突"
+          }
+        }
+      }
+    },
+    "Merge conflicts: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合并冲突：%@"
+          }
+        }
+      }
+    },
+    "Merge into Local" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合并到本地"
+          }
+        }
+      }
+    },
+    "Merge into Local?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合并到本地？"
+          }
+        }
+      }
+    },
+    "Merge into Local…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合并到本地…"
+          }
+        }
+      }
+    },
+    "Merge preflight is unavailable." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法执行合并预检。"
+          }
+        }
+      }
+    },
+    "Merged into Local at %@. The worktree and its branch were kept." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已合并到本地（%@）。工作树和它的分支都已保留。"
+          }
+        }
+      }
+    },
+    "Merged into Local at %@. The worktree and task branch were kept." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已合并到本地提交 %@。工作树和任务分支已保留。"
+          }
+        }
+      }
+    },
     "Message" : {
       "comment" : "Remote Access page (RemoteWeb)",
       "extractionState" : "manual",
@@ -8538,6 +10753,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "模态覆盖"
+          }
+        }
+      }
+    },
+    "Mode changed: %@ → %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Mode changed: %1$@ → %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "权限变化：%@ → %@"
           }
         }
       }
@@ -8878,6 +11109,16 @@
         }
       }
     },
+    "Modified" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已修改"
+          }
+        }
+      }
+    },
     "Monthly" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9000,6 +11241,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "需要审核"
+          }
+        }
+      }
+    },
+    "Needs a first commit" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要先有一次提交"
           }
         }
       }
@@ -9264,6 +11515,38 @@
         }
       }
     },
+    "New Worktree" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建工作树"
+          }
+        }
+      }
+    },
+    "New Worktree Conversation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建工作树对话"
+          }
+        }
+      }
+    },
+    "New Worktree Conversation…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建工作树会话…"
+          }
+        }
+      }
+    },
     "New conversation" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9296,12 +11579,43 @@
         }
       }
     },
+    "New empty file" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新的空文件"
+          }
+        }
+      }
+    },
     "New message received · resuming" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "收到新消息 · 正在继续"
+          }
+        }
+      }
+    },
+    "New worktree" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新工作树"
+          }
+        }
+      }
+    },
+    "New worktree each run" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每次运行新建工作树"
           }
         }
       }
@@ -9614,6 +11928,77 @@
         }
       }
     },
+    "No branch to compare against" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可对比的分支"
+          }
+        }
+      }
+    },
+    "No changes" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有改动"
+          }
+        }
+      }
+    },
+    "No changes from task base" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "相对任务基准没有改动"
+          }
+        }
+      }
+    },
+    "No changes since the task started" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务开始以来没有改动"
+          }
+        }
+      }
+    },
+    "No commits to compare" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可对比的提交"
+          }
+        }
+      }
+    },
+    "No commits yet" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚无提交"
+          }
+        }
+      }
+    },
+    "No content changes" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内容没有变化"
+          }
+        }
+      }
+    },
     "No conversations" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9682,6 +12067,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这一轮没有记录到文件改动。"
+          }
+        }
+      }
+    },
+    "No files or branches will be deleted. Limare will clear this record only if the directory and Git registration are both gone." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不会删除文件或分支。仅当目录和 Git 注册均已不存在时，Limare 才会清除记录。"
           }
         }
       }
@@ -9804,6 +12200,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有与“%@”匹配的模型。"
+          }
+        }
+      }
+    },
+    "No net change" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无净变化"
+          }
+        }
+      }
+    },
+    "No newline at end of file" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件末尾没有换行"
           }
         }
       }
@@ -10008,6 +12424,16 @@
         }
       }
     },
+    "Not a Git repository" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不是 Git 仓库"
+          }
+        }
+      }
+    },
     "Not answered" : {
       "localizations" : {
         "zh-Hans" : {
@@ -10120,6 +12546,26 @@
         }
       }
     },
+    "Nothing in the working tree differs from the index." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作区与暂存区没有差异。"
+          }
+        }
+      }
+    },
+    "Nothing is staged." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有已暂存的改动。"
+          }
+        }
+      }
+    },
     "Nothing new to compact since the last summary." : {
       "localizations" : {
         "zh-Hans" : {
@@ -10220,6 +12666,22 @@
         }
       }
     },
+    "Of %lld worktrees, %lld hold uncommitted changes or new files that exist nowhere else. Kept folders and their branches stay on disk." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Of %1$lld worktrees, %2$lld hold uncommitted changes or new files that exist nowhere else. Kept folders and their branches stay on disk."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld 个工作树中，有 %2$lld 个含有未提交的改动或新文件，别处没有副本。保留的文件夹及其分支会留在磁盘上。"
+          }
+        }
+      }
+    },
     "Off" : {
       "localizations" : {
         "zh-Hans" : {
@@ -10258,6 +12720,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "网络已断开，恢复后自动重连"
+          }
+        }
+      }
+    },
+    "Old file links may point to the removed worktree." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旧文件链接可能指向已删除的工作树。"
           }
         }
       }
@@ -10328,6 +12801,16 @@
         }
       }
     },
+    "Only in a worktree conversation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅限工作树对话"
+          }
+        }
+      }
+    },
     "Only models with complete discovery absence evidence are removed. Existing conversation and group bindings are retained." : {
       "localizations" : {
         "zh-Hans" : {
@@ -10338,12 +12821,34 @@
         }
       }
     },
+    "Only the binding will be removed; this action will not delete the directory." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只解除绑定，不会删除目录。"
+          }
+        }
+      }
+    },
     "Only the last message can be retracted." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "只能撤回最后一条消息。"
+          }
+        }
+      }
+    },
+    "Only the original merged task branch can be deleted." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只能删除已合并的原始任务分支。"
           }
         }
       }
@@ -10368,6 +12873,17 @@
         }
       }
     },
+    "Open Local Folder" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开本地文件夹"
+          }
+        }
+      }
+    },
     "Open Settings" : {
       "localizations" : {
         "zh-Hans" : {
@@ -10384,6 +12900,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开系统设置"
+          }
+        }
+      }
+    },
+    "Open Terminal in Local" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在本地目录打开终端"
+          }
+        }
+      }
+    },
+    "Open Terminal to resolve the conflicts yourself." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请打开终端自行解决冲突。"
+          }
+        }
+      }
+    },
+    "Open a Git working tree to create a worktree conversation." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请打开 Git 工作目录以创建工作树会话。"
+          }
+        }
+      }
+    },
+    "Open an empty conversation with an explicit project folder first." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先打开已明确设置项目文件夹的空会话。"
           }
         }
       }
@@ -10438,6 +12998,16 @@
         }
       }
     },
+    "Open in Files" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在“文件”中打开"
+          }
+        }
+      }
+    },
     "Open in New Window" : {
       "localizations" : {
         "zh-Hans" : {
@@ -10454,6 +13024,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开 Agent 网页工作台"
+          }
+        }
+      }
+    },
+    "Open the file in Files" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在“文件”中打开此文件"
+          }
+        }
+      }
+    },
+    "Open the repository root as the project folder." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请将仓库根目录作为项目文件夹打开。"
+          }
+        }
+      }
+    },
+    "Open the repository's root" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请打开仓库根目录"
           }
         }
       }
@@ -10564,6 +13164,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "其他回答…"
+          }
+        }
+      }
+    },
+    "Outdated" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已过期"
           }
         }
       }
@@ -10684,6 +13294,37 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "粘贴隧道令牌"
+          }
+        }
+      }
+    },
+    "Path" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "路径"
+          }
+        }
+      }
+    },
+    "Path can't be read" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取路径"
+          }
+        }
+      }
+    },
+    "Path not UTF-8" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "路径不是 UTF-8"
           }
         }
       }
@@ -10918,6 +13559,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请先在服务商设置中配置服务商并获取模型。"
+          }
+        }
+      }
+    },
+    "Points to %@. Links aren't followed." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "指向 %@。不会跟随链接。"
           }
         }
       }
@@ -11514,6 +14165,22 @@
         }
       }
     },
+    "Queued input is paused because the worktree is unavailable at %@: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Queued input is paused because the worktree is unavailable at %1$@: %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "排队输入已暂停，因为工作树不可用（%1$@）：%2$@"
+          }
+        }
+      }
+    },
     "Queued or inserted messages are still waiting, so nothing can be retracted yet." : {
       "localizations" : {
         "zh-Hans" : {
@@ -11544,6 +14211,28 @@
         }
       }
     },
+    "Quit" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出"
+          }
+        }
+      }
+    },
+    "Quit without adding your review comments?" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出而不加入审查评论吗？"
+          }
+        }
+      }
+    },
     "Ran command" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11564,12 +14253,33 @@
         }
       }
     },
+    "Read %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "读取时间：%@"
+          }
+        }
+      }
+    },
     "Read aloud" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "朗读"
+          }
+        }
+      }
+    },
+    "Read at %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "读取于 %@"
           }
         }
       }
@@ -11584,12 +14294,44 @@
         }
       }
     },
+    "Read the changes again" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新读取改动"
+          }
+        }
+      }
+    },
+    "Reading Git status…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在读取 Git 状态…"
+          }
+        }
+      }
+    },
     "Reading file" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在读取文件"
+          }
+        }
+      }
+    },
+    "Reading worktree contents…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在读取工作树内容…"
           }
         }
       }
@@ -11818,6 +14560,17 @@
         }
       }
     },
+    "Refresh Failed Items" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刷新失败项目"
+          }
+        }
+      }
+    },
     "Refresh File" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11858,6 +14611,17 @@
         }
       }
     },
+    "Refresh this item before trying again." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先刷新此项目，再重试。"
+          }
+        }
+      }
+    },
     "Refreshing models…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11874,6 +14638,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "登记工作区产物：%@"
+          }
+        }
+      }
+    },
+    "Registration could not be removed: %@. Inspect it with git -C %@ worktree list; prune only after reviewing other worktrees." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Registration could not be removed: %1$@. Inspect it with git -C %2$@ worktree list; prune only after reviewing other worktrees."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法删除注册信息：%1$@。请用 git -C %2$@ worktree list 检查，并在确认其他工作树后再清理。"
           }
         }
       }
@@ -12026,6 +14807,28 @@
         }
       }
     },
+    "Remove Binding" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解除绑定"
+          }
+        }
+      }
+    },
+    "Remove Binding…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解除绑定…"
+          }
+        }
+      }
+    },
     "Remove Folder" : {
       "localizations" : {
         "zh-Hans" : {
@@ -12066,12 +14869,54 @@
         }
       }
     },
+    "Remove Worktree Binding?" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解除工作树绑定？"
+          }
+        }
+      }
+    },
+    "Remove Worktree?" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除工作树？"
+          }
+        }
+      }
+    },
+    "Remove Worktree…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除工作树…"
+          }
+        }
+      }
+    },
     "Remove from Group" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "从模型组中移除"
+          }
+        }
+      }
+    },
+    "Remove the worktree?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除工作树？"
           }
         }
       }
@@ -12092,6 +14937,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已被服务商移除"
+          }
+        }
+      }
+    },
+    "Removed line %lld, comment" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除的第 %lld 行，评论"
           }
         }
       }
@@ -12122,6 +14977,42 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重命名项目"
+          }
+        }
+      }
+    },
+    "Renamed" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已重命名"
+          }
+        }
+      }
+    },
+    "Renamed from %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重命名自 %@"
+          }
+        }
+      }
+    },
+    "Renamed from %@ (%lld%% similar)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Renamed from %1$@ (%2$lld%% similar)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重命名自 %@（相似度 %lld%%）"
           }
         }
       }
@@ -12346,6 +15237,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "将覆盖重置为检测结果"
+          }
+        }
+      }
+    },
+    "Resolve this file's conflicts in a terminal; Changes doesn't show combined diffs." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在终端中解决此文件的冲突；“改动”不显示合并冲突的组合 diff。"
           }
         }
       }
@@ -12666,6 +15567,17 @@
         }
       }
     },
+    "Retry Failed Items" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重试失败项目"
+          }
+        }
+      }
+    },
     "Retry MCP Recovery" : {
       "localizations" : {
         "zh-Hans" : {
@@ -12706,6 +15618,17 @@
         }
       }
     },
+    "Reveal Parent in Finder" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在访达中显示上级目录"
+          }
+        }
+      }
+    },
     "Reveal Project Folder in Finder" : {
       "localizations" : {
         "zh-Hans" : {
@@ -12736,6 +15659,26 @@
         }
       }
     },
+    "Review Changes" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "审阅更改"
+          }
+        }
+      }
+    },
+    "Review Comments" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "审查评论"
+          }
+        }
+      }
+    },
     "Review Hook Package" : {
       "localizations" : {
         "zh-Hans" : {
@@ -12762,6 +15705,37 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "查看撤销"
+          }
+        }
+      }
+    },
+    "Review comments" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "审查评论"
+          }
+        }
+      }
+    },
+    "Review each worktree below. Its directory and listed local contents will be deleted; branches are kept." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请逐项检查以下工作树。目录及列出的本地内容将被删除，分支会保留。"
+          }
+        }
+      }
+    },
+    "Review the project's Git changes and comment on lines" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看项目的 Git 改动并逐行评论"
           }
         }
       }
@@ -12912,6 +15886,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "运行详情"
+          }
+        }
+      }
+    },
+    "Run each time in a new worktree" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每次在新工作树中运行"
           }
         }
       }
@@ -13178,6 +16163,28 @@
         }
       }
     },
+    "Scheduled tasks target this conversation. Change their target before removing its worktree if they should keep using it." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有定时任务以此会话为目标。如需它们继续使用工作树，请在移除前更改任务目标。"
+          }
+        }
+      }
+    },
+    "Scheduled worktrees require a new conversation in a project with a folder." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "定时工作树需要在已设置文件夹的项目中创建新会话。"
+          }
+        }
+      }
+    },
     "Schedules" : {
       "localizations" : {
         "zh-Hans" : {
@@ -13398,6 +16405,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择一个服务商"
+          }
+        }
+      }
+    },
+    "Select a file" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择一个文件"
           }
         }
       }
@@ -13852,6 +16869,26 @@
         }
       }
     },
+    "Show the review comments" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示审查评论"
+          }
+        }
+      }
+    },
+    "Show worktree details" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示工作树详情"
+          }
+        }
+      }
+    },
     "Sign In Again" : {
       "comment" : "Remote Access page (RemoteWeb)",
       "extractionState" : "manual",
@@ -13934,6 +16971,26 @@
         }
       }
     },
+    "Since the task started" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务开始以来"
+          }
+        }
+      }
+    },
+    "Since the task started from %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自任务从 %@ 开始以来"
+          }
+        }
+      }
+    },
     "Skills" : {
       "localizations" : {
         "zh-Hans" : {
@@ -13990,6 +17047,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "部分备份已被清理，只能撤回消息。"
+          }
+        }
+      }
+    },
+    "Some comments are outdated" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部分评论已过期"
           }
         }
       }
@@ -14142,6 +17209,26 @@
         }
       }
     },
+    "Staged" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已暂存"
+          }
+        }
+      }
+    },
+    "Staged + unstaged" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已暂存 + 未暂存"
+          }
+        }
+      }
+    },
     "Standalone" : {
       "localizations" : {
         "zh-Hans" : {
@@ -14168,6 +17255,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "从模板开始"
+          }
+        }
+      }
+    },
+    "Started from" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "起点"
           }
         }
       }
@@ -14236,6 +17333,39 @@
         }
       }
     },
+    "Stop active runs, queued inputs and subtasks, and finish any undo plan before merging." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合并前，请停止运行、清空排队输入、结束子任务并完成撤销计划。"
+          }
+        }
+      }
+    },
+    "Stop active runs, queued inputs, and unfinished subtasks before removing the worktree." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除工作树前，请停止运行中的任务、清空排队输入并结束未完成的子任务。"
+          }
+        }
+      }
+    },
+    "Stop active work and remove finished subtasks first." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先停止活动任务并删除已结束的子任务。"
+          }
+        }
+      }
+    },
     "Stop current run" : {
       "localizations" : {
         "zh-Hans" : {
@@ -14262,6 +17392,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "停止恢复：已恢复的文件保持现状，其余文件不再恢复，消息保留"
+          }
+        }
+      }
+    },
+    "Stop the conversation's run and subtasks first." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先停止这个对话的运行和子任务。"
           }
         }
       }
@@ -14402,6 +17542,68 @@
         }
       }
     },
+    "Submodule" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "子模块"
+          }
+        }
+      }
+    },
+    "Submodule lines can't be commented on" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "子模块的行不能评论"
+          }
+        }
+      }
+    },
+    "Submodule status could not be read." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取子模块状态。"
+          }
+        }
+      }
+    },
+    "Submodule status is unavailable; its working-directory contents may be deleted." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取子模块状态；其工作目录内容可能被删除。"
+          }
+        }
+      }
+    },
+    "Submodule with uncommitted changes inside it" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "子模块内有未提交的改动"
+          }
+        }
+      }
+    },
+    "Submodule: the commit it points at" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "子模块：它指向的提交"
+          }
+        }
+      }
+    },
     "Subtask" : {
       "localizations" : {
         "zh-Hans" : {
@@ -14536,6 +17738,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "立即切换"
+          }
+        }
+      }
+    },
+    "Symbolic link" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "符号链接"
           }
         }
       }
@@ -14700,6 +17912,50 @@
         }
       }
     },
+    "Task base" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务基准"
+          }
+        }
+      }
+    },
+    "Task base %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务基准 %@"
+          }
+        }
+      }
+    },
+    "Task branch" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务分支"
+          }
+        }
+      }
+    },
+    "Task branch name" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务分支名称"
+          }
+        }
+      }
+    },
     "Task failed" : {
       "localizations" : {
         "zh-Hans" : {
@@ -14736,6 +17992,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "任务名称（如：每日代码巡检）"
+          }
+        }
+      }
+    },
+    "Task: %@ · %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Task: %1$@ · %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务：%1$@ · %2$@"
           }
         }
       }
@@ -14870,6 +18143,28 @@
         }
       }
     },
+    "The .worktreeinclude file is not a regular file or is too large." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ".worktreeinclude 不是普通文件或文件过大。"
+          }
+        }
+      }
+    },
+    "The .worktreeinclude file is too large or is not UTF-8." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ".worktreeinclude 过大或不是 UTF-8。"
+          }
+        }
+      }
+    },
     "The MCP authority lease could not be secured." : {
       "localizations" : {
         "zh-Hans" : {
@@ -14922,6 +18217,37 @@
         }
       }
     },
+    "The base branch no longer exists." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "基准分支已不存在。"
+          }
+        }
+      }
+    },
+    "The branch is kept. Local will not contain unmerged commits until you integrate them." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分支会保留。合并之前，未整合的提交不会出现在本地目录中。"
+          }
+        }
+      }
+    },
+    "The branch to compare the commits against" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用来对比提交的分支"
+          }
+        }
+      }
+    },
     "The connection was lost, or the attachment limit of %lld was reached." : {
       "localizations" : {
         "zh-Hans" : {
@@ -14954,6 +18280,38 @@
         }
       }
     },
+    "The conversation changed while creating the worktree." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建工作树期间会话发生了变化。"
+          }
+        }
+      }
+    },
+    "The conversation changed while its worktree was being created." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建工作树期间对话发生了变化。"
+          }
+        }
+      }
+    },
+    "The conversation could not be deleted." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法删除此会话。"
+          }
+        }
+      }
+    },
     "The conversation could not be summarized." : {
       "localizations" : {
         "zh-Hans" : {
@@ -14974,6 +18332,17 @@
         }
       }
     },
+    "The conversation or its folder changed; reopen worktree setup." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话或文件夹已变化；请重新打开工作树设置。"
+          }
+        }
+      }
+    },
     "The conversations and messages the task created are kept." : {
       "localizations" : {
         "zh-Hans" : {
@@ -14990,6 +18359,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "凭据记录已损坏。原始密钥已保留。"
+          }
+        }
+      }
+    },
+    "The current commit matches the task base." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前提交与任务基准一致。"
           }
         }
       }
@@ -15024,6 +18404,16 @@
         }
       }
     },
+    "The diff is over 2 MB. Open the file in Files to read it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "diff 超过 2 MB。请在“文件”中打开查看。"
+          }
+        }
+      }
+    },
     "The draft couldn't be deleted: %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -15040,6 +18430,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此对话正忙，未能开始显式结果运行。"
+          }
+        }
+      }
+    },
+    "The file couldn't be read." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取此文件。"
           }
         }
       }
@@ -15062,6 +18462,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "文件超过 %lld MB。"
+          }
+        }
+      }
+    },
+    "The file is outside the repository." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此文件在仓库之外。"
           }
         }
       }
@@ -15092,6 +18502,27 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "目录 %@ 已被移动或替换"
+          }
+        }
+      }
+    },
+    "The folder “%@” inside this project is one. To review its changes, open it as the project." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此项目中的文件夹“%@”是一个 Git 仓库。要查看它的改动，请把它作为项目打开。"
+          }
+        }
+      }
+    },
+    "The following conversation data will be discarded:" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以下会话数据将被丢弃："
           }
         }
       }
@@ -15136,6 +18567,17 @@
         }
       }
     },
+    "The interrupted recovery record will be discarded." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中断恢复记录将被丢弃。"
+          }
+        }
+      }
+    },
     "The language of menus, settings and messages in Limare." : {
       "localizations" : {
         "zh-Hans" : {
@@ -15162,6 +18604,43 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "上一次撤销的文件已恢复，但消息尚未撤回，请先完成撤销。"
+          }
+        }
+      }
+    },
+    "The line no longer holds the text this comment was written on" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这一行已不是写评论时的内容"
+          }
+        }
+      }
+    },
+    "The merge has conflicts in %@; it was undone and Local was left as it was. The task's changes are committed on %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The merge has conflicts in %1$@; it was undone and Local was left as it was. The task's changes are committed on %2$@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合并在 %1$@ 中有冲突，已撤销合并，本地保持原样。任务的改动已提交在 %2$@ 上。"
+          }
+        }
+      }
+    },
+    "The merge preflight changed; review it again before merging." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合并预检结果已变化；合并前请重新审阅。"
           }
         }
       }
@@ -15316,6 +18795,38 @@
         }
       }
     },
+    "The open restore plan will be discarded." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开的恢复计划将被丢弃。"
+          }
+        }
+      }
+    },
+    "The parent conversation is unavailable." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "父会话不可用。"
+          }
+        }
+      }
+    },
+    "The patch includes tracked changes from the task base, including uncommitted changes. Untracked files are not included. If Local has moved, applying it may require a three-way merge." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "补丁包含相对任务基准的已跟踪文件改动，包括未提交的改动；未跟踪文件不包含在内。如果本地目录已发生变化，应用补丁时可能需要三方合并。"
+          }
+        }
+      }
+    },
     "The path %@ was redirected: a parent folder was replaced by a symbolic link or file" : {
       "localizations" : {
         "zh-Hans" : {
@@ -15346,6 +18857,17 @@
         }
       }
     },
+    "The preflight found no conflicts or ignored-file collisions." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "预检未发现冲突或被忽略文件的路径碰撞。"
+          }
+        }
+      }
+    },
     "The previous conversation's input couldn't be saved as a draft (%@). It is held for now and goes back into the composer when you return to that conversation; deal with it before you quit Limare." : {
       "localizations" : {
         "zh-Hans" : {
@@ -15362,6 +18884,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "上一次运行还没结束"
+          }
+        }
+      }
+    },
+    "The project folder changed; inspect it again." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目文件夹已变化，请重新检查。"
+          }
+        }
+      }
+    },
+    "The project folder changed; scheduled worktree creation stopped." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目文件夹已变化，定时工作树创建已停止。"
           }
         }
       }
@@ -15496,6 +19040,17 @@
         }
       }
     },
+    "The requested working directory differs from the worktree." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请求的工作目录与工作树不一致。"
+          }
+        }
+      }
+    },
     "The required authentication library is unavailable." : {
       "localizations" : {
         "zh-Hans" : {
@@ -15542,6 +19097,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "运行已停止（%@）。"
+          }
+        }
+      }
+    },
+    "The run would start outside the worktree." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行将会在工作树之外开始。"
           }
         }
       }
@@ -15616,12 +19181,56 @@
         }
       }
     },
+    "The scheduled worktree binding was not saved." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "定时工作树绑定未保存。"
+          }
+        }
+      }
+    },
+    "The scheduled worktree or its project is unavailable." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "定时工作树或其项目不可用。"
+          }
+        }
+      }
+    },
     "The selected authentication identity has no credential." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "所选的认证身份没有凭据。"
+          }
+        }
+      }
+    },
+    "The selected base changed; refresh the setup and try again." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选基准已变化；请刷新设置后重试。"
+          }
+        }
+      }
+    },
+    "The selected base is no longer available." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选基准已不可用。"
           }
         }
       }
@@ -15686,12 +19295,55 @@
         }
       }
     },
+    "The target path already exists or is not absolute." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目标路径已存在或不是绝对路径。"
+          }
+        }
+      }
+    },
     "The target project was deleted" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "目标项目已删除"
+          }
+        }
+      }
+    },
+    "The task branch changed; it was kept." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务分支已变化，因此已保留。"
+          }
+        }
+      }
+    },
+    "The task worktree must be available and on a branch before merging." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合并前，任务工作树必须可用并处于某个分支。"
+          }
+        }
+      }
+    },
+    "The task's worktree could not be prepared" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法准备任务的工作树"
           }
         }
       }
@@ -15716,6 +19368,383 @@
         }
       }
     },
+    "The worktree .git file is invalid." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树的 .git 文件无效。"
+          }
+        }
+      }
+    },
+    "The worktree .git file is missing or unreadable." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树的 .git 文件缺失或不可读。"
+          }
+        }
+      }
+    },
+    "The worktree administrative backlink does not match." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树管理目录中的反向链接不匹配。"
+          }
+        }
+      }
+    },
+    "The worktree administrative directory does not match." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树管理目录不匹配。"
+          }
+        }
+      }
+    },
+    "The worktree administrative directory is missing or unreadable." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树管理目录缺失或不可读。"
+          }
+        }
+      }
+    },
+    "The worktree binding is no longer available." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树绑定已不可用。"
+          }
+        }
+      }
+    },
+    "The worktree bookmark resolves to a different directory." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树书签解析到了其他目录。"
+          }
+        }
+      }
+    },
+    "The worktree changed since confirmation; no files were removed." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "确认后工作树发生变化；未删除任何文件。"
+          }
+        }
+      }
+    },
+    "The worktree couldn't be removed: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法删除工作树：%@"
+          }
+        }
+      }
+    },
+    "The worktree creation journal cannot be read; creation is paused." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取工作树创建记录，创建已暂停。"
+          }
+        }
+      }
+    },
+    "The worktree creation journal could not be read. Creation is paused; its files were preserved." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取工作树创建记录。创建已暂停，记录文件已保留。"
+          }
+        }
+      }
+    },
+    "The worktree directory and the following local contents will be deleted:" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树目录及以下本地内容将被删除："
+          }
+        }
+      }
+    },
+    "The worktree directory is missing." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树目录不存在。"
+          }
+        }
+      }
+    },
+    "The worktree directory still exists. Inspect it before clearing its record." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树目录仍然存在。清除记录前请先检查。"
+          }
+        }
+      }
+    },
+    "The worktree directory was kept." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树目录已保留。"
+          }
+        }
+      }
+    },
+    "The worktree folder is missing. Remove the worktree to keep working in the project folder." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树文件夹不见了。删除这个工作树后，对话会继续在项目文件夹中工作。"
+          }
+        }
+      }
+    },
+    "The worktree folder was kept at %@. This conversation now works in %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The worktree folder was kept at %1$@. This conversation now works in %2$@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树文件夹保留在 %1$@。这个对话现在在 %2$@ 中工作。"
+          }
+        }
+      }
+    },
+    "The worktree holds uncommitted changes or new files that exist nowhere else. A kept folder and its branch stay on disk." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个工作树含有未提交的改动或新文件，别处没有副本。保留的文件夹及其分支会留在磁盘上。"
+          }
+        }
+      }
+    },
+    "The worktree identity or registration changed; no files were removed." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树身份或注册状态已变化；未删除任何文件。"
+          }
+        }
+      }
+    },
+    "The worktree is being changed." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树正在变更中。"
+          }
+        }
+      }
+    },
+    "The worktree is locked by the user." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树已由用户锁定。"
+          }
+        }
+      }
+    },
+    "The worktree is locked." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树已锁定。"
+          }
+        }
+      }
+    },
+    "The worktree is unavailable." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树不可用。"
+          }
+        }
+      }
+    },
+    "The worktree lock changed; refresh the confirmation." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树锁已变化；请刷新确认信息。"
+          }
+        }
+      }
+    },
+    "The worktree lock or registration changed; no conversation data was cleared." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树的锁或注册状态已变化；未清除任何会话数据。"
+          }
+        }
+      }
+    },
+    "The worktree matches the commit it started from." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树与它开始时的提交一致。"
+          }
+        }
+      }
+    },
+    "The worktree parent is not writable." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树上级目录不可写。"
+          }
+        }
+      }
+    },
+    "The worktree path has moved or contains a changed symbolic link." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树路径已移动，或路径中的符号链接已变化。"
+          }
+        }
+      }
+    },
+    "The worktree root cannot be inside a Git repository or worktree." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树根目录不能位于 Git 仓库或工作树内部。"
+          }
+        }
+      }
+    },
+    "The worktree was locked again; no conversation data was cleared." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树再次被锁定；未清除任何会话数据。"
+          }
+        }
+      }
+    },
+    "The worktree was removed, but the branch was kept: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树已删除，但分支已保留：%@"
+          }
+        }
+      }
+    },
+    "The worktree was removed. This conversation now works in %@." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树已删除。这个对话现在在 %@ 中工作。"
+          }
+        }
+      }
+    },
+    "The worktree was removed; its branch %@ was kept. This conversation now works in %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The worktree was removed; its branch %1$@ was kept. This conversation now works in %2$@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树已删除，分支 %1$@ 已保留。这个对话现在在 %2$@ 中工作。"
+          }
+        }
+      }
+    },
+    "Their working-directory contents are deleted; shared Git repositories remain. Ignored files inside submodules are not listed individually." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "子模块的工作目录内容会被删除；共享 Git 仓库会保留。子模块内部的忽略文件不会逐一列出。"
+          }
+        }
+      }
+    },
     "Theme" : {
       "localizations" : {
         "zh-Hans" : {
@@ -15732,6 +19761,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "存在冲突，不能恢复文件"
+          }
+        }
+      }
+    },
+    "These changes may have no other copy." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这些改动可能没有其他副本。"
           }
         }
       }
@@ -15788,6 +19828,17 @@
         }
       }
     },
+    "This Git cannot perform merge-tree preflight: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前 Git 无法执行 merge-tree 预检：%@"
+          }
+        }
+      }
+    },
     "This Hook Package could not be loaded." : {
       "localizations" : {
         "zh-Hans" : {
@@ -15838,6 +19889,26 @@
         }
       }
     },
+    "This branch and %@ have no common history." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此分支与 %@ 没有共同历史。"
+          }
+        }
+      }
+    },
+    "This branch has no commits that %@ doesn't have." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此分支没有 %@ 之外的提交。"
+          }
+        }
+      }
+    },
     "This build is not signed with Limare's application identifier." : {
       "localizations" : {
         "zh-Hans" : {
@@ -15878,6 +19949,17 @@
         }
       }
     },
+    "This conversation already has an unresolved worktree creation." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此会话已有未解决的工作树创建记录。"
+          }
+        }
+      }
+    },
     "This conversation can't be found." : {
       "localizations" : {
         "zh-Hans" : {
@@ -15904,6 +19986,99 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此对话包含图片，但该模型的图像能力未知，且没有可用的视觉模型组。"
+          }
+        }
+      }
+    },
+    "This conversation has no task base." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个对话没有任务基准。"
+          }
+        }
+      }
+    },
+    "This conversation has no worktree." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此会话没有工作树。"
+          }
+        }
+      }
+    },
+    "This conversation no longer has a worktree." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个对话已经没有工作树了。"
+          }
+        }
+      }
+    },
+    "This conversation's working folder isn't under Git, so there are no changes to review." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此对话的工作文件夹不在 Git 管理下，没有可审查的改动。"
+          }
+        }
+      }
+    },
+    "This creates a merge commit in Local. Git may run merge drivers or signing. Nothing will be pushed." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这将在本地创建合并提交。Git 可能运行合并驱动程序或签名，不会推送。"
+          }
+        }
+      }
+    },
+    "This creation record is unavailable or still in use." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此创建记录不可用或仍在使用中。"
+          }
+        }
+      }
+    },
+    "This directory is not registered as a worktree." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此目录未注册为工作树。"
+          }
+        }
+      }
+    },
+    "This folder is inside the Git repository at %@. Open that folder as the project to review its changes." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此文件夹位于 %@ 的 Git 仓库内。请把该仓库根目录作为项目打开以查看改动。"
+          }
+        }
+      }
+    },
+    "This folder is not a Git repository." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此文件夹不是 Git 仓库。"
           }
         }
       }
@@ -15958,6 +20133,16 @@
         }
       }
     },
+    "This is a subtask's conversation; review in its parent conversation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这是子任务的对话；请在它的父对话中审查"
+          }
+        }
+      }
+    },
     "This loads the file in Limare's browser: page scripts run and can read the file's folder. The passive preview doesn't do this." : {
       "localizations" : {
         "zh-Hans" : {
@@ -15998,6 +20183,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这个模型已不可用。"
+          }
+        }
+      }
+    },
+    "This path isn't valid UTF-8, so Limare can't ask Git about it. Look at it in a terminal." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此路径不是有效的 UTF-8，Limare 无法向 Git 查询。请在终端中查看。"
           }
         }
       }
@@ -16088,6 +20283,16 @@
         }
       }
     },
+    "This view needs at least one commit." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此视图至少需要一次提交。"
+          }
+        }
+      }
+    },
     "This will remove the provider configuration and its stored credentials. Any Model Groups using this provider will need attention." : {
       "localizations" : {
         "zh-Hans" : {
@@ -16104,6 +20309,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这会移除服务器配置和所有已存储的凭据，但不会删除你 Mac 上的外部文件或进程。"
+          }
+        }
+      }
+    },
+    "This worktree is locked: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树已锁定：%@"
           }
         }
       }
@@ -16184,6 +20400,27 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tokens（例如 4096）"
+          }
+        }
+      }
+    },
+    "Too large to show here" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "太大，无法在此显示"
+          }
+        }
+      }
+    },
+    "Too many ignored files, or an ignored path is not UTF-8." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "忽略文件过多，或某个忽略路径不是 UTF-8。"
           }
         }
       }
@@ -16556,6 +20793,17 @@
         }
       }
     },
+    "Unfinished Git operations will be deleted with this worktree: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未完成的 Git 操作将随工作树删除：%@"
+          }
+        }
+      }
+    },
     "Unique identifier for this MCP server" : {
       "localizations" : {
         "zh-Hans" : {
@@ -16636,6 +20884,34 @@
         }
       }
     },
+    "Unlock it yourself: git -C %@ worktree unlock %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Unlock it yourself: git -C %1$@ worktree unlock %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请自行解锁：git -C %1$@ worktree unlock %2$@"
+          }
+        }
+      }
+    },
+    "Unmerged commits could not be read." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取未合并提交。"
+          }
+        }
+      }
+    },
     "Unpin Conversation" : {
       "localizations" : {
         "zh-Hans" : {
@@ -16666,6 +20942,17 @@
         }
       }
     },
+    "Unresolved worktree creations" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未解决的工作树创建"
+          }
+        }
+      }
+    },
     "Unsaved Changes" : {
       "localizations" : {
         "zh-Hans" : {
@@ -16692,6 +20979,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未发送的草稿"
+          }
+        }
+      }
+    },
+    "Unstaged" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未暂存"
           }
         }
       }
@@ -16734,6 +21031,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未命名服务商"
+          }
+        }
+      }
+    },
+    "Untracked" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未跟踪"
+          }
+        }
+      }
+    },
+    "Untracked files are not exported: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以下未跟踪文件不会导出：%@"
+          }
+        }
+      }
+    },
+    "Untracked: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未跟踪：%@"
           }
         }
       }
@@ -16792,12 +21121,32 @@
         }
       }
     },
+    "Use Default" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用默认位置"
+          }
+        }
+      }
+    },
     "Use this Limare from your phone's browser while Limare runs on this Mac. Limare listens only on 127.0.0.1; Cloudflare Tunnel is the only way in, and Cloudflare Access signs in the one person allowed." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "在 Limare 于这台 Mac 上运行时，从手机浏览器使用它。Limare 只监听 127.0.0.1；Cloudflare Tunnel 是唯一的入口，并由 Cloudflare Access 让唯一获准的人登录。"
+          }
+        }
+      }
+    },
+    "Used for newly created task branches." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用于新建任务分支。"
           }
         }
       }
@@ -17400,6 +21749,26 @@
         }
       }
     },
+    "Where this conversation works" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个对话的工作位置"
+          }
+        }
+      }
+    },
+    "Which changes to show" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示哪些改动"
+          }
+        }
+      }
+    },
     "While Limare is in the background, notify when a task of 20 seconds or more ends, or when a tool needs your approval. Notifications never name the tool, command or path." : {
       "localizations" : {
         "zh-Hans" : {
@@ -17450,6 +21819,26 @@
         }
       }
     },
+    "Work in" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作位置"
+          }
+        }
+      }
+    },
+    "Work in the project folder, or in a new Git worktree created when you send the first message" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在项目文件夹中工作，或在发送第一条消息时新建的 Git 工作树中工作"
+          }
+        }
+      }
+    },
     "Working" : {
       "localizations" : {
         "zh-Hans" : {
@@ -17476,6 +21865,216 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "工作区不可用。"
+          }
+        }
+      }
+    },
+    "Worktree" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树"
+          }
+        }
+      }
+    },
+    "Worktree admission is unavailable." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法验证工作树的运行准入。"
+          }
+        }
+      }
+    },
+    "Worktree binding removed. Future runs use %@. %@ Undo history was cleared." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Worktree binding removed. Future runs use %1$@. %2$@ Undo history was cleared."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树绑定已解除。后续运行将使用 %1$@。%2$@ 撤销历史已清除。"
+          }
+        }
+      }
+    },
+    "Worktree cleanup dependencies are unavailable." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树清理所需的组件不可用。"
+          }
+        }
+      }
+    },
+    "Worktree cleanup failed; the binding was kept: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树清理失败，绑定已保留：%@"
+          }
+        }
+      }
+    },
+    "Worktree contents or conversation data changed; refresh the confirmation." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树内容或会话数据已变化；请刷新确认信息。"
+          }
+        }
+      }
+    },
+    "Worktree details" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树详情"
+          }
+        }
+      }
+    },
+    "Worktree from %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树（基于 %@）"
+          }
+        }
+      }
+    },
+    "Worktree identity could not be verified." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法验证工作树身份。"
+          }
+        }
+      }
+    },
+    "Worktree location" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树位置"
+          }
+        }
+      }
+    },
+    "Worktree merge dependencies are unavailable." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树合并所需的组件不可用。"
+          }
+        }
+      }
+    },
+    "Worktree root" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树根目录"
+          }
+        }
+      }
+    },
+    "Worktree settings could not be read; creation is paused." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取工作树设置，创建已暂停。"
+          }
+        }
+      }
+    },
+    "Worktree settings could not be read; they were not overwritten." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取工作树设置，原文件未被覆盖。"
+          }
+        }
+      }
+    },
+    "Worktree settings couldn't be read; fix or remove worktree_settings_v1.json." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取工作树设置，请修复或删除 worktree_settings_v1.json。"
+          }
+        }
+      }
+    },
+    "Worktree unavailable at %@: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Worktree unavailable at %1$@: %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树不可用（%1$@）：%2$@"
+          }
+        }
+      }
+    },
+    "Worktree unavailable." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树不可用。"
+          }
+        }
+      }
+    },
+    "Worktrees" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树"
+          }
+        }
+      }
+    },
+    "Worktree…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树…"
           }
         }
       }
@@ -17576,6 +22175,16 @@
         }
       }
     },
+    "binary" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "二进制"
+          }
+        }
+      }
+    },
     "cloudflared could not start: %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -17608,7 +22217,6 @@
     },
     "conversation.untitled" : {
       "comment" : "The title of a conversation that has none yet; File > New Conversation is the command",
-      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -17740,6 +22348,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "退出码 %d"
+          }
+        }
+      }
+    },
+    "git branch <name> %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "git branch <name> %@"
           }
         }
       }

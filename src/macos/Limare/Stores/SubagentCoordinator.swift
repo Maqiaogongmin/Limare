@@ -91,6 +91,9 @@ final class SubagentCoordinator {
         guard let parent = conversations.conversations.first(where: { $0.id == parentConversationID }),
               !parent.isNativeDelegationChild else { throw DelegationFailure.permissionDenied }
         let workspace = conversations.effectiveWorkingDirectory(for: parent.id)
+        guard case .admitted = runs.worktreeAdmission(conversationID: parent.id, workingDirectory: workspace) else {
+            throw DelegationFailure.admissionRejected
+        }
         var started: [SubagentTask] = []
         for spec in specs {
             // The same tool call replayed (for example by recovery) finds its tasks again.
@@ -123,6 +126,11 @@ final class SubagentCoordinator {
         guard let child = conversations.conversations.first(where: { $0.id == task.childConversationID }),
               let source = child.effectiveModelSource else {
             finish(task.id, status: .failed, result: nil, failure: String(localized: "Its child conversation or model is gone."))
+            return
+        }
+        let childWorkspace = child.workspace?.url ?? conversations.effectiveWorkingDirectory(for: child.id)
+        if case .refused(let path, let reason) = runs.worktreeAdmission(conversationID: task.parentConversationID, workingDirectory: childWorkspace) {
+            finish(task.id, status: .failed, result: nil, failure: "admissionRejected: Worktree unavailable at \(path): \(reason)")
             return
         }
         let runID = UUID()
@@ -464,6 +472,7 @@ final class SubagentCoordinator {
     /// and a fresh allowance.
     func continueTask(taskID: UUID, instruction: String) throws -> SubagentTask {
         guard let task = store.tasks[taskID], !instruction.isEmpty else { throw DelegationFailure.invalidRequest }
+        guard case .admitted = runs.worktreeAdmission(conversationID: task.parentConversationID) else { throw DelegationFailure.admissionRejected }
         switch task.status {
         case .running:
             guard let runID = task.runID,
@@ -480,6 +489,19 @@ final class SubagentCoordinator {
 
     func hasUnfinishedTasks(parentConversationID: UUID) -> Bool {
         store.tasks.values.contains { $0.parentConversationID == parentConversationID && !$0.status.isFinished }
+    }
+
+    func deleteFinishedTask(_ taskID: UUID) throws {
+        guard let task = store.tasks[taskID], task.status.isFinished else { throw DelegationFailure.admissionRejected }
+        if conversations.conversations.contains(where: { $0.id == task.childConversationID }) {
+            conversations.deleteConversation(id: task.childConversationID)
+            guard !conversations.conversations.contains(where: { $0.id == task.childConversationID }) else {
+                throw DelegationFailure.admissionRejected
+            }
+        }
+        try store.removeFinished(taskID)
+        undelivered.remove(taskID)
+        watchers.removeValue(forKey: taskID)?.cancel()
     }
 
     /// After a restart nothing resumes by itself: running and queued tasks show as interrupted

@@ -101,6 +101,14 @@ public struct FilesTreeView: View {
 
     private var workspaceTitle: String {
         guard let rootURL = tree.rootURL else { return String(localized: "Workspace") }
+        if let conversation = window.conversation, let worktree = conversation.worktree {
+            let project = appState.conversations.project(for: conversation)?.name ?? URL(fileURLWithPath: worktree.repositoryRoot).lastPathComponent
+            let branch: String
+            if case .branch(let name)? = window.changes.snapshot?.branch { branch = name }
+            else if case .detached(let sha)? = window.changes.snapshot?.branch { branch = "HEAD \(sha)" }
+            else { branch = worktree.branch }
+            return "\(project) / \(branch)"
+        }
         if let conversation = window.conversation,
            let project = appState.conversations.project(for: conversation),
            project.workspace?.url.standardizedFileURL == rootURL.standardizedFileURL {

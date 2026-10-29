@@ -8,8 +8,9 @@ const UNSUCCESSFUL = new Set(['failed', 'timedOut', 'cancelled', 'denied', 'inte
 /// messages between two user messages. Its earlier steps fold under one disclosure once it ends
 /// in a finished answer (complete, no tool calls, some text), while the run works on it (all but
 /// the current step) and before a message the user sent while it worked; otherwise every message
-/// shows. `frozen` ({ key, count }) keeps the last turn's fold where it was while the reader is
-/// away from the bottom. Folded calls that did not succeed are counted on the fold's title.
+/// shows. `frozen` ({ key, count }) keeps the last running turn's fold where it was while the
+/// reader is away from the bottom; a finished turn folds anyway. Folded calls that did not
+/// succeed are counted on the fold's title.
 export function groupTranscript(messages, { runActive = false, frozen = null } = {}) {
   const entries = [];
   let turn = [];
@@ -20,10 +21,9 @@ export function groupTranscript(messages, { runActive = false, frozen = null } =
     let rowIndex = turn.length - 1;
     let folded = false;
     let hidesReasoning = false;
-    if (frozen && frozen.key === turn[0].id) {
+    if (!finished && frozen && frozen.key === turn[0].id) {
       rowIndex = Math.min(frozen.count, turn.length - 1);
       folded = rowIndex > 0;
-      hidesReasoning = folded && finished && rowIndex === turn.length - 1;
     } else if (finished) {
       folded = turn.length > 1 || !!final.reasoning;
       hidesReasoning = folded;

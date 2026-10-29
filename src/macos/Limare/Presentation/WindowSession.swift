@@ -14,6 +14,8 @@ final class WindowSession: Identifiable {
     let chat: ChatStore
     let workSurface: WorkSurfaceStore
     let files: FilesSurfaceStore
+    /// The Changes surface: Git's view of the working directory and the review comments on it.
+    let changes: GitReviewStore
     var screen: AppScreen = .chat
     /// The scheduled-task manager's selection, editor and error, shared by its two columns.
     let scheduledPanel = ScheduledPanelState()
@@ -21,17 +23,24 @@ final class WindowSession: Identifiable {
     var composerFocusRequest = 0
     /// The Run Details sheet of the shown conversation's latest run is open.
     var showsRunDetails = false
+    /// The worktree details sheet's conversation.
+    var worktreeDetails: UUID?
+    /// Removing worktrees that hold uncommitted work waits on this question.
+    var worktreeRemovalPrompt: WorktreeRemovalPrompt?
     /// The last request a composer acted on. A request made from Settings is acted on when the
     /// chat's composer appears.
     @ObservationIgnored var composerFocusServed = 0
     @ObservationIgnored weak var app: AppState?
     /// The AppKit window presenting this session, once it is on screen.
     @ObservationIgnored weak var hostWindow: NSWindow?
+    /// Refreshes Changes when a run of the shown conversation ends.
+    @ObservationIgnored private var runSubscription: ConversationRunSubscription?
 
-    init(chat: ChatStore) {
+    init(chat: ChatStore, reviewComments: ReviewCommentStore) {
         self.chat = chat
         self.workSurface = WorkSurfaceStore()
         self.files = FilesSurfaceStore()
+        self.changes = GitReviewStore(comments: reviewComments)
     }
 
     var conversationID: UUID? { chat.viewedConversationID }
@@ -71,6 +80,60 @@ final class WindowSession: Identifiable {
             workSurface.clearFilePreviews()
         }
         files.setRootURL(root)
+        syncChanges()
+    }
+
+    // MARK: - Changes
+
+    /// Binds Changes to the conversation and its effective working directory, the one value the
+    /// shell, the file tools and undo use. Comments belong to the conversation, so this runs on
+    /// every conversation switch, not only when the directory changes.
+    func syncChanges() {
+        guard let app else { return }
+        let root = conversationID.map { app.conversations.effectiveWorkingDirectory(for: $0) }
+        changes.log = { [weak app] line in app?.logs.info("Changes", line) }
+        changes.bind(workspace: root, conversationID: conversationID, refresh: showsChanges,
+                     taskBase: conversation?.worktree?.baseCommit, taskBaseName: conversation?.worktree?.baseName)
+        if runSubscription == nil {
+            runSubscription = app.conversationRuns.observe { [weak self] event in
+                guard let self, case .runFinished(let conversationID, _, _, _) = event,
+                      conversationID == self.conversationID else { return }
+                self.refreshChanges(.runFinished)
+            }
+        }
+    }
+
+    /// The window closed. Its comments stay with their conversation.
+    func closeChanges() {
+        changes.saveEditor()
+        runSubscription?.cancel()
+        runSubscription = nil
+    }
+
+    /// A Changes tab is open in this window.
+    var showsChanges: Bool { workSurface.tabs.contains { $0.kind == .changes } }
+
+    func reviewWorktree() {
+        addSurface(.changes)
+        changes.showTaskReview()
+    }
+
+    /// Refreshes Changes if this window shows it.
+    func refreshChanges(_ reason: GitReviewStore.RefreshReason) {
+        guard showsChanges else { return }
+        changes.refresh(reason)
+    }
+
+    /// A subtask's conversation is written by its run; review comments go to its parent.
+    var canAddReviewToMessage: Bool { conversation?.isNativeDelegationChild != true }
+
+    /// Puts the review comments into the composer after what is already there, takes them out of
+    /// Changes, hides the Work Surface and focuses the composer. Nothing is sent.
+    func addReviewToMessage() {
+        guard canAddReviewToMessage, let message = changes.takeMessage() else { return }
+        chat.draft = GitReviewMessageBuilder.appending(message, to: chat.draft)
+        workSurface.hide()
+        composerFocusRequest += 1
     }
 
     // MARK: - Work Surface
@@ -97,6 +160,10 @@ final class WindowSession: Identifiable {
                 workSurface.additionalBrowsers[key] = tab
                 workSurface.open(kind: .browser, contentID: key, title: String(localized: "Browser"))
             }
+        } else if kind == .changes {
+            workSurface.open(kind: .changes, contentID: WorkSurfaceStore.changesID)
+            syncChanges()
+            changes.refresh(.opened)
         } else {
             openFilesTree()
         }
@@ -164,6 +231,7 @@ final class WindowSession: Identifiable {
     func closeWorkSurfaceTab(id: UUID) {
         if let tab = workSurface.tabs.first(where: { $0.id == id }) {
             filesStore(for: tab)?.clearSelection()
+            if tab.kind == .changes { changes.saveEditor() }
         }
         workSurface.close(id: id)
     }
@@ -196,6 +264,8 @@ final class WindowSession: Identifiable {
         switch tab.kind {
         case .files:
             return filesStore(for: tab)?.previewSource?.displayName ?? tab.kind.defaultTitle
+        case .changes:
+            return tab.title
         case .browser:
             let pageTitle = workSurface.additionalBrowsers[tab.contentID]?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return pageTitle.isEmpty ? tab.title : pageTitle

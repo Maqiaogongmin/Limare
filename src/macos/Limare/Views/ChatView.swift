@@ -173,6 +173,15 @@ struct ChatView: View {
                     ChatErrorBanner(message: errorMessage)
                 }
 
+                if let id = window.conversationID, let notice = appState.worktrees.notices[id] {
+                    HStack(alignment: .top) {
+                        Text(notice).font(.caption).textSelection(.enabled)
+                        Spacer()
+                        Button("Dismiss") { appState.worktrees.clearNotice(for: id) }.controlSize(.small)
+                    }
+                    .padding(AppSpacing.small)
+                }
+
                 RecoveryBannerView()
 
                 UndoPlanBanner()

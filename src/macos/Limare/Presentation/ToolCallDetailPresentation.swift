@@ -97,9 +97,9 @@ enum ToolCallDetail: Equatable, Sendable {
         case .shell:
             return nil
         case .edit:
-            guard let arguments: EditArguments = decode(record.input) else { return nil }
-            let difference = lines(arguments.newText).difference(from: lines(arguments.oldText))
-            return "+\(difference.insertions.count) −\(difference.removals.count)"
+            // The path says which file; the diff is one click away. Line counts on every edit
+            // row were noise.
+            return nil
         case .write:
             guard let arguments: WriteArguments = decode(record.input) else { return nil }
             return String(localized: "\(lines(arguments.content).count) lines")

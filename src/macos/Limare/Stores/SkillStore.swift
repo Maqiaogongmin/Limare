@@ -85,9 +85,9 @@ final class SkillStore {
         return String(data: data, encoding: .utf8) != nil
     }
 
-    private func validEnabledSkillsNow() -> [Skill] {
+    private func validEnabledSkillsNow(_ candidates: [Skill]? = nil) -> [Skill] {
         let isCUAvailable = computerUseAvailabilityProvider?() ?? false
-        return skills.filter { skill in
+        return (candidates ?? skills).filter { skill in
             guard skill.isEnabled && isSkillSourceValidNow(skill) else { return false }
             if isCUAvailable && Self.isShadowedByComputerUse(skillName: skill.name, skillDirectoryName: skill.directoryURL.lastPathComponent) {
                 logs.info("Skills", "Skill '\(skill.name)' shadowed by Limare native Computer Use capability.")
@@ -110,7 +110,21 @@ final class SkillStore {
     }
 
     func runSnapshot(runID: UUID? = nil) -> RunSnapshot {
-        let allEnabled = validEnabledSkillsNow()
+        makeRunSnapshot(from: validEnabledSkillsNow(), runID: runID)
+    }
+
+    /// Captures skills for this run without changing the workspace shown in Settings.
+    func runSnapshot(workspaceURL: URL?, runID: UUID? = nil) -> RunSnapshot {
+        let disabledIDs = Set(defaults.stringArray(forKey: disabledKey) ?? [])
+        let scanned = scanner.scan(workspaceURL: workspaceURL).map { skill in
+            var copy = skill
+            copy.isEnabled = !disabledIDs.contains(skill.id)
+            return copy
+        }
+        return makeRunSnapshot(from: validEnabledSkillsNow(scanned), runID: runID)
+    }
+
+    private func makeRunSnapshot(from allEnabled: [Skill], runID: UUID?) -> RunSnapshot {
         let selected = selectSkills(from: allEnabled, maximumCount: 20)
         let prompt = promptFragment(from: allEnabled, maximumCount: 20) ?? ""
 

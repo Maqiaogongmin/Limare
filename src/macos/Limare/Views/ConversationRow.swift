@@ -120,7 +120,7 @@ struct ConversationRow: View {
             titleVisibility: .visible
         ) {
             Button("Delete Conversation", role: .destructive) {
-                appState.conversations.deleteConversation(id: conversation.id)
+                appState.requestDeleteConversations([conversation.id], in: window)
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -130,6 +130,11 @@ struct ConversationRow: View {
 
     @ViewBuilder
     private var conversationMenuItems: some View {
+        if conversation.worktree != nil {
+            Button { window.worktreeDetails = conversation.id } label: {
+                Label("Worktree…", systemImage: "arrow.triangle.branch")
+            }
+        }
         Button {
             appState.prepareWindow(for: conversation.id)
             openWindow(id: WindowSession.sceneID)

@@ -21,6 +21,8 @@ final class ConversationStore {
     @ObservationIgnored
     var onConversationDeleted: ((UUID) -> Void)?
     @ObservationIgnored
+    var worktreeOperationInProgress: ((UUID) -> Bool)?
+    @ObservationIgnored
     var onDelegationRelationshipDeletion: ((UUID) throws -> Void)?
     /// True when the conversation still holds archived drafts (for example a retracted first
     /// message). Such an empty conversation is not a disposable placeholder: pruning or reusing
@@ -76,30 +78,45 @@ final class ConversationStore {
         persistence.ensureWorkingDirectoryExists(for: conversationID)
     }
 
-    /// Resolves the effective working directory using the canonical 4-step resolution ladder (SR-I03).
-    /// Resolution is governed strictly by scope configuration truth, not current filesystem availability.
-    func effectiveWorkingDirectory(for conversationID: UUID) -> URL {
+    /// Resolve configured scope without checking filesystem availability (SR-I03).
+    func effectiveWorkspaceConfiguration(for conversationID: UUID) -> WorkspaceConfiguration? {
         guard let conv = conversations.first(where: { $0.id == conversationID }) else {
-            return managedWorkingDirectory(for: conversationID)
+            return nil
         }
         // Native child admission binds an immutable explicit workspace; no UI/global/project fallback.
-        if conv.isNativeDelegationChild, let workspace = conv.workspace { return workspace.url }
+        if conv.isNativeDelegationChild, let workspace = conv.workspace { return workspace }
+        if let worktree = conv.worktree { return worktree.workspace }
         // Step 1: Project Workspace
         if conv.projectID != nil, let parent = project(for: conv), let parentWorkspace = parent.workspace {
-            return parentWorkspace.url
+            return parentWorkspace
         }
         // Step 2: Legacy Standalone Compatibility Bridge
         if conv.projectID == nil, let directWorkspace = conv.workspace {
-            return directWorkspace.url
+            return directWorkspace
         }
         // Step 3: Global Durable Default Workspace
         if let defaultWS = defaultWorkspaceConfiguration?() {
-            return defaultWS.url
+            return defaultWS
         }
         // Step 4: Managed Scratch Directory
-        return managedWorkingDirectory(for: conversationID)
+        return nil
     }
 
+    func effectiveWorkingDirectory(for conversationID: UUID) -> URL {
+        effectiveWorkspaceConfiguration(for: conversationID)?.url ?? managedWorkingDirectory(for: conversationID)
+    }
+
+    func setConversationWorktree(id: UUID, worktree: ConversationWorktree?) throws {
+        guard let index = conversations.firstIndex(where: { $0.id == id }) else {
+            throw RuntimePersistenceError.conversationNotFound(id)
+        }
+        var candidate = conversations[index]
+        candidate.worktree = worktree
+        candidate.schemaVersion = ConversationRecord.currentSchemaVersion
+        try persistence.saveConversation(candidate)
+        conversations[index] = candidate
+        onWorkspaceChanged?()
+    }
 
     // MARK: - Query Resolvers (Centralized Sorting & Filtering)
 
@@ -392,7 +409,7 @@ final class ConversationStore {
     }
 
     private func isDisposable(_ record: ConversationRecord) -> Bool {
-        record.isDisposablePlaceholder && hasRetainedDrafts?(record.id) != true
+        record.isDisposablePlaceholder && hasRetainedDrafts?(record.id) != true && worktreeOperationInProgress?(record.id) != true
     }
 
     func renameConversation(id: UUID, title: String) {
@@ -443,6 +460,7 @@ final class ConversationStore {
     /// an archived conversation is out of every list (Mac sidebar, phone), so a run left going
     /// there could wait on an approval or question no one can reach. Queued messages stay held.
     func archiveConversation(id: UUID) {
+        guard worktreeOperationInProgress?(id) != true else { return }
         guard let index = conversations.firstIndex(where: { $0.id == id }) else { return }
         runCoordinator?.stop(conversationID: id)
         conversations[index].archivedAt = Date()
@@ -469,6 +487,11 @@ final class ConversationStore {
     }
 
     func deleteConversation(id: UUID) {
+        guard worktreeOperationInProgress?(id) != true else { return }
+        guard conversations.first(where: { $0.id == id })?.worktree == nil else {
+            logs.error("Conversation", "Refusing to delete conversation '\(id)' while its worktree is bound.")
+            return
+        }
         do { try onDelegationRelationshipDeletion?(id) }
         catch { logs.error("Conversation", "Delegation relationship deletion failed: \(error)"); return }
         runCoordinator?.stop(conversationID: id)
@@ -753,7 +776,7 @@ final class ConversationStore {
 
     func archiveProjectConversations(id: UUID) {
         var anyArchived = false
-        for index in conversations.indices where conversations[index].projectID == id && !conversations[index].isNativeDelegationChild && !conversations[index].isArchived {
+        for index in conversations.indices where conversations[index].projectID == id && !conversations[index].isNativeDelegationChild && !conversations[index].isArchived && worktreeOperationInProgress?(conversations[index].id) != true {
             runCoordinator?.stop(conversationID: conversations[index].id)  // as archiveConversation
             conversations[index].archivedAt = Date()
             conversations[index].updatedAt = Date()

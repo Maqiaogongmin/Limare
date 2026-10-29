@@ -88,6 +88,7 @@ enum ScheduledTaskPresentation {
         case .modelUnavailable: return String(localized: "No model is available")
         // Limare was closed or asleep, or another scheduled run held the one slot; which is not recorded.
         case .missedSlots: return String(localized: "Missed \(missedCount ?? 1) times (Limare wasn't running, or another task was)")
+        case .worktreeUnavailable: return String(localized: "The task's worktree could not be prepared")
         }
     }
 

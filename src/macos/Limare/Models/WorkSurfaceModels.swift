@@ -4,6 +4,7 @@ import Foundation
 public enum WorkSurfaceKind: String, Codable, Sendable, CaseIterable, Identifiable {
     case browser
     case files
+    case changes
 
     public var id: String { rawValue }
 
@@ -13,6 +14,8 @@ public enum WorkSurfaceKind: String, Codable, Sendable, CaseIterable, Identifiab
             return String(localized: "Browser")
         case .files:
             return String(localized: "Files")
+        case .changes:
+            return String(localized: "Changes")
         }
     }
 
@@ -22,6 +25,8 @@ public enum WorkSurfaceKind: String, Codable, Sendable, CaseIterable, Identifiab
             return "globe"
         case .files:
             return "folder"
+        case .changes:
+            return "plus.forwardslash.minus"
         }
     }
 }
@@ -81,7 +86,7 @@ public struct WorkSurfaceDefinition: Identifiable, Equatable, Sendable {
 /// Boundary registry listing built-in work surface definitions.
 public enum WorkSurfaceRegistry {
     /// Currently registered built-in work surface definitions.
-    /// Only contains fully implemented surfaces (`Browser` and `Files`).
+    /// Only contains fully implemented surfaces.
     public static let builtInDefinitions: [WorkSurfaceDefinition] = [
         WorkSurfaceDefinition(
             kind: .browser,
@@ -96,6 +101,13 @@ public enum WorkSurfaceRegistry {
             systemImage: "folder",
             description: String(localized: "Browse workspace files and documents"),
             order: 1
+        ),
+        WorkSurfaceDefinition(
+            kind: .changes,
+            title: String(localized: "Changes"),
+            systemImage: "plus.forwardslash.minus",
+            description: String(localized: "Review the project's Git changes and comment on lines"),
+            order: 2
         )
     ]
 }

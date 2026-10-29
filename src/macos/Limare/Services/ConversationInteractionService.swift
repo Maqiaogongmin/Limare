@@ -100,6 +100,7 @@ final class ConversationInteractionService {
         /// An explicit outcome run needs an idle conversation; it is never turned into a steer or queue entry.
         case outcomeRequiresIdle
         case held(String)
+        case worktreeUnavailable(path: String, reason: String)
         case persistenceFailed(String)
         case queuePersistenceFailed
         /// Compact needs an existing conversation with history and no run or compaction on it.
@@ -116,6 +117,7 @@ final class ConversationInteractionService {
             case .imageInputUnsupported(let reason): reason
             case .outcomeRequiresIdle: String(localized: "Cannot start an explicit outcome run while this conversation is busy.")
             case .held(let reason): reason
+            case .worktreeUnavailable(let path, let reason): String(localized: "Worktree unavailable at \(path): \(reason)")
             case .persistenceFailed(let reason): String(localized: "Failed to save message: \(reason)")
             case .queuePersistenceFailed: String(localized: "The queued message couldn't be saved; your input was kept.")
             case .compactUnavailable: String(localized: "Compact is available when the conversation is idle and has history.")
@@ -212,6 +214,10 @@ final class ConversationInteractionService {
         }
         // A persistent child is driven by its own run; viewing it must never start a Primary run.
         if existing?.isNativeDelegationChild == true { return .refused(.nativeChild) }
+        if let id = input.conversationID,
+           case .refused(let path, let reason) = runs.worktreeAdmission(conversationID: id) {
+            return .refused(.worktreeUnavailable(path: path, reason: reason))
+        }
 
         let prompt = input.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty || !input.attachments.isEmpty else { return .refused(.empty) }
@@ -343,6 +349,9 @@ final class ConversationInteractionService {
     /// conversation with history and no run or compaction on it.
     func compact(conversationID: UUID) -> Admission {
         if let record = record(for: conversationID), record.isNativeDelegationChild { return .refused(.nativeChild) }
+        if case .refused(let path, let reason) = runs.worktreeAdmission(conversationID: conversationID) {
+            return .refused(.worktreeUnavailable(path: path, reason: reason))
+        }
         guard !runs.conversationMessages(for: conversationID).isEmpty,
               runs.canStartRun(conversationID: conversationID),
               runs.compactions[conversationID]?.isRunning != true else {

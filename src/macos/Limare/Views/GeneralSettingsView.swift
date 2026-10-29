@@ -201,6 +201,8 @@ struct GeneralSettingsView: View {
                     }
                 }
             }
+
+            WorktreeSettingsSection()
         }
     }
 }

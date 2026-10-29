@@ -127,12 +127,20 @@ private struct DiffLineRow: View {
         }
     }
 
+    /// As the Changes view draws a line (`GitDiffView`): only the mark takes the colour, over a
+    /// faint tint; whole lines in red and green were glaring.
     var body: some View {
-        Text("\(prefix) \(line.text)")
-            .font(AppTypography.codeMeta)
-            .foregroundStyle(color.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.secondary))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(color?.opacity(0.08) ?? .clear)
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            Text(prefix)
+                .foregroundStyle(color ?? AppColors.textMuted)
+                .frame(width: 14, alignment: .leading)
+            // Unchanged lines step back so the change reads without its colour.
+            Text(line.text)
+                .foregroundStyle(color == nil ? AppColors.textSecondary : AppColors.textPrimary)
+        }
+        .font(AppTypography.codeMeta)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color?.opacity(0.09) ?? .clear)
     }
 }
 

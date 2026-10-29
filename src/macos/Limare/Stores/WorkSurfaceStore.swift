@@ -12,6 +12,8 @@ public final class WorkSurfaceStore {
 
     /// Content ID of the Files tab backed by the app's own Files store.
     static let filesNavigatorID = "files"
+    /// Content ID of the one Changes tab a window has.
+    static let changesID = "changes"
 
     /// How far the Work Surface reaches past its own column, as a preview or page needs the room.
     public enum Coverage: Sendable, Equatable {

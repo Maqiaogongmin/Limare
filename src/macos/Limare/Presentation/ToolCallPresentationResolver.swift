@@ -12,9 +12,7 @@ struct ToolCallPresentationModel: Sendable, Equatable {
     let displayToolName: String
     let namespaceLabel: String?
     let summary: String?
-    /// The command behind a shell call's description, shown on hover.
-    let summaryHelp: String?
-    /// A finished call's result in a few words ("+3 −1", "12 items"), before its duration.
+    /// A finished call's result in a few words ("12 items", "exit 2"), before its duration.
     let resultDigest: String?
     let tone: ToolCallTone
     let symbolName: String
@@ -23,7 +21,6 @@ struct ToolCallPresentationModel: Sendable, Equatable {
         displayToolName: String,
         namespaceLabel: String? = nil,
         summary: String? = nil,
-        summaryHelp: String? = nil,
         resultDigest: String? = nil,
         tone: ToolCallTone,
         symbolName: String
@@ -31,7 +28,6 @@ struct ToolCallPresentationModel: Sendable, Equatable {
         self.displayToolName = displayToolName
         self.namespaceLabel = namespaceLabel
         self.summary = summary
-        self.summaryHelp = summaryHelp
         self.resultDigest = resultDigest
         self.tone = tone
         self.symbolName = symbolName
@@ -76,14 +72,16 @@ public struct DelegatedRunPresentation: Identifiable, Sendable, Equatable {
 enum ToolCallPresentationResolver {
 
     /// `awaitingAnswer`: the call is the question card its conversation now waits on, so while
-    /// it runs it waits for the user rather than working.
+    /// it runs it waits for the user rather than working. `workspace`: the conversation's working
+    /// directory, which file paths are shown relative to.
     static func resolve(
         toolCall: ToolCallRecord,
         runs: [DelegatedRunPresentation]? = nil,
-        awaitingAnswer: Bool = false
+        awaitingAnswer: Bool = false,
+        workspace: URL? = nil
     ) -> ToolCallPresentationModel {
         let (displayToolName, namespaceLabel) = resolveToolNames(name: toolCall.name)
-        let summary = resolveSummary(name: toolCall.name, input: toolCall.input)
+        let summary = resolveSummary(name: toolCall.name, input: toolCall.input, workspace: workspace)
 
         let tone: ToolCallTone
         let symbolName: String
@@ -105,7 +103,6 @@ enum ToolCallPresentationResolver {
             displayToolName: displayToolName,
             namespaceLabel: namespaceLabel,
             summary: summary,
-            summaryHelp: resolveSummaryHelp(name: toolCall.name, input: toolCall.input),
             resultDigest: ToolCallDetail.resultDigest(toolCall),
             tone: tone,
             symbolName: symbolName
@@ -119,7 +116,7 @@ enum ToolCallPresentationResolver {
         return (name, nil)
     }
 
-    static func resolveSummary(name: String, input: String) -> String? {
+    static func resolveSummary(name: String, input: String, workspace: URL? = nil) -> String? {
         guard !input.isEmpty, input != "Receiving arguments…" else { return nil }
         guard let data = input.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -143,7 +140,7 @@ enum ToolCallPresentationResolver {
 
         if name.contains("file_") {
             if let path = json["path"] as? String {
-                return path
+                return displayPath(path, workspace: workspace)
             }
         }
 
@@ -180,14 +177,19 @@ enum ToolCallPresentationResolver {
         return nil
     }
 
-    /// A shell call that carries a description shows it; the command stays one hover away.
-    static func resolveSummaryHelp(name: String, input: String) -> String? {
-        guard name == "shell_execute" || name.hasSuffix("shell_execute"),
-              let data = input.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              shellDescription(json) != nil,
-              let command = json["command"] as? String else { return nil }
-        return "$ \(command)"
+    /// An absolute path as a row shows it: relative inside the workspace, under `~` inside the
+    /// home folder, otherwise as it is. Relative paths are already relative to the workspace.
+    static func displayPath(_ path: String, workspace: URL?) -> String {
+        guard path.hasPrefix("/") else { return path }
+        let standardized = URL(fileURLWithPath: path).standardizedFileURL.path
+        if let root = workspace?.standardizedFileURL.path, root != "/", standardized.hasPrefix(root + "/") {
+            return String(standardized.dropFirst(root.count + 1))
+        }
+        let home = NSHomeDirectory()
+        if standardized.hasPrefix(home + "/") {
+            return "~" + standardized.dropFirst(home.count)
+        }
+        return path
     }
 
     /// The model's own words for a shell command, when it gave any.

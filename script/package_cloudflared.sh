@@ -8,9 +8,10 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="${REPO_ROOT}/dist"
 CACHE_DIR="${HOME}/.cache/limare-helpers"
 
-PINNED_VERSION="2026.10.0"
+PINNED_VERSION="2026.10.4"
 PINNED_TARBALL_URL="https://github.com/cloudflare/cloudflared/releases/download/${PINNED_VERSION}/cloudflared-darwin-arm64.tgz"
-PINNED_TARBALL_SHA256="a2f79ff7b9420aa537d74af239f376da170bbabeb529aec416002adac6a72e70"
+# The GitHub release asset digest is for the tarball; the release notes list the extracted binary's digest.
+PINNED_TARBALL_SHA256="68b6bc4080ac1330234db2a9002d07f98b000537a1bd531a687b660d4160fa7f"
 PINNED_LICENSE_URL="https://raw.githubusercontent.com/cloudflare/cloudflared/${PINNED_VERSION}/LICENSE"
 
 mkdir -p "${DIST_DIR}" "${CACHE_DIR}"

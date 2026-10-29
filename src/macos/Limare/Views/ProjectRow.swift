@@ -92,34 +92,33 @@ struct ProjectRow: View {
     }
 
     private var header: some View {
+        // The whole row toggles, as a conversation row opens wherever it is clicked; only the
+        // name did before, and the empty part of the row ignored clicks.
         SidebarRowContainer(
-            isSelected: false
-        ) {
-            Button {
+            isSelected: false,
+            onSelect: {
                 withAnimation(AppMotion.resolved(AppMotion.standard)) {
                     appState.conversations.toggleProjectExpanded(id: project.id)
                 }
-            } label: {
-                HStack(spacing: AppSpacing.xSmall) {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(AppTypography.interfaceCaption2.weight(.bold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 12, height: 12)
-
-                    Image(systemName: project.isPinned ? "pin.fill" : "folder")
-                        .font(AppTypography.interfaceSubheadline)
-                        .foregroundStyle(project.isPinned ? Color.accentColor : Color.secondary)
-
-                    Text(project.name)
-                        .font(AppTypography.interfaceSubheadline.weight(.medium))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .foregroundStyle(Color.primary)
-                }
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(isExpanded ? "Collapse project \(project.name)" : "Expand project \(project.name)")
+        ) {
+            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                .font(AppTypography.interfaceCaption2.weight(.bold))
+                .foregroundStyle(.secondary)
+                .frame(width: 12, height: 12)
+                .accessibilityHidden(true)
+
+            Image(systemName: project.isPinned ? "pin.fill" : "folder")
+                .font(AppTypography.interfaceSubheadline)
+                .foregroundStyle(project.isPinned ? Color.accentColor : Color.secondary)
+                .accessibilityHidden(true)
+
+            Text(project.name)
+                .font(AppTypography.interfaceSubheadline.weight(.medium))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .foregroundStyle(Color.primary)
+                .accessibilityLabel(isExpanded ? "Collapse project \(project.name)" : "Expand project \(project.name)")
         } actions: {
             SidebarHoverIconButton(
                 systemImage: "plus",
@@ -156,6 +155,16 @@ struct ProjectRow: View {
             appState.conversations.newConversation(projectID: project.id)
         } label: {
             Label("New Conversation in Project", systemImage: "plus")
+        }
+
+        if project.workspace.map({ FileManager.default.fileExists(atPath: $0.url.appendingPathComponent(".git").path) }) == true {
+            Button {
+                appState.showChat(in: window)
+                let conversation = appState.conversations.newConversation(projectID: project.id)
+                appState.worktrees.setPending(.init(), for: conversation.id)
+            } label: {
+                Label("New Worktree Conversation", systemImage: "arrow.triangle.branch")
+            }
         }
 
         Button {

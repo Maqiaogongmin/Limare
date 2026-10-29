@@ -14,6 +14,10 @@ final class ChatStore {
     private(set) var pendingAttachments: [ChatAttachment] = []
     /// True while a send is importing the images its text @-mentions; sending is unavailable.
     private(set) var isAttachingMentionedImages = false
+    /// Work a conversation needs before its message goes out, such as creating the worktree it
+    /// was set to start in; set by the composition root.
+    @ObservationIgnored var prepareBeforeSend: (@MainActor (UUID) async throws -> Void)?
+    private(set) var isPreparingSend = false
     fileprivate(set) var messages: [ChatMessage] = []
     var errorMessage: String?
 
@@ -247,6 +251,7 @@ final class ChatStore {
         )
         if let conversationStore { companion.setConversationStore(conversationStore) }
         if let draftArchive { companion.setDraftArchive(draftArchive) }
+        companion.prepareBeforeSend = prepareBeforeSend
         if let undo { companion.setUndoCoordinator(undo) }
         companion.bindToWindow()
         return companion
@@ -447,6 +452,18 @@ final class ChatStore {
     /// and the imported copies are discarded.
     func sendAttachingMentionedImages(queueing: Bool) async {
         guard canSend else { return }
+        if let prepare = prepareBeforeSend, let conversationID = viewedConversationID {
+            isPreparingSend = true
+            do {
+                try await prepare(conversationID)
+            } catch {
+                isPreparingSend = false
+                if isViewing(conversationID: conversationID) { errorMessage = error.localizedDescription }
+                return
+            }
+            isPreparingSend = false
+            guard viewedConversationID == conversationID, canSend else { return }
+        }
         let mode: InteractiveSendMode = queueing ? .queue : .steerOrSend
         let mentioned = Self.mentionedImageFiles(in: draft)
         if mentioned.isEmpty {
@@ -652,7 +669,7 @@ final class ChatStore {
     }
 
     var canSend: Bool {
-        guard !isAttachingMentionedImages else { return false }
+        guard !isAttachingMentionedImages, !isPreparingSend else { return false }
         return !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingAttachments.isEmpty
     }
 

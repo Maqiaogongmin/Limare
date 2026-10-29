@@ -284,6 +284,7 @@ final class ScheduledScheduler {
         if let id = target.conversationID {
             if !runs.canStartRun(conversationID: id) || runs.admissionHoldReason(conversationID: id) != nil { return .targetConversationBusy }
             if !conversations.conversations.contains(where: { $0.id == id }) { return .conversationGone }
+            if case .refused = runs.worktreeAdmission(conversationID: id) { return .worktreeUnavailable }
         }
         if let projectID = target.projectID, !conversations.projects.contains(where: { $0.id == projectID }) { return .projectGone }
         let model = target.isNew ? (task.modelSource ?? interaction.modelSource(for: nil)) : interaction.modelSource(for: target.conversationID)
@@ -350,6 +351,7 @@ final class ScheduledScheduler {
         case .refused(.conversationNotFound): outcome = .skipped(.conversationGone)
         case .refused(.projectNotFound): outcome = .skipped(.projectGone)
         case .refused(.held): outcome = .skipped(.targetConversationBusy)
+        case .refused(.worktreeUnavailable): outcome = .skipped(.worktreeUnavailable)
         case .steered, .queued:
             record(kind: "scheduled.unexpectedAdmission", task: task, claimID: claimID, conversationID: admission.conversationID,
                    severity: .warning, summary: "Submit absorbed the scheduled input instead of starting a run")
@@ -365,6 +367,7 @@ final class ScheduledScheduler {
             if ended.status == .skipped {
                 record(kind: "scheduled.skip", task: task, claimID: claimID, conversationID: admission.conversationID,
                        summary: "Skipped: \(ended.skipReason?.rawValue ?? "")")
+                if ended.skipReason == .worktreeUnavailable { notify(.runEnded(task, ended)) }
             } else {
                 notify(.runEnded(task, ended))
             }

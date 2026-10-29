@@ -25,7 +25,7 @@ struct ToolCallCard: View {
     }
 
     private var presentation: ToolCallPresentationModel {
-        ToolCallPresentationResolver.resolve(toolCall: toolCall, awaitingAnswer: isAwaitingAnswer)
+        ToolCallPresentationResolver.resolve(toolCall: toolCall, awaitingAnswer: isAwaitingAnswer, workspace: workspaceURL)
     }
 
     private var statusColor: Color {
@@ -38,11 +38,14 @@ struct ToolCallCard: View {
         }
     }
 
-    private var resolvedFileTargetURL: URL? {
-        let workspaceURL = window.conversationID.map {
+    private var workspaceURL: URL? {
+        window.conversationID.map {
             appState.conversations.effectiveWorkingDirectory(for: $0)
         } ?? appState.workspace.url
-        return ToolCallFileTargetResolver.resolveTargetURL(for: toolCall, in: workspaceURL)
+    }
+
+    private var resolvedFileTargetURL: URL? {
+        ToolCallFileTargetResolver.resolveTargetURL(for: toolCall, in: workspaceURL)
     }
 
     private var changeNotice: ToolCallChangeNotice? {
@@ -98,7 +101,6 @@ struct ToolCallCard: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .truncationMode(.middle)
-                            .help(presentation.summaryHelp ?? "")
 
                         Text(presentation.displayToolName)
                             .font(AppTypography.interfaceCaption)
@@ -203,7 +205,6 @@ private struct ToolCallDetails: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowSession.self) private var window
     let toolCall: ToolCallRecord
-    @State private var showsRawData = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.small) {
@@ -228,36 +229,19 @@ private struct ToolCallDetails: View {
                 .padding(.bottom, AppSpacing.xxSmall)
             }
 
-            // Resolved only here, once the row is open.
+            // Resolved only here, once the row is open. A readable detail replaces the recorded
+            // input and output, as Claude Code and Codex show a command or a diff and nothing else.
             let detail = ToolCallDetail.resolve(toolCall)
             if detail == .raw {
                 ToolCallRawData(toolCall: toolCall)
             } else {
                 ToolCallDetailView(detail: detail)
-                // The recorded input and output stay one step down, for when something is off.
-                Button {
-                    withAnimation(AppMotion.resolved(AppMotion.standard)) { showsRawData.toggle() }
-                } label: {
-                    HStack(spacing: AppSpacing.xxSmall) {
-                        Text("Raw Data")
-                        Image(systemName: showsRawData ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 8, weight: .bold))
-                    }
-                }
-                .buttonStyle(QuietLinkButtonStyle())
-                .accessibilityIdentifier("toolcard.rawData")
-                if showsRawData {
-                    ToolCallRawData(toolCall: toolCall)
-                }
             }
 
+            // The row already shows how long the call took.
             HStack(spacing: AppSpacing.medium) {
                 if let approval = ToolCallPresentationResolver.approvalLabel(for: toolCall.approvalState) {
                     Label(approval, systemImage: "hand.raised")
-                }
-                if let milliseconds = toolCall.durationMilliseconds {
-                    Label(ToolCallDurationFormat.detail(milliseconds: milliseconds), systemImage: "clock")
-                        .help("\(milliseconds.formatted()) ms")
                 }
                 if let error = toolCall.errorMessage, !error.isEmpty {
                     Text(error)

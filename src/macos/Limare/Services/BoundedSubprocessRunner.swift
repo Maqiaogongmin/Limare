@@ -7,6 +7,7 @@ struct BoundedSubprocessRunner: Sendable {
         var executable: URL
         var arguments: [String]
         var environment: [String: String]? = nil
+        var standardInputFile: URL? = nil
         var timeoutSeconds: TimeInterval = 60
         var outputLimitBytes: Int = 4 * 1024 * 1024
         var terminationGraceSeconds: TimeInterval = 0.5
@@ -16,6 +17,8 @@ struct BoundedSubprocessRunner: Sendable {
         let exitCode: Int32?
         let launched: Bool
         let stdout: String
+        /// The bytes `stdout` was decoded from, for output that need not be UTF-8.
+        let stdoutData: Data
         let stderr: String
         let stdoutTruncated: Bool
         let stderrTruncated: Bool
@@ -95,6 +98,9 @@ struct BoundedSubprocessRunner: Sendable {
                 self.installReader(self.outputPipe.fileHandleForReading, isError: false)
                 self.installReader(self.errorPipe.fileHandleForReading, isError: true)
                 do {
+                    if let input = self.request.standardInputFile {
+                        self.process.standardInput = try FileHandle(forReadingFrom: input)
+                    }
                     try self.process.run()
                     self.launched = true
                     try? self.outputPipe.fileHandleForWriting.close()
@@ -211,6 +217,7 @@ struct BoundedSubprocessRunner: Sendable {
                 exitCode: launched && !process.isRunning ? process.terminationStatus : nil,
                 launched: launched,
                 stdout: String(decoding: output, as: UTF8.self),
+                stdoutData: output,
                 stderr: String(decoding: errors, as: UTF8.self),
                 stdoutTruncated: outputTruncated, stderrTruncated: errorTruncated,
                 timedOut: timedOut, cancelled: cancelled,

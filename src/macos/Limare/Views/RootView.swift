@@ -135,6 +135,27 @@ struct RootView: View {
                 MCPCredentialPromptView(request: credRequest)
             }
         }
+        .sheet(isPresented: Binding(get: { window.worktreeDetails != nil },
+                                    set: { if !$0 { window.worktreeDetails = nil } })) {
+            if let id = window.worktreeDetails { WorktreeDetailsView(conversationID: id) }
+        }
+        .confirmationDialog(worktreeRemovalTitle, isPresented: Binding(get: { window.worktreeRemovalPrompt != nil },
+                                                                       set: { if !$0 { window.worktreeRemovalPrompt = nil } }),
+                            titleVisibility: .visible, presenting: window.worktreeRemovalPrompt) { prompt in
+            Button(prompt.conversationIDs.count == 1 ? "Delete Worktree" : "Delete Worktrees", role: .destructive) {
+                Task { await appState.finishWorktreeRemoval(prompt, keepingFolders: false) }
+            }
+            Button(prompt.conversationIDs.count == 1 ? "Keep Worktree Folder" : "Keep Worktree Folders") {
+                Task { await appState.finishWorktreeRemoval(prompt, keepingFolders: true) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { prompt in
+            if prompt.conversationIDs.count == 1 {
+                Text("The worktree holds uncommitted changes or new files that exist nowhere else. A kept folder and its branch stay on disk.")
+            } else {
+                Text("Of \(prompt.conversationIDs.count) worktrees, \(prompt.unsavedCount) hold uncommitted changes or new files that exist nowhere else. Kept folders and their branches stay on disk.")
+            }
+        }
         .environment(\.font, AppTypography.interface)
         .onChange(of: workSurfaceFillsWindow) { _, fills in
             if fills {
@@ -185,6 +206,12 @@ struct RootView: View {
             case .mcpCredential(let c): return "mcp-cred-\(c.id)"
             }
         }
+    }
+
+    private var worktreeRemovalTitle: String {
+        window.worktreeRemovalPrompt?.deletesConversations == true
+            ? String(localized: "Delete the conversation and its worktree?")
+            : String(localized: "Remove the worktree?")
     }
 
     /// A request that belongs to no conversation, when this window is the one to present it: a

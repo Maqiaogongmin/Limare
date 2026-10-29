@@ -23,6 +23,9 @@ public struct WorkSurfaceView: View {
                 case .files:
                     FilesSurfaceView(previewStore: window.workSurface.filePreviews[activeTab.contentID])
                         .id(activeTab.id)
+                case .changes:
+                    ChangesSurfaceView()
+                        .id(activeTab.id)
                 }
             } else {
                 WorkSurfaceLauncherView()

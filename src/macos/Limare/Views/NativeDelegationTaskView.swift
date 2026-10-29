@@ -7,6 +7,7 @@ struct NativeDelegationTaskView: View {
     @State private var collapsedConversations: Set<UUID> = []
     @State private var expandedFinished: Set<UUID> = []
     @State private var continuing: SubagentTask?
+    @State private var deleting: SubagentTask?
     @State private var instruction = ""
     @State private var errorMessage: String?
     let conversationID: UUID
@@ -77,6 +78,18 @@ struct NativeDelegationTaskView: View {
                     continuing = nil
                 }
             }
+            .confirmationDialog("Delete finished subtask?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
+                Button("Delete Subtask", role: .destructive) {
+                    if let task = deleting {
+                        do { try subagents.deleteFinishedTask(task.id); errorMessage = nil }
+                        catch { errorMessage = error.localizedDescription }
+                    }
+                    deleting = nil
+                }
+                Button("Cancel", role: .cancel) { deleting = nil }
+            } message: {
+                Text("Its conversation and task history will be deleted.")
+            }
         }
     }
 
@@ -100,6 +113,7 @@ struct NativeDelegationTaskView: View {
             }
             if task.status.isFinished {
                 Button("Continue") { instruction = ""; continuing = task }
+                if !isChild { Button("Delete Task…") { deleting = task } }
             } else {
                 Button("Cancel", role: .destructive) { appState.subagents.cancel(taskID: task.id) }
             }
