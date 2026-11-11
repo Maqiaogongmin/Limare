@@ -31,6 +31,7 @@ struct MessageListView: View {
         let navigatorEntries = UserMessageNavigatorModel.entries(from: messages)
         let markersByEntry = CompactionMarkerPlacement.markersByEntry(compactionMarkers, entries: entries)
         let trailingCompaction = compaction.flatMap { $0.isFinished ? nil : $0 }
+        let currentRunIDs = isRunActive ? Set(TranscriptTurnGrouping.currentTurn(in: messages).map(\.id)) : []
         return ScrollViewReader { proxy in
             ScrollView {
                 // A plain stack, as Enchanted's transcript: every row has its real height, so the
@@ -41,6 +42,8 @@ struct MessageListView: View {
                     ForEach(entries) { entry in
                         TranscriptEntryView(
                             entry: entry,
+                            isCurrentRun: currentRunIDs.contains(entry.id),
+                            isRunActive: isRunActive,
                             isRetractable: entry.message.id == retractableMessageID,
                             onRetract: { onRetract(entry.message.id) },
                             onSelectionBecameActive: {
@@ -279,13 +282,15 @@ private struct CompactionStatusLine: View {
 /// One transcript entry: an optional collapsed execution history above its row.
 private struct TranscriptEntryView: View, Equatable {
     let entry: TranscriptTurnGrouping.Entry
+    let isCurrentRun: Bool
+    let isRunActive: Bool
     let isRetractable: Bool
     let onRetract: @MainActor () -> Void
     let onSelectionBecameActive: @MainActor () -> Void
     let onCollapse: @MainActor () -> Void
 
     nonisolated static func == (lhs: TranscriptEntryView, rhs: TranscriptEntryView) -> Bool {
-        lhs.entry == rhs.entry && lhs.isRetractable == rhs.isRetractable
+        lhs.entry == rhs.entry && lhs.isCurrentRun == rhs.isCurrentRun && lhs.isRunActive == rhs.isRunActive && lhs.isRetractable == rhs.isRetractable
     }
 
     var body: some View {
@@ -299,21 +304,29 @@ private struct TranscriptEntryView: View, Equatable {
 
     private var turnBody: some View {
         let message = entry.message
+        // A stopped or failed run can end on the tool-call message itself. Keep that last
+        // plan call in the execution fold too, instead of leaving it beside the answer.
+        let finalPlanCalls = TranscriptTurnGrouping.finishedPlanCalls(in: message, isCurrentRun: isCurrentRun)
+        let hiddenIDs = Set(finalPlanCalls.map(\.id))
         return VStack(alignment: .leading, spacing: AppSpacing.large) {
-            if let history = entry.history {
+            if entry.history != nil || !finalPlanCalls.isEmpty {
+                let history = entry.history ?? []
                 DisclosureGroup {
                     if entry.row.hidesReasoning, let reasoning = message.reasoningContent, !reasoning.isEmpty {
                         ReasoningDisclosureView(reasoning: reasoning, state: message.state, hasVisibleOutput: ReasoningDisclosureView.hasVisibleOutput(content: message.content, toolCalls: message.toolCalls))
                     }
                     VStack(alignment: .leading, spacing: AppSpacing.xxSmall) {
                         ForEach(history) { item in
-                            MessageRow(row: item)
+                            MessageRow(row: item, allowsFork: false)
                                 .equatable()
+                        }
+                        ForEach(finalPlanCalls) { toolCall in
+                            ToolCallCard(toolCall: toolCall)
                         }
                     }
                     .environment(\.isInExecutionFold, true)
                 } label: {
-                    ExecutionHistoryLabel(count: history.count, unsuccessfulCount: entry.unsuccessfulCount)
+                    ExecutionHistoryLabel(count: history.count + (finalPlanCalls.isEmpty ? 0 : 1), unsuccessfulCount: entry.unsuccessfulCount + finalPlanCalls.filter { TranscriptTurnGrouping.isUnsuccessful($0.state) }.count)
                 }
                 if !entry.pinnedToolCalls.isEmpty {
                     FoldedChangeNotices(toolCalls: entry.pinnedToolCalls)
@@ -325,6 +338,8 @@ private struct TranscriptEntryView: View, Equatable {
             }
             MessageRow(
                 row: entry.row,
+                hiddenToolCallIDs: hiddenIDs,
+                allowsFork: !isRunActive,
                 showsRetract: isRetractable,
                 onRetract: onRetract,
                 onSelectionBecameActive: onSelectionBecameActive,
@@ -395,23 +410,37 @@ private struct FoldedChangeNotices: View {
 /// Equatable on its row value only: the callbacks capture stable owners (scroll proxy, follow
 /// coordinator), so an unchanged row skips its body when the transcript re-renders.
 private struct MessageRow: View, Equatable {
+    @Environment(AppState.self) private var appState
+    @Environment(WindowSession.self) private var window
     let row: TranscriptRow
+    var hiddenToolCallIDs: Set<UUID> = []
+    var allowsFork = false
     var showsRetract = false
     var onRetract: (@MainActor () -> Void)? = nil
     var onSelectionBecameActive: (@MainActor () -> Void)? = nil
     var onCollapse: (@MainActor () -> Void)? = nil
 
     nonisolated static func == (lhs: MessageRow, rhs: MessageRow) -> Bool {
-        lhs.row == rhs.row && lhs.showsRetract == rhs.showsRetract
+        lhs.row == rhs.row && lhs.hiddenToolCallIDs == rhs.hiddenToolCallIDs && lhs.allowsFork == rhs.allowsFork && lhs.showsRetract == rhs.showsRetract
     }
 
     private var message: ChatMessage { row.message }
     private var hidesReasoning: Bool { row.hidesReasoning }
+    private var canFork: Bool {
+        row.canFork(allowsFork: allowsFork, isDelegationChild: window.conversation?.isNativeDelegationChild == true)
+    }
     private var retractAction: (@MainActor () -> Void)? {
         guard showsRetract else { return nil }
         return onRetract
     }
     @State private var isHovered = false
+    @State private var forkError: String?
+
+    private var canOfferForkWorktree: Bool {
+        guard let id = window.conversationID else { return false }
+        let folder = appState.conversations.effectiveWorkingDirectory(for: id)
+        return FileManager.default.fileExists(atPath: folder.appendingPathComponent(".git").path)
+    }
 
     var body: some View {
         let presentation = row.presentation
@@ -428,7 +457,9 @@ private struct MessageRow: View, Equatable {
                     UserMessageActionBar(
                         message: message,
                         isVisible: isHovered,
-                        onRetract: retractAction
+                        onRetract: retractAction,
+                        canOfferForkWorktree: canOfferForkWorktree,
+                        onFork: canFork ? fork : nil
                     )
                 }
                 // Bubble, gap and bar are one hover region. Hovering only what draws (the bubble
@@ -453,6 +484,27 @@ private struct MessageRow: View, Equatable {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .alert("Could not fork conversation", isPresented: Binding(
+            get: { forkError != nil }, set: { if !$0 { forkError = nil } }
+        )) { Button("OK") { forkError = nil } } message: { Text(forkError ?? "") }
+    }
+
+    private func fork(useWorktree: Bool) {
+        guard let sourceID = window.conversationID else { return }
+        do {
+            let created = try appState.conversations.forkConversation(id: sourceID, through: message.id)
+            appState.worktrees.setNotice(String(localized: "This fork and its source use the same folder and can change the same files."), for: created.id)
+            guard useWorktree else { return }
+            Task {
+                do {
+                    try await appState.worktrees.create(conversationID: created.id, baseBranch: nil)
+                } catch {
+                    appState.worktrees.setNotice(String(localized: "The worktree could not be created: \(error.localizedDescription). This fork still uses the same folder as its source."), for: created.id)
+                }
+            }
+        } catch {
+            forkError = error.localizedDescription
+        }
     }
 
     private func messageBubble(presentation: AssistantTurnPresentation) -> some View {
@@ -467,10 +519,12 @@ private struct MessageRow: View, Equatable {
             if !message.toolCalls.isEmpty {
                 VStack(alignment: .leading, spacing: AppSpacing.xxSmall) {
                     ForEach(message.toolCalls) { toolCall in
-                        if toolCall.name == "delegate_task" {
-                            AgentRunGroupView(toolCall: toolCall)
-                        } else {
-                            ToolCallCard(toolCall: toolCall)
+                        if !hiddenToolCallIDs.contains(toolCall.id) {
+                            if toolCall.name == "delegate_task" {
+                                AgentRunGroupView(toolCall: toolCall)
+                            } else {
+                                ToolCallCard(toolCall: toolCall)
+                            }
                         }
                     }
                 }
@@ -485,13 +539,16 @@ private struct MessageRow: View, Equatable {
             let speakerPayload = presentation.showsSpeakerAction
                 ? presentation.authorizedSpeakerPayload.flatMap { VoiceTextSanitizer.sanitize($0).isEmpty ? nil : $0 }
                 : nil
-            if row.turnCopyPayload != nil || speakerPayload != nil {
+            if row.turnCopyPayload != nil || speakerPayload != nil || (message.role == .assistant && canFork) {
                 HStack(spacing: AppSpacing.small) {
                     if let payload = row.turnCopyPayload {
                         TurnCopyButton(payload: payload)
                     }
                     if let speakerPayload {
                         SpeakerButton(messageID: message.id, spokenPayload: speakerPayload)
+                    }
+                    if message.role == .assistant && canFork {
+                        ForkActionMenu(canOfferWorktree: canOfferForkWorktree, onFork: fork)
                     }
                 }
                 .padding(.top, AppSpacing.xxSmall)
@@ -794,8 +851,10 @@ private struct UserMessageActionBar: View {
     let isVisible: Bool
     /// Present only on the retractable last user message.
     var onRetract: (@MainActor () -> Void)? = nil
+    var canOfferForkWorktree = false
+    var onFork: (@MainActor (Bool) -> Void)? = nil
 
-    private enum Action: Hashable { case retract, copy }
+    private enum Action: Hashable { case retract, copy, fork }
     /// The bar's buttons are focus stops only where the system makes buttons focusable (Full
     /// Keyboard Access); a focused button shows the bar instead of leaving an invisible stop.
     @FocusState private var focusedAction: Action?
@@ -820,11 +879,40 @@ private struct UserMessageActionBar: View {
                 CopyMessageButton(message: message)
                     .focused($focusedAction, equals: .copy)
             }
+            if let onFork {
+                ForkActionMenu(canOfferWorktree: canOfferForkWorktree, onFork: onFork)
+                .focused($focusedAction, equals: .fork)
+            }
         }
         .frame(height: 14)
         .opacity(isShown ? 1 : 0)
         .animation(AppMotion.resolved(AppMotion.standard), value: isShown)
         .allowsHitTesting(isShown)
+    }
+}
+
+/// A small menu anchored to the fork icon, keeping the conversation visible.
+private struct ForkActionMenu: View {
+    let canOfferWorktree: Bool
+    let onFork: @MainActor (Bool) -> Void
+
+    var body: some View {
+        Menu {
+            Button("Use the same folder") { onFork(false) }
+            if canOfferWorktree {
+                Button("Create a new worktree") { onFork(true) }
+            }
+        } label: {
+            Image(systemName: "arrow.triangle.branch")
+                .font(.system(size: 11))
+                .frame(width: 14, height: 14)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .foregroundStyle(.secondary)
+        .help("Fork from this message")
+        .accessibilityLabel("Fork from this message")
     }
 }
 
@@ -1076,6 +1164,11 @@ struct TranscriptRow: Identifiable, Equatable, Sendable {
     let deliveredArtifactIDs: [UUID]
     var id: UUID { message.id }
 
+    func canFork(allowsFork: Bool, isDelegationChild: Bool) -> Bool {
+        allowsFork && !isDelegationChild && message.state == .complete && !message.isSystemNotice
+            && (message.role == .user || (message.role == .assistant && turnCopyPayload != nil))
+    }
+
     init(
         message: ChatMessage,
         in messages: [ChatMessage],
@@ -1100,6 +1193,26 @@ struct TranscriptRow: Identifiable, Equatable, Sendable {
 /// interrupted), its last message staying in view; only a stream with no run behind it shows
 /// each message on its own.
 enum TranscriptTurnGrouping {
+    static func isPlanTool(_ call: ToolCallRecord) -> Bool {
+        MCPToolNamespace.parse(exposedName: call.name) == nil && (call.name == "update_plan" || call.name.hasSuffix("update_plan"))
+    }
+
+    static func finishedPlanCalls(in message: ChatMessage, isCurrentRun: Bool) -> [ToolCallRecord] {
+        guard !isCurrentRun, message.role == .assistant else { return [] }
+        return message.toolCalls.filter(isPlanTool)
+    }
+    /// A mid-run steer or subagent notice doesn't begin a new task or discard its plan.
+    static func currentTurn(in messages: [ChatMessage]) -> [ChatMessage] {
+        guard let boundary = messages.lastIndex(where: { $0.isUserPrompt && !$0.sentWhileWorking }) else {
+            return messages
+        }
+        return Array(messages.dropFirst(boundary + 1))
+    }
+
+    static func currentPlan(in messages: [ChatMessage]) -> [ToolCallDetail.PlanItem] {
+        ToolCallDetail.latestPlan(in: currentTurn(in: messages).flatMap(\.toolCalls))
+    }
+
     struct Entry: Identifiable, Equatable, Sendable {
         /// A folding turn's first message, so the entry keeps its identity, and its fold's
         /// open state, from the first step to the answer.
@@ -1115,6 +1228,9 @@ enum TranscriptTurnGrouping {
         /// Folded question calls the user resolved, in order; their questions and answers show
         /// outside the fold.
         let answeredQuestionCalls: [ToolCallRecord]
+        /// The turn's latest `update_plan` checklist, shown outside the fold and updated in place
+        /// as steps complete.
+        let planItems: [ToolCallDetail.PlanItem]
         var message: ChatMessage { row.message }
     }
 
@@ -1135,7 +1251,8 @@ enum TranscriptTurnGrouping {
                 startsAssistantTurn: startsTurn,
                 unsuccessfulCount: 0,
                 pinnedToolCalls: [],
-                answeredQuestionCalls: []
+                answeredQuestionCalls: [],
+                planItems: message.role == .assistant ? ToolCallDetail.latestPlan(in: message.toolCalls) : []
             )
         }
         /// The turn's first `rowIndex` messages folded above the message at `rowIndex`, which
@@ -1143,6 +1260,7 @@ enum TranscriptTurnGrouping {
         func folded(rowIndex: Int, hidesReasoning: Bool) -> Entry {
             let history = Array(turn[..<rowIndex])
             let calls = history.flatMap(\.toolCalls)
+            let turnCalls = Array(turn[...rowIndex]).flatMap(\.toolCalls)
             return Entry(
                 id: turn[0].id,
                 row: TranscriptRow(
@@ -1155,7 +1273,8 @@ enum TranscriptTurnGrouping {
                 startsAssistantTurn: true,
                 unsuccessfulCount: calls.filter { isUnsuccessful($0.state) }.count,
                 pinnedToolCalls: calls.filter { mayHaveLeftChanges($0.state) },
-                answeredQuestionCalls: calls.filter { $0.questionResolution != nil }
+                answeredQuestionCalls: calls.filter { $0.questionResolution != nil },
+                planItems: ToolCallDetail.latestPlan(in: turnCalls)
             )
         }
         func flush(isLast: Bool, endsAtSteer: Bool) {

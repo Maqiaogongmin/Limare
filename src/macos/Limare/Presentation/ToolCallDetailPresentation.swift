@@ -84,6 +84,16 @@ enum ToolCallDetail: Equatable, Sendable {
         }
     }
 
+    /// The latest valid `update_plan` checklist recorded across `calls`, or `[]` when none exists.
+    static func latestPlan(in calls: [ToolCallRecord]) -> [PlanItem] {
+        for record in calls.reversed() {
+            if case .plan(let items) = resolve(record), !items.isEmpty {
+                return items
+            }
+        }
+        return []
+    }
+
     /// The few words a finished row adds before its duration, or nil.
     static func resultDigest(_ record: ToolCallRecord) -> String? {
         guard let tool = BuiltInTool(record.name) else { return nil }

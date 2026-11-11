@@ -90,6 +90,9 @@ public enum NativeWireCodec {
             let encoder = JSONEncoder()
             encoder.keyEncodingStrategy = .convertToSnakeCase
             body = try JSONSerialization.jsonObject(with: encoder.encode(parameter)) as! [String: Any]
+            if host.lowercased() == "api.anthropic.com" {
+                body["cache_control"] = ["type": "ephemeral"]
+            }
             if !tools.isEmpty {
                 body["tools"] = tools.map { tool -> [String: Any] in
                     let f = tool["function"] as? [String: Any] ?? tool

@@ -1,4 +1,25 @@
 import Foundation
+import CryptoKit
+
+@MainActor
+final class FileReadVersions {
+    private var versions: [UUID: [String: SHA256.Digest]] = [:]
+
+    func record(_ content: String, at url: URL, conversationID: UUID) {
+        versions[conversationID, default: [:]][url.standardizedFileURL.path] = SHA256.hash(data: Data(content.utf8))
+    }
+
+    func requireCurrent(at url: URL, conversationID: UUID) throws {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        guard let expected = versions[conversationID]?[url.standardizedFileURL.path] else {
+            throw FileToolError.readRequired(url.path)
+        }
+        let current = try Data(contentsOf: url)
+        guard SHA256.hash(data: current) == expected else { throw FileToolError.changedSinceRead(url.path) }
+    }
+
+    func forget(conversationID: UUID) { versions[conversationID] = nil }
+}
 
 enum FileToolError: LocalizedError {
     case notAFile(String)
@@ -7,6 +28,8 @@ enum FileToolError: LocalizedError {
     case emptyMatch
     case matchNotFound
     case matchNotUnique(count: Int)
+    case readRequired(String)
+    case changedSinceRead(String)
 
     var errorDescription: String? {
         switch self {
@@ -16,6 +39,8 @@ enum FileToolError: LocalizedError {
         case .emptyMatch: "file_edit requires a non-empty old_text value."
         case .matchNotFound: "old_text was not found in the file."
         case .matchNotUnique(let count): "old_text matched \(count) locations; provide a unique match."
+        case .readRequired(let path): "Read \(path) with file_read before modifying it."
+        case .changedSinceRead(let path): "\(path) changed since it was read. Read it again before modifying it."
         }
     }
 }
@@ -62,6 +87,10 @@ struct FileToolService: Sendable {
     /// Replaces the unique match of `oldText`. With `location`, the result is written there
     /// (pinned to its directory); otherwise to `url`.
     func edit(url: URL, oldText: String, newText: String, writingTo location: AnchoredPath? = nil) throws -> Int {
+        try editContent(url: url, oldText: oldText, newText: newText, writingTo: location).utf8.count
+    }
+
+    func editContent(url: URL, oldText: String, newText: String, writingTo location: AnchoredPath? = nil) throws -> String {
         guard !oldText.isEmpty else { throw FileToolError.emptyMatch }
         let original = try read(url: url)
         let matches = original.ranges(of: oldText)
@@ -74,7 +103,7 @@ struct FileToolService: Sendable {
         } else {
             try data.write(to: url, options: .atomic)
         }
-        return data.count
+        return updated
     }
 }
 

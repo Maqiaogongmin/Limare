@@ -9,12 +9,6 @@ import Foundation
 ///    invocationID, requirementID, concreteVerifierIdentity, runID, and taskID before admission.
 /// 4. Transport vs xcresult truth agreement: contradictory outcomes reject; never produce canonical PASS.
 /// 5. Exact test identity normalization: bundle/suite/method strict matching without substring guessing.
-/// 6. Conservative outcome mapping:
-///    - Exact test terminal PASS -> VerificationResult.passed + deterministicTest(passed: true)
-///    - Exact test terminal assertion FAIL -> VerificationResult.failed + deterministicTest(passed: false)
-///    - Runner started without terminal test result -> VerificationResult.indeterminate (GV-I06)
-///    - Test target unavailable / unexecutable -> VerificationResult.unsupported
-/// 7. Atomic admission into ConversationRunCoordinator (EC-B01).
 public final class MacOSGUIVerifierRuntime: @unchecked Sendable {
     public static let shared = MacOSGUIVerifierRuntime()
 
@@ -285,25 +279,6 @@ public final class MacOSGUIVerifierRuntime: @unchecked Sendable {
             timeoutSeconds: 180
         ))
         return !raw.cancelled && !raw.timedOut && raw.exitCode == 0
-    }
-
-    // MARK: - Core Execution Entrypoint
-
-    /// Executes the mechanical GUI verifier for a declared requirement,
-    /// validates the untrusted outcome across the process boundary,
-    /// and atomically admits the result and receipt into the coordinator.
-    @MainActor
-    func executeVerification(
-        request: InvocationRequest,
-        coordinator: ConversationRunCoordinator
-    ) async -> (admitted: Bool, result: VerificationResult?, receipt: EvidenceReceipt?) {
-        // 1. Invoke the test runner subprocess
-        let raw = await runTestProcess(request: request)
-
-        guard !Task.isCancelled, !raw.cancelled else { return (false, nil, nil) }
-
-        // 2. Validate untrusted output and map to canonical result + receipt
-        return validateAndAdmit(raw: raw, request: request, coordinator: coordinator)
     }
 
     // MARK: - Subprocess Invocation
@@ -724,105 +699,4 @@ public final class MacOSGUIVerifierRuntime: @unchecked Sendable {
         return (passed: exactPassed, found: exactFound, runnerStarted: runnerStarted, failureMessage: failureMessage)
     }
 
-    // MARK: - Validation & Admission (Trust Boundary Enforcement)
-
-    @MainActor
-    func validateAndAdmit(
-        raw: RawExecutionOutcome,
-        request: InvocationRequest,
-        coordinator: ConversationRunCoordinator
-    ) -> (admitted: Bool, result: VerificationResult?, receipt: EvidenceReceipt?) {
-        guard !Task.isCancelled, !raw.cancelled else { return (false, nil, nil) }
-        // 0. Trust-boundary correlation failure: payload is FOREIGN / UNTRUSTED.
-        // It MUST NOT indirectly create a canonical requirement result or evidence receipt.
-        if raw.trustBoundaryRejected {
-            return (admitted: false, result: nil, receipt: nil)
-        }
-
-        // Evaluate terminal state conservatively:
-        // 1. Exact test terminal PASS
-        if raw.exactTestFound, raw.exactTestPassed == true {
-            let (result, receipt) = makePair(isPassed: true, request: request)
-            let admitted = coordinator.recordMechanicalVerification(
-                runID: request.runID,
-                verificationResult: result,
-                evidenceReceipt: receipt
-            )
-            return (admitted, result, receipt)
-        }
-
-        // 2. Exact test terminal assertion FAIL
-        if raw.exactTestFound, raw.exactTestPassed == false {
-            let (result, receipt) = makePair(isPassed: false, request: request)
-            let admitted = coordinator.recordMechanicalVerification(
-                runID: request.runID,
-                verificationResult: result,
-                evidenceReceipt: receipt
-            )
-            return (admitted, result, receipt)
-        }
-
-        // 3. Runner started, but no authoritative terminal exact-test result -> indeterminate (GV-I06)
-        if raw.runnerStarted || raw.timedOut {
-            let indeterminateResult = VerificationResult(
-                requirementID: request.requirementID,
-                verifierIdentity: request.concreteVerifierIdentity,
-                resultState: .indeterminate,
-                evidenceReferences: VerificationEvidenceReferences(receiptIDs: []),
-                correlation: VerificationCorrelation(runID: request.runID)
-            )
-            let admitted = coordinator.recordVerificationResult(
-                runID: request.runID,
-                result: indeterminateResult
-            )
-            return (admitted, indeterminateResult, nil)
-        }
-
-        // 4. Runner / infrastructure unavailable before execution -> unsupported
-        let unsupportedResult = VerificationResult(
-            requirementID: request.requirementID,
-            verifierIdentity: request.concreteVerifierIdentity,
-            resultState: .unsupported,
-            evidenceReferences: VerificationEvidenceReferences(receiptIDs: []),
-            correlation: VerificationCorrelation(runID: request.runID)
-        )
-        let admitted = coordinator.recordVerificationResult(
-            runID: request.runID,
-            result: unsupportedResult
-        )
-        return (admitted, unsupportedResult, nil)
-    }
-
-    // MARK: - Pair Construction
-
-    public func makePair(
-        isPassed: Bool,
-        request: InvocationRequest
-    ) -> (result: VerificationResult, receipt: EvidenceReceipt) {
-        let receipt = EvidenceReceipt(
-            taskID: request.taskID,
-            runID: request.runID,
-            turnID: "gui-verification-\(request.runID)",
-            sourceCallID: request.concreteVerifierIdentity,
-            observation: .deterministicTest(
-                testID: request.concreteVerifierIdentity,
-                targetArtifactID: nil,
-                targetRevisionID: nil,
-                passed: isPassed,
-                exitCode: isPassed ? 0 : 1,
-                detail: nil
-            ),
-            reportedCanonicalOwnerDomain: "gui_verifier"
-        )
-
-        let result = VerificationResult(
-            requirementID: request.requirementID,
-            verifierIdentity: request.concreteVerifierIdentity,
-            resultState: isPassed ? .passed : .failed,
-            evidenceReferences: VerificationEvidenceReferences(receiptIDs: [receipt.id]),
-            correlation: VerificationCorrelation(runID: request.runID)
-        )
-
-        return (result, receipt)
-    }
 }

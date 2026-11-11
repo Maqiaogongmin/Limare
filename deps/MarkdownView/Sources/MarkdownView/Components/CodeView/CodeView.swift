@@ -67,6 +67,10 @@ final class CodeView: PlatformView {
         }
     }
 
+    /// The parser's block content, including trailing whitespace hidden from layout.
+    var originalContent: String?
+    var copyContent: String { originalContent ?? content }
+
     private var cachedLineCount: Int = 1
     private var highlightedContent: String = ""
 
@@ -356,7 +360,7 @@ final class CodeView: PlatformView {
 
     #if canImport(UIKit)
         @objc func handleCopy(_: UIButton) {
-            UIPasteboard.general.string = content
+            UIPasteboard.general.string = copyContent
             #if !os(visionOS)
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
             #endif
@@ -377,7 +381,7 @@ final class CodeView: PlatformView {
         @objc func handleCopy(_: Any?) {
             let pasteboard = NSPasteboard.general
             pasteboard.clearContents()
-            pasteboard.setString(content, forType: .string)
+            pasteboard.setString(copyContent, forType: .string)
             showCopyFeedback()
         }
 

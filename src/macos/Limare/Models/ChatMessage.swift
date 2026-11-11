@@ -558,22 +558,22 @@ enum HarnessToolDefinitions {
             "blockers": .init(type: "array", description: "What is unfinished, unverified or blocked."),
             "partial": .init(type: "boolean", description: "True if the task is not fully done.")], required: ["summary"])
 
-    static let delegateTaskDefinition: ChatToolDefinition = {
+    private static let delegateTaskSchema: [String: AnyCodable] = {
         let schema: [String: AnyCodable] = [
             "type": AnyCodable("object"),
             "properties": AnyCodable([
                 "tasks": AnyCodable([
                     "type": AnyCodable("array"),
-                    "description": AnyCodable("1 to 3 isolated, self-contained research tasks to execute concurrently."),
+                    "description": AnyCodable("1 to 3 self-contained subagent tasks to execute concurrently."),
                     "minItems": AnyCodable(1),
                     "maxItems": AnyCodable(3),
                     "items": AnyCodable([
                         "type": AnyCodable("object"),
                         "properties": AnyCodable([
                             "title": AnyCodable(["type": AnyCodable("string"), "description": AnyCodable("Short descriptive title of the subtask.")]),
-                            "goal": AnyCodable(["type": AnyCodable("string"), "description": AnyCodable("Specific question or problem the child agent should investigate.")]),
+                            "goal": AnyCodable(["type": AnyCodable("string"), "description": AnyCodable("Specific goal for the child agent.")]),
                             "context": AnyCodable(["type": AnyCodable("string"), "description": AnyCodable("Concise relevant context needed for this subtask.")]),
-                            "scope": AnyCodable(["type": AnyCodable("string"), "description": AnyCodable("Specific files, modules, or domains to investigate.")]),
+                            "scope": AnyCodable(["type": AnyCodable("string"), "description": AnyCodable("Specific files, modules, or domains relevant to the task.")]),
                             "constraints": AnyCodable(["type": AnyCodable("string"), "description": AnyCodable("Explicit constraints or boundaries (e.g. what not to do).")]),
                             "expected_output": AnyCodable(["type": AnyCodable("string"), "description": AnyCodable("Expected format and focus of the final report.")]),
                             "allow_web": AnyCodable(["type": AnyCodable("boolean"), "description": AnyCodable("Whether this subtask requires public web research.")]),
@@ -587,24 +587,18 @@ enum HarnessToolDefinitions {
             "required": AnyCodable(["tasks"]),
             "additionalProperties": AnyCodable(false)
         ]
-        return ChatToolDefinition(
-            function: .init(
-                name: "delegate_task",
-                description: "Delegate 1–3 bounded read-only research tasks to isolated child agent sessions that execute concurrently. To delegate research on local materials, stage them into the current Workspace and specify 'workspace_scope' to narrow child containment. External host directories outside the workspace do not inherit parent authorization.",
-                rawParameters: AnyCodable(schema)
-            )
-        )
+        return schema
     }()
 
     static let nativeDelegateTaskDefinition: ChatToolDefinition = {
         let normalized = try! JSONDecoder().decode(AnyCodable.self,
-            from: JSONEncoder().encode(delegateTaskDefinition.function.parameters))
+            from: JSONEncoder().encode(AnyCodable(delegateTaskSchema)))
         var schema = normalized.dictionaryValue!
         var properties = schema["properties"]!.dictionaryValue!
         var tasks = properties["tasks"]!.dictionaryValue!
         var item = tasks["items"]!.dictionaryValue!
         var fields = item["properties"]!.dictionaryValue!
-        fields["role"] = AnyCodable.from(json: ["type": "string", "enum": ["coding", "research"], "description": "research (default): investigates with file read/list/search, read_image and shell_execute (git log, grep, builds, tests), and the browser when allow_web is true; it has no file_write or file_edit and is told not to change files, though its shell is not technically read-only. coding: the same tools you have, to make and verify changes. Neither can delegate or use computer_use."])
+        fields["role"] = AnyCodable.from(json: ["type": "string", "enum": ["coding", "research"], "description": "research (default): investigates with file read/list/search, read_image and shell_execute (git log, grep, builds, tests), and the browser when allow_web is true; it has no file_write or file_edit and is told not to change files, though its shell is not technically read-only. coding: makes and verifies changes using the available tools. Neither role can delegate, use computer_use, ask the user, or manage schedules."])
         item["properties"] = AnyCodable(fields)
         tasks["items"] = AnyCodable(item)
         tasks["description"] = AnyCodable("1–3 subagent tasks, run in parallel.")
@@ -719,7 +713,7 @@ enum HarnessToolDefinitions {
         fileSearchDefinition,
         definition(
             name: "file_write",
-            description: "Create or replace a UTF-8 text file on this Mac.",
+            description: "Create or replace a UTF-8 text file on this Mac. Before replacing an existing file, read it with file_read in this conversation; read it again if it has changed.",
             properties: [
                 "path": .init(type: "string", description: "Absolute or relative file path."),
                 "content": .init(type: "string", description: "Complete UTF-8 file content."),
@@ -728,7 +722,7 @@ enum HarnessToolDefinitions {
         ),
         definition(
             name: "file_edit",
-            description: "Replace one unique exact text occurrence in a UTF-8 file on this Mac.",
+            description: "Replace one unique exact text occurrence in a UTF-8 file on this Mac. First read the file with file_read in this conversation; read it again if it has changed.",
             properties: [
                 "path": .init(type: "string", description: "Absolute or relative file path."),
                 "old_text": .init(type: "string", description: "Exact existing text; it must occur once."),
@@ -820,20 +814,6 @@ enum HarnessToolDefinitions {
             "amount": .init(type: "number", description: "Scroll amount in pixels (1-5000). Defaults to 600."),
             "timeout_seconds": .init(type: "number", description: "Timeout in seconds for wait_for_dom_stable (1-20, default 10)."),
             "tab_id": .init(type: "number", description: "A tab's number from list_tabs. Required for switch_tab; optional for close_tab."),
-        ],
-        required: ["action"]
-    )
-
-    static let researchBrowserUseDefinition: ChatToolDefinition = definition(
-        name: "browser_use",
-        description: "Interact with the web browser for read-only research. Inspect web pages via navigation, reading text/DOM, finding links, scrolling, and taking screenshots. Modifying web pages (click, type) is strictly forbidden.",
-        properties: [
-            "action": .init(type: "string", description: "The read-only browser action: navigate, get_page_info, get_text, get_readable, find_elements, scroll, screenshot, wait_for_dom_stable."),
-            "url": .init(type: "string", description: "URL to navigate to: http/https (a local dev server such as http://localhost:5173 included), or a local file as file:// or an absolute path (a built index.html, a report). Required for navigate."),
-            "selector": .init(type: "string", description: "CSS selector for target element. Optional for get_text, find_elements, scroll."),
-            "direction": .init(type: "string", description: "Scroll direction: 'up' or 'down'. Defaults to 'down'."),
-            "amount": .init(type: "number", description: "Scroll amount in pixels (1-5000). Defaults to 600."),
-            "timeout_seconds": .init(type: "number", description: "Timeout in seconds for wait_for_dom_stable (1-20, default 10)."),
         ],
         required: ["action"]
     )
@@ -930,7 +910,7 @@ enum HarnessToolDefinitions {
     )
 
     static var all: [ChatToolDefinition] {
-        workspaceTools + [readImageDefinition, browserUseDefinition, delegateTaskDefinition, mcpManageDefinition, scheduleManageDefinition]
+        workspaceTools + [readImageDefinition, browserUseDefinition, nativeDelegateTaskDefinition, mcpManageDefinition, scheduleManageDefinition]
     }
 
     private static func definition(

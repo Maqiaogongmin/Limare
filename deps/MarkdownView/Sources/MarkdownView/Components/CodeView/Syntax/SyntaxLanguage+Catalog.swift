@@ -10,6 +10,7 @@ extension SyntaxLanguage {
             }
         }
         add(.swift, "swift")
+        add(SyntaxLanguage(mode: .markdown), "markdown md")
         add(.cFamily, "c h cpp c++ cc cxx hpp hh hxx objc objective-c objectivec obj-c m mm cuda metal glsl hlsl arduino ino")
         add(.csharp, "cs csharp c# fsharp f#")
         add(.java, "java")

@@ -109,8 +109,13 @@ final class ToolExecutor {
     private let logs: DebugLogStore
     private let shellRunner: ShellRunner
     private let files: FileToolService
+    private let unscopedFileVersionID = UUID()
+    private var fileVersionConversationID: UUID {
+        hookExecutionScope?.conversationID ?? activeConversationIDProvider?() ?? browserActionConversationID ?? unscopedFileVersionID
+    }
     private let researchFiles: ResearchFileService
     private let memoryLocations: @MainActor () -> [URL]
+    private let memoryLongTermLocations: @MainActor () -> [URL]
     private let allowedReadDirectories: @MainActor () -> [URL]
     private let mcpStore: MCPStore?
     private var visionGroupResolver: VisionGroupResolver?
@@ -138,6 +143,7 @@ final class ToolExecutor {
     /// policy topology, and it knows no source or target format of its own.
     private var resourceConversionPolicies: ResourceConversionConsumerPolicies?
     var imageDataReader: @Sendable (URL) throws -> Data = { try Data(contentsOf: $0) }
+    var memoryCapacityReader: (URL) throws -> String = { try String(contentsOf: $0, encoding: .utf8) }
     private(set) var computerUseV2Engine: ComputerUseV2Engine?
     var computerUseRoute: ComputerUseExecutionRoute = .v2Production
     var runAuthorityResolver: (@Sendable () async -> Bool)?
@@ -157,6 +163,7 @@ final class ToolExecutor {
         researchFiles: ResearchFileService = ResearchFileService(),
         allowedReadDirectories: @escaping @MainActor () -> [URL] = { [] },
         memoryLocations: @escaping @MainActor () -> [URL] = { [] },
+        memoryLongTermLocations: @escaping @MainActor () -> [URL] = { [] },
         mcpStore: MCPStore? = nil,
         attachmentStore: AttachmentStore = AttachmentStore(),
         artifactStore: ArtifactStore? = nil,
@@ -181,6 +188,7 @@ final class ToolExecutor {
         self.files = files
         self.researchFiles = researchFiles
         self.memoryLocations = memoryLocations
+        self.memoryLongTermLocations = memoryLongTermLocations
         self.allowedReadDirectories = allowedReadDirectories
         self.mcpStore = mcpStore
         self.attachmentStore = attachmentStore
@@ -244,7 +252,9 @@ final class ToolExecutor {
         conversationTitle: String?,
         workspace: WorkspaceStore,
         modelSources: (sub: ConversationModelSource?, primary: ConversationModelSource?),
-        allowedReadDirectories: [URL]? = nil
+        allowedReadDirectories: [URL]? = nil,
+        memoryLocations: [URL]? = nil,
+        memoryLongTermLocations: [URL]? = nil
     ) -> ToolExecutor {
         let scoped = ToolExecutor(
             workspace: workspace,
@@ -255,7 +265,19 @@ final class ToolExecutor {
             files: files,
             researchFiles: researchFiles,
             allowedReadDirectories: { allowedReadDirectories ?? self.allowedReadDirectories() },
-            memoryLocations: self.memoryLocations,
+            memoryLocations: {
+                guard let memoryLocations else { return self.memoryLocations() }
+                return memoryLocations.enumerated().compactMap { index, url in
+                    // Project paths are fixed at capture; a later symlink must not redirect their grant.
+                    index < 2 || WorkspacePathResolver.canonicalPath(url) == url.standardizedFileURL.path ? url : nil
+                }
+            },
+            memoryLongTermLocations: {
+                guard let memoryLongTermLocations else { return self.memoryLongTermLocations() }
+                return memoryLongTermLocations.enumerated().compactMap { index, url in
+                    index == 0 || WorkspacePathResolver.canonicalPath(url) == url.standardizedFileURL.path ? url : nil
+                }
+            },
             mcpStore: mcpStore,
             attachmentStore: attachmentStore,
             artifactStore: artifactStore,
@@ -274,6 +296,7 @@ final class ToolExecutor {
         )
         scoped.setConversationContext(activeConversationID: { conversationID }, modelSources: { modelSources })
         scoped.imageDataReader = imageDataReader
+        scoped.memoryCapacityReader = memoryCapacityReader
         scoped.subagents = subagents
         scoped.scheduler = scheduler
         scoped.setComputerUseV2Engine(self.computerUseV2Engine)
@@ -724,7 +747,12 @@ final class ToolExecutor {
             summary = "Browser \(input.action.rawValue)"
         }
 
+        let tab = browserSessionStore.tab(for: convID)
+        let actionURL: String? = (input.action == .navigate || input.action == .newTab)
+            ? input.url : (tab?.runtime.webView.url?.absoluteString ?? tab?.currentURL)
+        let browserSite = requestsNetwork ? Self.browserSite(actionURL) : nil
         let request = ToolPermissionRequest(
+            conversationID: convID,
             toolName: "browser_use",
             summary: summary,
             workspaceURL: nil,
@@ -732,11 +760,18 @@ final class ToolExecutor {
             command: nil,
             environmentKeys: [],
             requestsNetwork: requestsNetwork,
-            isHighRisk: false
+            isHighRisk: false,
+            browserSite: browserSite
         )
 
         let approval = await authorize(request, onUpdate: onUpdate)
         guard approval != .denied else { return deniedOutcome() }
+
+        let currentTab = browserSessionStore.tab(for: convID)
+        if requestsNetwork, input.action != .navigate, input.action != .newTab,
+           (currentTab?.id != tab?.id || Self.browserSite(currentTab?.runtime.webView.url?.absoluteString ?? currentTab?.currentURL) != browserSite) {
+            throw ToolExecutorError.invalidArguments("The browser site changed while approval was pending. Inspect the current page and try again.")
+        }
 
         try Task.checkCancellation()
         onUpdate(.init(state: .running, approvalState: approval, output: "Browser \(input.action.rawValue)..."))
@@ -767,6 +802,20 @@ final class ToolExecutor {
             resultParts: resultParts,
             mechanicalTerminalFact: result.mechanicalTerminalFact
         )
+    }
+
+    nonisolated static func browserSite(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("/"), !trimmed.hasPrefix("~/") else { return nil }
+        let normalized = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
+        guard let url = URLComponents(string: normalized), let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme), let host = url.host?.lowercased(), !host.isEmpty else { return nil }
+        var origin = URLComponents()
+        origin.scheme = scheme
+        origin.host = host
+        origin.port = url.port
+        return origin.string
     }
 
     private func sanitizedBrowserHost(_ urlString: String) -> String {
@@ -815,7 +864,6 @@ final class ToolExecutor {
         // Full access runs outside the sandbox; otherwise only an escalation someone approved does.
         let unconfined = permissions.mode == .fullAccess || (arguments.requiresEscalation && approval == .approved)
 
-        onUpdate(.init(state: .running, approvalState: approval, output: ""))
         logs.info("Tool", "Starting shell_execute in \(cwd.path)\(unconfined ? " (outside the sandbox)" : "").")
         var environment = arguments.environment ?? [:]
         if environment["PATH"] == nil, let path = await LoginShellEnvironment.path() {
@@ -827,6 +875,7 @@ final class ToolExecutor {
         var observedShellEvent = false
         let streamShell: @MainActor () async throws -> Void = { [self] in
             do {
+            onUpdate(.init(state: .running, approvalState: approval, output: "", shellStartedAt: Date()))
             for try await event in shellRunner.stream(
                 ShellExecutionRequest(
                     command: command,
@@ -846,7 +895,7 @@ final class ToolExecutor {
                         maximumBytes: 131_072
                     )
                     let displayOutput = sanitizedShellText(rawDisplayOutput, masking: secretValues)
-                    onUpdate(.init(state: .running, approvalState: approval, output: displayOutput))
+                    onUpdate(.init(state: .running, approvalState: approval, output: displayOutput, shellOutputAt: Date()))
                 case .finished(let result):
                     finalResult = result
                 }
@@ -872,6 +921,11 @@ final class ToolExecutor {
             "truncated": result.truncated,
         ]
         payloadObject["exit_code"] = result.exitCode.map(Int.init) ?? NSNull()
+        if let silence = result.silentMillisecondsAtTimeout { payloadObject["silent_ms_at_timeout"] = silence }
+        if let elapsed = result.elapsedMillisecondsAtTimeout { payloadObject["elapsed_ms_at_timeout"] = elapsed }
+        if result.timedOut {
+            payloadObject["message"] = "The command exceeded its total runtime limit. Increase timeout_seconds or run it in the background with output redirected to a file."
+        }
         let payload = jsonString(payloadObject)
         let terminalState: ToolExecutionState
         if result.timedOut {
@@ -921,6 +975,7 @@ final class ToolExecutor {
         case .success(let window): boundedContent = window
         case .failure(let failure): throw ToolExecutorError.invalidArguments(failure.message)
         }
+        permissions.fileReadVersions.record(content, at: context.url, conversationID: fileVersionConversationID)
         onUpdate(.init(state: .completed, approvalState: approval, output: boundedContent))
         logs.info("Tool", "Read file \(context.url.path).")
         return .init(content: boundedContent, isError: false, approvalState: approval, durationMilliseconds: milliseconds(since: startedAt))
@@ -1308,11 +1363,13 @@ final class ToolExecutor {
         guard approval != .denied else { return deniedOutcome() }
         onUpdate(.init(state: .running, approvalState: approval, output: ""))
         let startedAt = ContinuousClock.now
+        try permissions.fileReadVersions.requireCurrent(at: context.url, conversationID: fileVersionConversationID)
         let count = try recordedWrite(context.url, call: call) { location in
             if let location { return try files.write(content: arguments.content, at: location) }
             return try files.write(url: context.url, content: arguments.content)
         }
-        let output = "Wrote \(count) bytes to \(context.url.path)."
+        permissions.fileReadVersions.record(arguments.content, at: context.url, conversationID: fileVersionConversationID)
+        let output = "Wrote \(count) bytes to \(context.url.path)." + memoryCapacityFeedback(for: context.url)
         onUpdate(.init(state: .completed, approvalState: approval, output: output))
         logs.info("Tool", output)
         return .init(content: output, isError: false, approvalState: approval, durationMilliseconds: milliseconds(since: startedAt))
@@ -1328,13 +1385,27 @@ final class ToolExecutor {
         guard approval != .denied else { return deniedOutcome() }
         onUpdate(.init(state: .running, approvalState: approval, output: ""))
         let startedAt = ContinuousClock.now
-        let count = try recordedWrite(context.url, call: call) { location in
-            try files.edit(url: context.url, oldText: arguments.oldText, newText: arguments.newText, writingTo: location)
+        try permissions.fileReadVersions.requireCurrent(at: context.url, conversationID: fileVersionConversationID)
+        let updated = try recordedWrite(context.url, call: call) { location in
+            try files.editContent(url: context.url, oldText: arguments.oldText, newText: arguments.newText, writingTo: location)
         }
-        let output = "Edited \(context.url.path); resulting file is \(count) bytes."
+        permissions.fileReadVersions.record(updated, at: context.url, conversationID: fileVersionConversationID)
+        let count = updated.utf8.count
+        let output = "Edited \(context.url.path); resulting file is \(count) bytes." + memoryCapacityFeedback(for: context.url)
         onUpdate(.init(state: .completed, approvalState: approval, output: output))
         logs.info("Tool", output)
         return .init(content: output, isError: false, approvalState: approval, durationMilliseconds: milliseconds(since: startedAt))
+    }
+
+    private func memoryCapacityFeedback(for url: URL) -> String {
+        let target = WorkspacePathResolver.canonicalPath(url)
+        guard memoryLongTermLocations().contains(where: { WorkspacePathResolver.canonicalPath($0) == target }) else { return "" }
+        do {
+            let content = try memoryCapacityReader(url)
+            return MemoryStore.capacityWarning(for: content).map { "\n" + $0 } ?? ""
+        } catch {
+            return "\nMemory capacity warning: the file was written successfully, but its capacity could not be checked."
+        }
     }
 
     private static func artifactUUID(from source: String) -> UUID? {
@@ -1486,7 +1557,12 @@ final class ToolExecutor {
             throw ToolExecutorError.invalidArguments("Tool call arguments are malformed or incomplete JSON: \(error.localizedDescription)")
         }
 
-        let isHTTP = mcpStore.servers.first(where: { $0.id == serverID })?.isHTTP ?? false
+        guard let server = mcpStore.servers.first(where: { $0.id == serverID }) else {
+            throw ToolExecutorError.unknownTool("MCP server '\(serverID)' is not configured.")
+        }
+        guard let fingerprint = Self.mcpServerFingerprint(server) else {
+            throw ToolExecutorError.invalidArguments("The MCP server configuration could not be checked for approval.")
+        }
         let request = ToolPermissionRequest(
             toolName: call.function.name,
             summary: String(localized: "Call MCP tool '\(toolName)' on '\(serverID)'"),
@@ -1494,11 +1570,17 @@ final class ToolExecutor {
             affectedURLs: [],
             command: nil,
             environmentKeys: [],
-            requestsNetwork: isHTTP,
-            isHighRisk: false
+            requestsNetwork: server.isHTTP,
+            isHighRisk: false,
+            mcpTool: MCPToolGrant(serverID: serverID, toolName: toolName, serverFingerprint: fingerprint)
         )
         let approval = await authorize(request, onUpdate: onUpdate)
         guard approval != .denied else { return deniedOutcome() }
+
+        guard let currentServer = mcpStore.servers.first(where: { $0.id == serverID }),
+              Self.mcpServerFingerprint(currentServer) == fingerprint else {
+            throw ToolExecutorError.invalidArguments("The MCP server configuration changed while approval was pending. Inspect it and try again.")
+        }
 
         onUpdate(.init(state: .running, approvalState: approval, output: ""))
         let convID = hookExecutionScope?.conversationID ?? activeConversationIDProvider?() ?? browserActionConversationID
@@ -1523,6 +1605,13 @@ final class ToolExecutor {
             attachments: result.attachments,
             resultParts: result.resultParts
         )
+    }
+
+    private nonisolated static func mcpServerFingerprint(_ server: MCPServerConfig) -> String? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let data = try? encoder.encode(server) else { return nil }
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     private struct MCPManageArguments: Decodable {
@@ -2027,7 +2116,7 @@ final class ToolExecutor {
         } else {
             scopedRequest = request
         }
-        if permissions.mode != .fullAccess, case .requiresApproval = PermissionEvaluator.evaluate(scopedRequest, allowedReadDirectories: allowedReadDirectories, memoryLocations: memoryLocations()) {
+        if permissions.mode != .fullAccess, !permissions.hasRememberedGrant(for: scopedRequest), case .requiresApproval = PermissionEvaluator.evaluate(scopedRequest, allowedReadDirectories: allowedReadDirectories, memoryLocations: memoryLocations()) {
             onUpdate(.init(state: .awaitingApproval, approvalState: .awaitingApproval, output: ""))
         }
         let turnReviewer = TurnReviewContext.activeReviewer

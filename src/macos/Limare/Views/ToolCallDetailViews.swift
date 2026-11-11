@@ -154,14 +154,37 @@ private struct PlanItemRow: View {
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(.secondary)
                 Text(item.step).foregroundStyle(.secondary)
             case .inProgress:
-                Image(systemName: "circle.inset.filled").foregroundStyle(.primary)
-                Text(item.step).fontWeight(.semibold).foregroundStyle(.primary)
+                Image(systemName: "circle").foregroundStyle(.secondary)
+                Text(item.step).foregroundStyle(.primary)
             case .pending:
-                Image(systemName: "circle").foregroundStyle(.tertiary)
-                Text(item.step).foregroundStyle(.secondary)
+                Image(systemName: "circle.dashed").foregroundStyle(.tertiary)
+                Text(item.step).foregroundStyle(.primary)
             }
         }
         .font(AppTypography.interfaceSubheadline)
         .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// A turn's live or finished `update_plan` checklist and completion progress, shown outside the
+/// execution fold so the plan and its completion status remain visible without opening tool history.
+struct TurnPlanView: View {
+    let items: [ToolCallDetail.PlanItem]
+
+    var body: some View {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: AppSpacing.xxSmall) {
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    PlanItemRow(item: item)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .textSelection(.enabled)
+        }
+        .frame(maxHeight: 180)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(AppSpacing.medium)
+        .raisedCardSurface()
+        .accessibilityIdentifier("turn.plan")
     }
 }

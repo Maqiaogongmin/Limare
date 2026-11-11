@@ -1,6 +1,166 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Fork from this message" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从此消息分叉"
+          }
+        }
+      }
+    },
+    "Fork conversation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分叉对话"
+          }
+        }
+      }
+    },
+    "Use the same folder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沿用当前文件夹"
+          }
+        }
+      }
+    },
+    "Create a new worktree" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建工作树"
+          }
+        }
+      }
+    },
+    "The fork includes this message. Using the same folder means both conversations can change the same files. A new worktree starts from the current commit; uncommitted changes are not copied, except files covered by .worktreeinclude." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分叉包含这条消息。沿用文件夹时，新旧对话会修改同一份文件。新工作树从当前提交创建，未提交的改动不会复制；.worktreeinclude 指定的文件除外。"
+          }
+        }
+      }
+    },
+    "Could not fork conversation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法分叉对话"
+          }
+        }
+      }
+    },
+    "This fork and its source use the same folder and can change the same files." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新旧对话使用同一文件夹，会修改同一份文件。"
+          }
+        }
+      }
+    },
+    "The worktree could not be created: %@. This fork still uses the same folder as its source." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法创建工作树：%1$@。分叉仍与原对话使用同一文件夹。"
+          }
+        }
+      }
+    },
+    "Another conversation shares this worktree. Keep the folder or move that conversation before removing it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "另一个对话正在共享此工作树。移除前请保留文件夹或更改该对话的目录。"
+          }
+        }
+      }
+    },
+    "The conversation cannot start in a worktree." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此对话无法在工作树中启动。"
+          }
+        }
+      }
+    },
+    "command" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "命令"
+          }
+        }
+      }
+    },
+    "Running %@ · %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在执行 %1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "No output for %lld seconds" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已 %lld 秒无输出"
+          }
+        }
+      }
+    },
+    "Increase timeout_seconds, or run in the background and redirect output to a file." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可以调大 timeout_seconds，或让命令在后台运行并将输出重定向到文件。"
+          }
+        }
+      }
+    },
+    "The command timed out after %@. No output for %@ at timeout. %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "命令运行 %1$@ 后超时，超时前已 %2$@ 无输出。%3$@"
+          }
+        }
+      }
+    },
+    "The command timed out after %@. %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "命令运行 %1$@ 后超时。%2$@"
+          }
+        }
+      }
+    },
     "" : {
       "shouldTranslate" : false
     },
@@ -34,9 +194,6 @@
       "shouldTranslate" : false
     },
     "%@  %@" : {
-      "shouldTranslate" : false
-    },
-    "%@ %@" : {
       "shouldTranslate" : false
     },
     "%@ (Invalid)" : {
@@ -230,6 +387,7 @@
       }
     },
     "%@ ms" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -2150,6 +2308,16 @@
         }
       }
     },
+    "Allow %@ for This Conversation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在本会话中允许 %@"
+          }
+        }
+      }
+    },
     "Allow Computer Use to control “%@”?" : {
       "comment" : "Remote Access page (RemoteWeb)",
       "extractionState" : "manual",
@@ -2192,6 +2360,16 @@
         }
       }
     },
+    "Allow Site for This Conversation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本会话允许此站点"
+          }
+        }
+      }
+    },
     "Allow This App" : {
       "comment" : "Remote Access page (RemoteWeb)",
       "extractionState" : "manual",
@@ -2210,6 +2388,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在此对话中允许"
+          }
+        }
+      }
+    },
+    "Allowed MCP Tools" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已允许的 MCP 工具"
           }
         }
       }
@@ -2262,6 +2450,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "总是"
+          }
+        }
+      }
+    },
+    "Always Allow This MCP Tool" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "始终允许此 MCP 工具"
           }
         }
       }
@@ -3202,6 +3400,16 @@
         }
       }
     },
+    "Browser Sites Allowed for Conversations" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话中允许的浏览器站点"
+          }
+        }
+      }
+    },
     "Browser action" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3413,6 +3621,7 @@
       }
     },
     "Cannot start an explicit outcome run while this conversation is busy." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -4146,6 +4355,7 @@
       }
     },
     "Codex Project Config" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -4156,6 +4366,7 @@
       }
     },
     "Codex User Config" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6115,16 +6326,6 @@
         }
       }
     },
-    "Danger" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "危险"
-          }
-        }
-      }
-    },
     "Dark" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7977,7 +8178,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "故障转移"
+            "value" : "按顺序替补"
           }
         }
       }
@@ -7987,7 +8188,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "故障转移行为"
+            "value" : "替补切换时机"
           }
         }
       }
@@ -8526,7 +8727,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "全局"
+            "value" : "通用"
           }
         }
       }
@@ -9947,6 +10148,7 @@
       }
     },
     "Local" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -11695,7 +11897,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "没有全局技能"
+            "value" : "没有通用技能"
           }
         }
       }
@@ -12299,7 +12501,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在全局位置中没有找到技能。"
+            "value" : "在通用目录中没有找到技能。"
           }
         }
       }
@@ -14244,6 +14446,7 @@
       }
     },
     "Raw Data" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -15178,7 +15381,17 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "重新扫描项目技能和全局技能"
+            "value" : "重新扫描项目技能和通用技能"
+          }
+        }
+      }
+    },
+    "Plan" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "计划"
           }
         }
       }
@@ -15786,6 +15999,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "审核…"
+          }
+        }
+      }
+    },
+    "Revoke" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "撤销"
           }
         }
       }
@@ -18425,6 +18648,7 @@
       }
     },
     "The explicit outcome run was not admitted because this conversation is busy." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -19845,6 +20069,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法载入此 Hook 包。"
+          }
+        }
+      }
+    },
+    "This MCP tool can perform actions through its server." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此 MCP 工具可以通过其服务器执行操作。"
           }
         }
       }

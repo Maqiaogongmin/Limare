@@ -343,6 +343,16 @@ private struct PermissionApprovalView: View {
                 Button("Deny", role: .cancel) {
                     appState.permissions.resolvePendingApproval(id: approval.id, approved: false)
                 }
+                if approval.mcpTool != nil {
+                    Button("Always Allow This MCP Tool") {
+                        appState.permissions.resolvePendingApproval(id: approval.id, approved: true, rememberMCPTool: true)
+                    }
+                }
+                if let site = approval.browserSite, approval.conversationID != nil {
+                    Button("Allow \(site) for This Conversation") {
+                        appState.permissions.resolvePendingApproval(id: approval.id, approved: true, rememberBrowserSite: true)
+                    }
+                }
                 Button("Allow Once") {
                     appState.permissions.resolvePendingApproval(id: approval.id, approved: true)
                 }

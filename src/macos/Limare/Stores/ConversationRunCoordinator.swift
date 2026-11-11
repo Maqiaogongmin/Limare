@@ -24,14 +24,13 @@ enum ConversationRunEvent {
     case messagesChanged(conversationID: UUID)
     case providerHistoryUpdated(conversationID: UUID, history: [ChatRequestMessage])
     case runFinished(conversationID: UUID, runID: UUID, status: ConversationRunStatus, error: String?)
-    case outcomeHandoff(conversationID: UUID, handoff: OutcomeHandoff)
 
     var conversationID: UUID {
         switch self {
         case .turnStarted(let id, _), .reasoningDelta(let id, _, _), .textDelta(let id, _, _),
              .toolCallAccumulated(let id, _, _, _), .toolUpdated(let id, _, _, _), .toolOutcome(let id, _, _, _),
              .assistantCompleted(let id, _, _, _, _, _), .messagesChanged(let id),
-             .providerHistoryUpdated(let id, _), .runFinished(let id, _, _, _), .outcomeHandoff(let id, _):
+             .providerHistoryUpdated(let id, _), .runFinished(let id, _, _, _):
             id
         }
     }
@@ -132,9 +131,9 @@ final class ConversationRunCoordinator {
         let summary: String
     }
 
-    private func captureMemorySnapshot(conversationID: UUID, enabled: Bool = true) -> MemoryRunSnapshot {
+    private func captureMemorySnapshot(conversationID: UUID, enabled: Bool = true, workspace: URL? = nil) -> MemoryRunSnapshot {
         let shouldProject = enabled && (conversationStore?.shouldProjectMemory(for: conversationID) ?? true)
-        let captured = memory?.projectPromptSnapshot(enabled: shouldProject)
+        let captured = memory?.projectPromptSnapshot(enabled: shouldProject, workspace: workspace)
         let outcome = memoryProjectionOutcome(shouldProject: shouldProject, projected: captured != nil)
         return MemoryRunSnapshot(prompt: captured, kind: outcome.kind, summary: outcome.summary)
     }
@@ -150,23 +149,6 @@ final class ConversationRunCoordinator {
             return ("memory.failed", "Memory projection failed closed")
         }
     }
-
-    @ObservationIgnored
-    private var outcomeDeclarations: [UUID: OutcomeRunDeclaration] = [:]
-    @ObservationIgnored
-    private var outcomeRunConversations: [UUID: UUID] = [:]
-    @ObservationIgnored
-    private var outcomeReceipts: [UUID: [EvidenceReceipt]] = [:]
-    @ObservationIgnored
-    private var outcomeVerificationResults: [UUID: [VerificationResult]] = [:]
-    // Ephemeral index of canonical, durably committed CU facts; never a verdict or history owner.
-    @ObservationIgnored
-    private var lastComputerUseTerminal: [UUID: (callID: String, committedAt: Date, dispatched: Bool)] = [:]
-    @ObservationIgnored
-    var guiVerifierRuntime: MacOSGUIVerifierRuntime = .shared
-    @ObservationIgnored
-    var guiVerifierProjectPath: String = "src/macos/Limare.xcodeproj"
-
 
     @ObservationIgnored
     private weak var conversationStore: ConversationStore?
@@ -856,19 +838,12 @@ final class ConversationRunCoordinator {
     }
 
     func conversationID(forRunID runID: UUID) -> UUID? {
-        activeRuns.values.first(where: { $0.id == runID })?.conversationID ?? outcomeRunConversations[runID]
+        activeRuns.values.first(where: { $0.id == runID })?.conversationID
     }
 
 
     func testInjectActiveRun(_ conversationID: UUID, run: ConversationRun) {
         activeRuns[conversationID] = run
-    }
-
-    func testInjectOutcomeDeclaration(runID: UUID, declaration: OutcomeRunDeclaration, conversationID: UUID? = nil) {
-        outcomeDeclarations[runID] = declaration
-        if let conversationID {
-            outcomeRunConversations[runID] = conversationID
-        }
     }
 
     /// Delivers `event` to the subscribers as if the run had produced it.
@@ -1190,7 +1165,6 @@ final class ConversationRunCoordinator {
         runStartReason: RunStartReason = .userPrompt,
         recoveredFromRunID: UUID? = nil,
         explicitWorkingDirectory: URL? = nil,
-        outcomeDeclaration: OutcomeRunDeclaration? = nil,
         executionPolicy: RunExecutionPolicy = .full,
         subagentRunID: UUID? = nil,
         subagentInstruction: String? = nil,
@@ -1225,10 +1199,6 @@ final class ConversationRunCoordinator {
             runProtectionHints[run.id] = ContextProtectionHints(mandatoryUserMessageIDs: [admitted.id])
         } else {
             runProtectionHints[run.id] = ContextProtectionHints()
-        }
-        if let outcomeDeclaration {
-            outcomeDeclarations[run.id] = outcomeDeclaration
-            outcomeRunConversations[run.id] = conversationID
         }
         activeMutationOwners[conversationID] = run.id
         if let instruction = subagentInstruction, isNativeChild {
@@ -1296,10 +1266,6 @@ final class ConversationRunCoordinator {
                 activeRuns[conversationID]?.status = .failed
                 activeRuns[conversationID]?.completedAt = Date()
                 activeRuns[conversationID]?.error = error.localizedDescription
-                outcomeDeclarations.removeValue(forKey: run.id)
-                outcomeRunConversations.removeValue(forKey: run.id)
-                outcomeReceipts.removeValue(forKey: run.id)
-                outcomeVerificationResults.removeValue(forKey: run.id)
                 activeMutationOwners.removeValue(forKey: conversationID)
                 runProtectionHints.removeValue(forKey: run.id)
                 runtimeEvents.record(conversationID: conversationID, runID: run.id, domain: .run, kind: "run.failed", severity: .error, summary: "Failed to persist active run marker: \(error.localizedDescription)")
@@ -1320,10 +1286,6 @@ final class ConversationRunCoordinator {
                 activeRuns[conversationID]?.status = .failed
                 activeRuns[conversationID]?.completedAt = Date()
                 activeRuns[conversationID]?.error = error.localizedDescription
-                outcomeDeclarations.removeValue(forKey: run.id)
-                outcomeRunConversations.removeValue(forKey: run.id)
-                outcomeReceipts.removeValue(forKey: run.id)
-                outcomeVerificationResults.removeValue(forKey: run.id)
                 activeMutationOwners.removeValue(forKey: conversationID)
                 runProtectionHints.removeValue(forKey: run.id)
                 try? recoveryStore?.recordRunTerminal(conversationID: conversationID, runID: run.id, status: .failed, error: error.localizedDescription)
@@ -1344,14 +1306,19 @@ final class ConversationRunCoordinator {
         }
         let skillSnapshot = allowSkills ? (skills?.runSnapshot(workspaceURL: scopedWorkspace.url, runID: run.id) ?? .init(promptFragment: "", readableDirectories: [])) : .init(promptFragment: "", readableDirectories: [])
         runSkillSnapshots[run.id] = skillSnapshot
-        runMemorySnapshots[run.id] = captureMemorySnapshot(conversationID: conversationID, enabled: allowSkills)
+        // Managed per-conversation scratch directories do not create permanent project memory.
+        let hasExplicitMemoryWorkspace = (explicitWorkingDirectory != nil || conversationStore?.effectiveWorkspaceConfiguration(for: conversationID) != nil)
+            && !(scopedWorkspace.url.map { conversationStore?.isManagedWorkingDirectory($0) ?? false } ?? false)
+        runMemorySnapshots[run.id] = captureMemorySnapshot(conversationID: conversationID, enabled: allowSkills, workspace: hasExplicitMemoryWorkspace ? scopedWorkspace.url : nil)
         let scopedExecutor = toolExecutor.scoped(
             for: conversationID,
             runID: run.id,
             conversationTitle: convRecord?.displayTitle,
             workspace: scopedWorkspace,
             modelSources: modelSources,
-            allowedReadDirectories: ExtensionContribution.projectReadableDirectories(from: skillSnapshot.contributions)
+            allowedReadDirectories: ExtensionContribution.projectReadableDirectories(from: skillSnapshot.contributions),
+            memoryLocations: runMemorySnapshots[run.id]?.prompt?.memoryLocations,
+            memoryLongTermLocations: runMemorySnapshots[run.id]?.prompt?.longTermLocations
         )
         if let binding = subagentRuns[run.id] {
             scopedExecutor.setSubagent(binding, coordinator: subagents)
@@ -1372,7 +1339,6 @@ final class ConversationRunCoordinator {
                 self.runSkillSnapshots.removeValue(forKey: run.id)
                 self.runMemorySnapshots.removeValue(forKey: run.id)
                 self.runLoadedDeferredTools.removeValue(forKey: run.id)
-                self.lastComputerUseTerminal.removeValue(forKey: run.id)
                 if self.taskRunIDs[conversationID] == run.id {
                     self.runTasks.removeValue(forKey: conversationID)
                     self.taskRunIDs.removeValue(forKey: conversationID)
@@ -1646,86 +1612,130 @@ final class ConversationRunCoordinator {
             model: model
         )
 
-        do {
-            let loopResult = try await runLoop(
-                conversationID: conversationID,
-                runID: runID,
-                provider: provider,
-                apiKey: apiKey,
-                modelID: modelID,
-                options: options,
-                scopedWorkspace: scopedWorkspace,
-                scopedExecutor: scopedExecutor,
-                fallbackConversation: fallbackConversation
-            )
-            if let pendingError = pendingFatalPersistenceErrors[runID] {
-                throw pendingError
-            }
-            guard hasMutationAuthority(conversationID: conversationID, runID: runID) else { return }
-            runtimeEvents.record(conversationID: conversationID, runID: runID, domain: .modelRouting, kind: "model.selected", summary: "Using \(model?.displayName ?? modelID)", metadata: ["provider": provider.name, "providerID": provider.id.uuidString, "model": modelID])
-            await finalizeSuccessfulRun(conversationID: conversationID, runID: runID, lastAssistantMessage: loopResult.finalText, model: modelID)
-            logs.info("ConversationRun", "Run completed for conversation '\(conversationID)' with model \(modelID).")
-        } catch is CancellationError {
-            guard hasMutationAuthority(conversationID: conversationID, runID: runID) else {
-                logs.info("ConversationRun", "Revoked run '\(runID)' unwound on CancellationError; skipped mutation.")
-                runtimeEvents.record(conversationID: conversationID, runID: runID, domain: .run, kind: "run.staleCancellationUnwound", summary: "Revoked run unwound without mutation")
-                onStaleCancellationUnwound?(conversationID, runID)
-                return
-            }
-            revokeMutationAuthority(conversationID: conversationID, runID: runID)
-            markAuthoritativeCancellation(conversationID: conversationID, runID: runID)
-            finishRun(conversationID: conversationID, runID: runID, status: .cancelled, error: String(localized: "Cancelled."), model: modelID)
-            logs.info("ConversationRun", "Run cancelled for conversation '\(conversationID)'.")
-        } catch {
-            guard hasMutationAuthority(conversationID: conversationID, runID: runID) else {
-                logs.info("ConversationRun", "Revoked run '\(runID)' unwound on error; skipped mutation.")
-                return
-            }
-            recordModelRejection(error, providerID: provider.id, modelID: modelID)
-            recordFailure(conversationID: conversationID, runID: runID, error: error, provider: provider.name, modelID: modelID)
+        let attemptStartMessageCount = conversationMessages(for: conversationID).count
+        var currentRetryCount = 0
+        var candidateToolExecutionOccurred = false
+        var hasCommittedToolCheckpoint = false
+        var lastCommittedCheckpointMessageCount = attemptStartMessageCount
 
-            var activeSecrets: [String] = []
-            if !apiKey.isEmpty { activeSecrets.append(apiKey) }
-            for (_, headerVal) in provider.extraHeaders where !headerVal.isEmpty {
-                activeSecrets.append(headerVal)
-            }
-            let safeMessage = SecretMasker.redactCredentials(error.localizedDescription, secrets: activeSecrets)
-
-            var presentationMessage: String
-            if let ctxErr = error as? ContextLifecycleError {
-                presentationMessage = ctxErr.userFacingMessage
-            } else if let providerError = error as? ProviderClientError,
-                      case .http(let status, let msg) = providerError,
-                      ProviderContextOverflowRecognizer.isOverflow(status: status, message: msg) {
-                presentationMessage = String(localized: "The provider rejected the request because it exceeded the model's maximum context length. Select a model with a larger context window or reduce conversation context.")
-            } else if let providerError = error as? ProviderClientError,
-                      case .responsesFailed(let code, let msg) = providerError,
-                      ProviderContextOverflowRecognizer.isOverflow(responsesCode: code, message: msg) {
-                presentationMessage = String(localized: "The provider rejected the request because it exceeded the model's maximum context length. Select a model with a larger context window or reduce conversation context.")
-            } else {
-                presentationMessage = safeMessage
-            }
-
-            if providers.providers.first(where: { $0.id == provider.id })?.models.first(where: { $0.id == modelID })?.discovery.isRemoved == true {
-                presentationMessage += String(localized: " This model was also absent from a complete provider list and rejected as model-not-found.")
-            }
-            let isContextRelated = error is ContextLifecycleError || (error as? ProviderClientError).map { err in
-                switch err {
-                case .http(let status, let msg): return ProviderContextOverflowRecognizer.isOverflow(status: status, message: msg)
-                case .responsesFailed(let code, let msg): return ProviderContextOverflowRecognizer.isOverflow(responsesCode: code, message: msg)
-                default: return false
+        while true {
+            do {
+                let loopResult = try await runLoop(
+                    conversationID: conversationID,
+                    runID: runID,
+                    provider: provider,
+                    apiKey: apiKey,
+                    modelID: modelID,
+                    options: options,
+                    scopedWorkspace: scopedWorkspace,
+                    scopedExecutor: scopedExecutor,
+                    fallbackConversation: fallbackConversation,
+                    onToolExecutionStarted: {
+                        candidateToolExecutionOccurred = true
+                    },
+                    onToolOutcomeCommitted: { committedCount in
+                        hasCommittedToolCheckpoint = true
+                        lastCommittedCheckpointMessageCount = committedCount
+                        currentRetryCount = 0
+                    }
+                )
+                if let pendingError = pendingFatalPersistenceErrors[runID] {
+                    throw pendingError
                 }
-            } == true
+                guard hasMutationAuthority(conversationID: conversationID, runID: runID) else { return }
+                runtimeEvents.record(conversationID: conversationID, runID: runID, domain: .modelRouting, kind: "model.selected", summary: "Using \(model?.displayName ?? modelID)", metadata: ["provider": provider.name, "providerID": provider.id.uuidString, "model": modelID])
+                await finalizeSuccessfulRun(conversationID: conversationID, runID: runID, lastAssistantMessage: loopResult.finalText, model: modelID)
+                logs.info("ConversationRun", "Run completed for conversation '\(conversationID)' with model \(modelID).")
+                return
+            } catch is CancellationError {
+                guard hasMutationAuthority(conversationID: conversationID, runID: runID) else {
+                    logs.info("ConversationRun", "Revoked run '\(runID)' unwound on CancellationError; skipped mutation.")
+                    runtimeEvents.record(conversationID: conversationID, runID: runID, domain: .run, kind: "run.staleCancellationUnwound", summary: "Revoked run unwound without mutation")
+                    onStaleCancellationUnwound?(conversationID, runID)
+                    return
+                }
+                revokeMutationAuthority(conversationID: conversationID, runID: runID)
+                markAuthoritativeCancellation(conversationID: conversationID, runID: runID)
+                finishRun(conversationID: conversationID, runID: runID, status: .cancelled, error: String(localized: "Cancelled."), model: modelID)
+                logs.info("ConversationRun", "Run cancelled for conversation '\(conversationID)'.")
+                return
+            } catch {
+                guard hasMutationAuthority(conversationID: conversationID, runID: runID) else {
+                    logs.info("ConversationRun", "Revoked run '\(runID)' unwound on error; skipped mutation.")
+                    return
+                }
+                recordModelRejection(error, providerID: provider.id, modelID: modelID)
+                let failureClass = ModelRoutingClassifier.classify(error)
+                let decision = ModelRoutingClassifier.decide(
+                    failureClass: failureClass,
+                    strategy: .limited,
+                    toolExecutionOccurred: candidateToolExecutionOccurred,
+                    hasCommittedToolCheckpoint: hasCommittedToolCheckpoint,
+                    currentRetryCount: currentRetryCount,
+                    maxRetries: hasCommittedToolCheckpoint ? 2 : 0
+                )
+                if case .retryCurrent(let nextAttempt, let delaySeconds, let reason) = decision {
+                    recordFailure(conversationID: conversationID, runID: runID, error: error, provider: provider.name, modelID: modelID, recoverable: "true", decision: decision.eventDecision)
+                    runtimeEvents.record(conversationID: conversationID, runID: runID, domain: .modelRouting, kind: "model.retrying", severity: .warning, summary: "Retrying the current model", metadata: ["provider": provider.name, "providerID": provider.id.uuidString, "model": modelID, "decision": "retry", "attempt": "\(nextAttempt)"])
+                    var currentMsgs = conversationMessages(for: conversationID)
+                    let rollbackTarget = candidateToolExecutionOccurred ? lastCommittedCheckpointMessageCount : attemptStartMessageCount
+                    if currentMsgs.count > rollbackTarget {
+                        currentMsgs = Array(currentMsgs.prefix(rollbackTarget)) + currentMsgs.dropFirst(rollbackTarget).filter { $0.role == .assistant && $0.state == .failed && ($0.toolCalls.isEmpty || $0.rejectedAssistantTurn != nil) }
+                        updateConversationMessages(conversationID: conversationID, messages: currentMsgs, expectedRunID: runID)
+                    }
+                    currentRetryCount = nextAttempt
+                    logs.info("ConversationRun", "Retrying direct model '\(provider.name) / \(modelID)' (attempt \(nextAttempt)) after \(delaySeconds)s delay: \(reason).")
+                    if delaySeconds > 0 {
+                        try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
+                    }
+                    continue
+                }
+                recordFailure(conversationID: conversationID, runID: runID, error: error, provider: provider.name, modelID: modelID)
 
-            if isContextRelated {
-                if !removeEmptyStreamingMessage(conversationID: conversationID, runID: runID) {
+                var activeSecrets: [String] = []
+                if !apiKey.isEmpty { activeSecrets.append(apiKey) }
+                for (_, headerVal) in provider.extraHeaders where !headerVal.isEmpty {
+                    activeSecrets.append(headerVal)
+                }
+                let safeMessage = SecretMasker.redactCredentials(error.localizedDescription, secrets: activeSecrets)
+
+                var presentationMessage: String
+                if let ctxErr = error as? ContextLifecycleError {
+                    presentationMessage = ctxErr.userFacingMessage
+                } else if let providerError = error as? ProviderClientError,
+                          case .http(let status, let msg) = providerError,
+                          ProviderContextOverflowRecognizer.isOverflow(status: status, message: msg) {
+                    presentationMessage = String(localized: "The provider rejected the request because it exceeded the model's maximum context length. Select a model with a larger context window or reduce conversation context.")
+                } else if let providerError = error as? ProviderClientError,
+                          case .responsesFailed(let code, let msg) = providerError,
+                          ProviderContextOverflowRecognizer.isOverflow(responsesCode: code, message: msg) {
+                    presentationMessage = String(localized: "The provider rejected the request because it exceeded the model's maximum context length. Select a model with a larger context window or reduce conversation context.")
+                } else {
+                    presentationMessage = safeMessage
+                }
+
+                if providers.providers.first(where: { $0.id == provider.id })?.models.first(where: { $0.id == modelID })?.discovery.isRemoved == true {
+                    presentationMessage += String(localized: " This model was also absent from a complete provider list and rejected as model-not-found.")
+                }
+                let isContextRelated = error is ContextLifecycleError || (error as? ProviderClientError).map { err in
+                    switch err {
+                    case .http(let status, let msg): return ProviderContextOverflowRecognizer.isOverflow(status: status, message: msg)
+                    case .responsesFailed(let code, let msg): return ProviderContextOverflowRecognizer.isOverflow(responsesCode: code, message: msg)
+                    default: return false
+                    }
+                } == true
+
+                if isContextRelated {
+                    if !removeEmptyStreamingMessage(conversationID: conversationID, runID: runID) {
+                        markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: presentationMessage)
+                    }
+                } else {
                     markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: presentationMessage)
                 }
-            } else {
-                markLastStreamingMessageFailed(conversationID: conversationID, runID: runID, fallback: presentationMessage)
+                finishRun(conversationID: conversationID, runID: runID, status: .failed, error: presentationMessage, model: modelID)
+                logs.error("ConversationRun", "Run failed for conversation '\(conversationID)': \(safeMessage)")
+                return
             }
-            finishRun(conversationID: conversationID, runID: runID, status: .failed, error: presentationMessage, model: modelID)
-            logs.error("ConversationRun", "Run failed for conversation '\(conversationID)': \(safeMessage)")
         }
     }
 
@@ -1905,7 +1915,7 @@ final class ConversationRunCoordinator {
                 let failureClass = ModelRoutingClassifier.classify(error)
                 let decision = ModelRoutingClassifier.decide(
                     failureClass: failureClass,
-                    strategy: group.fallbackStrategy,
+                    strategy: hasCommittedToolCheckpoint ? .limited : group.fallbackStrategy,
                     toolExecutionOccurred: candidateToolExecutionOccurred,
                     hasCommittedToolCheckpoint: hasCommittedToolCheckpoint,
                     currentRetryCount: currentRetryCount,
@@ -2473,8 +2483,6 @@ final class ConversationRunCoordinator {
                     do {
                         try self.mutationSink?.commitDurableMessages(id: conversationID, messages: postToolMsgs)
                         self.runMessages[conversationID] = postToolMsgs
-                        let durableRecord = postToolMsgs[msgIndex].toolCalls[recordIndex]
-                        self.accumulateOutcomeReceipts(runID: runID, assistantMessageID: resolvedAssistantID, record: durableRecord)
                         self.handleToolOutcome(conversationID: conversationID, runID: runID, messageID: resolvedAssistantID, recordID: resolvedRecordID, outcome: outcome)
                         onToolOutcomeCommitted?(postToolMsgs.count)
                     } catch {
@@ -2670,62 +2678,6 @@ final class ConversationRunCoordinator {
     ) async {
         guard !Task.isCancelled, hasMutationAuthority(conversationID: conversationID, runID: runID),
               activeRuns[conversationID]?.status == .running else { return }
-        if let declaration = outcomeDeclarations[runID] {
-            let requirements = declaration.requirements.compactMap { requirement -> VerificationRequirement? in
-                guard case .verification(let value) = requirement,
-                      value.computerUseDependency == .required else { return nil }
-                return value
-            }
-            if !requirements.isEmpty {
-                runtimeEvents.record(conversationID: conversationID, runID: runID, domain: .run,
-                    kind: "verification.phase.started", summary: "Declared CU verification before terminal completion")
-                for requirement in requirements {
-                    guard !Task.isCancelled, hasMutationAuthority(conversationID: conversationID, runID: runID) else { return }
-                    runtimeEvents.record(conversationID: conversationID, runID: runID, domain: .tool,
-                        kind: "verification.requirement.started", summary: "Declared verification",
-                        metadata: ["requirementID": requirement.requirementID])
-                    let identity = requirement.concreteVerifierIdentity ?? "unavailable"
-                    func unavailable(_ state: VerificationResultState) {
-                        _ = recordVerificationResult(runID: runID, result: VerificationResult(
-                            requirementID: requirement.requirementID, verifierIdentity: identity,
-                            resultState: state, evidenceReferences: VerificationEvidenceReferences(receiptIDs: []),
-                            correlation: VerificationCorrelation(runID: runID)))
-                    }
-                    guard let action = lastComputerUseTerminal[runID], action.dispatched else {
-                        unavailable(.notRun)
-                        continue
-                    }
-                    switch requirement.factClass {
-                    case .deterministic, .boundedVisual:
-                        guard let exactIdentity = requirement.concreteVerifierIdentity, !exactIdentity.isEmpty else {
-                            unavailable(.unsupported)
-                            continue
-                        }
-                        let storageRoot = FileManager.default.temporaryDirectory
-                            .appendingPathComponent("batch_g_verifier_\(UUID().uuidString)", isDirectory: true)
-                        let request = MacOSGUIVerifierRuntime.InvocationRequest(
-                            projectPath: guiVerifierProjectPath, concreteVerifierIdentity: exactIdentity,
-                            requirementID: requirement.requirementID, runID: runID,
-                            taskID: declaration.taskID, testStorageRoot: storageRoot)
-                        _ = await guiVerifierRuntime.executeVerification(request: request, coordinator: self)
-                    case .semantic:
-                        guard identity == "vision.read_image" else {
-                            unavailable(.unsupported)
-                            continue
-                        }
-                        // A semantic check needs a screenshot of the final state; computer_use
-                        // works from the accessibility tree, so there is none to judge.
-                        unavailable(.notRun)
-                    }
-                    guard !Task.isCancelled, hasMutationAuthority(conversationID: conversationID, runID: runID) else { return }
-                    runtimeEvents.record(conversationID: conversationID, runID: runID, domain: .tool,
-                        kind: "verification.requirement.completed", summary: "Verification attempt ended",
-                        metadata: ["requirementID": requirement.requirementID])
-                }
-                runtimeEvents.record(conversationID: conversationID, runID: runID, domain: .run,
-                    kind: "verification.phase.completed", summary: "Declared verification ended")
-            }
-        }
         guard !Task.isCancelled, hasMutationAuthority(conversationID: conversationID, runID: runID) else { return }
         finishRun(conversationID: conversationID, runID: runID, status: .completed,
                   lastAssistantMessage: lastAssistantMessage, model: model)
@@ -2800,14 +2752,6 @@ final class ConversationRunCoordinator {
         case .paused: kind = "run.paused"; summary = String(localized: "Paused")
         case .queued, .running: kind = "run.updated"; summary = String(localized: "Working")
         }
-        // Capture the immutable terminal snapshot of *this* run before any external callback
-        // or queued-run transition can replace `activeRuns[conversationID]`. The snapshot must
-        // never be re-derived from the active run map afterwards.
-        let terminalRun = ConversationRun(id: current.id, conversationID: current.conversationID, status: effectiveStatus, startedAt: current.startedAt, completedAt: terminalCompletedAt, error: effectiveError, recoveredFromRunID: current.recoveredFromRunID)
-        let declaration = outcomeDeclarations.removeValue(forKey: current.id)
-        outcomeRunConversations.removeValue(forKey: current.id)
-        let receipts = outcomeReceipts.removeValue(forKey: current.id) ?? []
-        let verificationResults = outcomeVerificationResults.removeValue(forKey: current.id) ?? []
         runtimeEvents.record(conversationID: conversationID, runID: current.id, domain: .run, kind: kind, severity: effectiveStatus == .failed ? .error : .info, summary: summary)
         recoveryContexts.removeValue(forKey: conversationID)
 
@@ -2830,20 +2774,6 @@ final class ConversationRunCoordinator {
             lastAssistantMessage: finalAssistantText,
             model: model
         )
-
-        if let declaration {
-            Task { [weak self] in
-                let assessment = await OutcomeAssessor().assess(
-                    taskID: declaration.taskID,
-                    run: terminalRun,
-                    requirements: declaration.requirements,
-                    receipts: receipts,
-                    verificationResults: verificationResults
-                )
-                let handoff = OutcomeHandoff(assessment: assessment)
-                await MainActor.run { self?.publish(.outcomeHandoff(conversationID: conversationID, handoff: handoff)) }
-            }
-        }
 
         // Only detach the conversation's live run messages when this run still owns them.
         // A replacement run started from an external terminal callback owns them otherwise.
@@ -2887,299 +2817,6 @@ final class ConversationRunCoordinator {
             return msgs
         }
         return []
-    }
-
-    /// Record a verification result for an active outcome-declared run.
-    /// Ingests results via the production-side verifier seam without creating a second outcome authority.
-    /// Results remain run-scoped, requirement-scoped, and immutable until OutcomeAssessor evaluation.
-    /// Fails closed if the target requirement is not an OutcomeRequirement.verification or fails shape validation.
-    @discardableResult
-    public func recordVerificationResult(runID: UUID, result: VerificationResult) -> Bool {
-        guard let declaration = outcomeDeclarations[runID] else { return false }
-        guard result.correlation.runID == runID else { return false }
-        guard let targetReq = declaration.requirements.first(where: { $0.requirementID == result.requirementID }) else { return false }
-        guard case .verification(let vReq) = targetReq else { return false }
-        guard vReq.validateResultShape(result) == nil else { return false }
-
-        var results = outcomeVerificationResults[runID] ?? []
-        results.append(result)
-        outcomeVerificationResults[runID] = results
-        return true
-    }
-
-    /// Records an atomic mechanical verification result and evidence receipt pair for an active run (EC-B01).
-    /// Both are admitted or neither is admitted.
-    /// Fails closed if:
-    /// - declaration is absent for runID
-    /// - verificationResult.correlation.runID != runID or evidenceReceipt.runID != runID
-    /// - evidenceReceipt.taskID != declaration.taskID
-    /// - verificationResult targets non-verification requirement or fails shape validation
-    /// - concreteVerifierIdentity is missing or does not match verificationResult.verifierIdentity
-    /// - evidenceReceipt is not .verifiedByTest with .deterministicTest matching concreteVerifierIdentity
-    /// - verificationResult does not reference evidenceReceipt.id
-    /// - verificationResult.resultState contradicts evidenceReceipt observation (e.g. passed != testPassed)
-    /// - only one of result or receipt already exists (inconsistent partial state)
-    /// Idempotent: if both result and receipt already exist, returns true without duplicating.
-    @discardableResult
-    public func recordMechanicalVerification(
-        runID: UUID,
-        verificationResult: VerificationResult,
-        evidenceReceipt: EvidenceReceipt
-    ) -> Bool {
-        guard let declaration = outcomeDeclarations[runID] else { return false }
-        guard verificationResult.correlation.runID == runID,
-              evidenceReceipt.runID == runID,
-              evidenceReceipt.taskID == declaration.taskID else { return false }
-        guard let targetReq = declaration.requirements.first(where: { $0.requirementID == verificationResult.requirementID }) else { return false }
-        guard case .verification(let vReq) = targetReq else { return false }
-        guard vReq.validateResultShape(verificationResult) == nil else { return false }
-        guard let concreteIdentity = vReq.concreteVerifierIdentity, !concreteIdentity.isEmpty else { return false }
-        guard verificationResult.verifierIdentity == concreteIdentity else { return false }
-
-        guard evidenceReceipt.operation == .verifiedByTest else { return false }
-        guard case .deterministicTest(let testID, _, _, let testPassed, _, _) = evidenceReceipt.observation else { return false }
-        guard testID == concreteIdentity else { return false }
-        guard verificationResult.evidenceReferences.receiptIDs.contains(evidenceReceipt.id) else { return false }
-
-        // Mechanical truth must agree:
-        // .passed <-> deterministicTest.passed == true
-        // .failed <-> deterministicTest.passed == false
-        guard (verificationResult.resultState == .passed && testPassed) ||
-              (verificationResult.resultState == .failed && !testPassed) else { return false }
-
-        var currentResults = outcomeVerificationResults[runID] ?? []
-        var currentReceipts = outcomeReceipts[runID] ?? []
-
-        let resultExists = currentResults.contains(where: { $0.id == verificationResult.id })
-        let receiptExists = currentReceipts.contains(where: { $0.id == evidenceReceipt.id })
-
-        if resultExists && receiptExists {
-            // Idempotent replay: already admitted both, do not append duplicates
-            return true
-        }
-        if resultExists || receiptExists {
-            // Partial / contradictory presence: reject
-            return false
-        }
-
-        currentResults.append(verificationResult)
-        currentReceipts.append(evidenceReceipt)
-        outcomeVerificationResults[runID] = currentResults
-        outcomeReceipts[runID] = currentReceipts
-        return true
-    }
-
-    /// Atomically admits a semantic VerificationResult together with its specialistProcessed EvidenceReceipt (EC-C01).
-    /// Enforces single truth, atomic pair presence, correlation integrity, Artifact Authority, and idempotent replay.
-    @discardableResult
-    public func recordSemanticVerification(
-        runID: UUID,
-        verificationResult: VerificationResult,
-        specialistReceipt: EvidenceReceipt,
-        artifactStore: ArtifactStore? = nil
-    ) -> Bool {
-        guard let declaration = outcomeDeclarations[runID] else { return false }
-        guard verificationResult.correlation.runID == runID,
-              specialistReceipt.runID == runID,
-              specialistReceipt.taskID == declaration.taskID else { return false }
-        guard let targetReq = declaration.requirements.first(where: { $0.requirementID == verificationResult.requirementID }) else { return false }
-        guard case .verification(let vReq) = targetReq else { return false }
-        guard vReq.factClass == .semantic else { return false }
-        guard vReq.validateResultShape(verificationResult) == nil else { return false }
-        if let concreteIdentity = vReq.concreteVerifierIdentity, !concreteIdentity.isEmpty {
-            guard verificationResult.verifierIdentity == concreteIdentity else { return false }
-        }
-
-        // Receipt verification
-        guard specialistReceipt.operation == .specialistProcessed else { return false }
-        guard case .specialistProcessed(let specialistID, let success) = specialistReceipt.observation else { return false }
-        guard specialistID == verificationResult.verifierIdentity else { return false }
-        guard success == true else { return false }
-        guard verificationResult.evidenceReferences.receiptIDs.contains(specialistReceipt.id) else { return false }
-
-        // Canonical Causal Identity Validation
-        guard let sourceCallID = specialistReceipt.sourceCallID, !sourceCallID.isEmpty else { return false }
-        guard sourceCallID != verificationResult.verifierIdentity else { return false }
-        guard specialistReceipt.callID == sourceCallID else { return false }
-        guard verificationResult.correlation.callID == specialistReceipt.callID else { return false }
-        guard verificationResult.correlation.turnID == specialistReceipt.turnID else { return false }
-
-        // Shape and payload verification for advisoryFinding (§24, AC-C16, AC-C17)
-        guard verificationResult.resultState == .advisoryFinding else { return false }
-        guard let payload = verificationResult.findingPayload else { return false }
-        guard payload.governingRequirementID == verificationResult.requirementID else { return false }
-        guard payload.evaluatorID == verificationResult.verifierIdentity else { return false }
-
-        // AC-C15d: findingPayload.artifactRef must be present in verificationResult.evidenceReferences.artifactRefs
-        guard verificationResult.evidenceReferences.artifactRefs.contains(payload.artifactRef) else { return false }
-
-        // Conversation scope validation (§5, AC-C15c)
-        guard let owningConversationID = outcomeRunConversations[runID]
-            ?? activeRuns.values.first(where: { $0.id == runID })?.conversationID else {
-            return false
-        }
-        guard payload.artifactRef.conversationID == owningConversationID else { return false }
-
-        // Canonical Artifact Authority validation (§3, AC-C15a, AC-C15b)
-        guard let store = artifactStore ?? toolExecutor.artifactStore else { return false }
-        guard let descriptor = try? store.resolveDescriptor(
-            artifactID: payload.artifactRef.artifactID,
-            conversationID: owningConversationID
-        ) else { return false }
-        guard descriptor.retentionState == .available else { return false }
-        guard descriptor.retentionClass == .evidencePinned else { return false }
-        guard (try? store.loadData(
-            artifactID: payload.artifactRef.artifactID,
-            conversationID: owningConversationID,
-            verifyIntegrity: true
-        )) != nil else { return false }
-
-        var currentResults = outcomeVerificationResults[runID] ?? []
-        var currentReceipts = outcomeReceipts[runID] ?? []
-
-        let resultExists = currentResults.contains(where: { $0.id == verificationResult.id })
-        let receiptExists = currentReceipts.contains(where: { $0.id == specialistReceipt.id })
-
-        if resultExists && receiptExists {
-            // Idempotent replay: already admitted both, do not append duplicates (AC-C18)
-            return true
-        }
-        if resultExists || receiptExists {
-            // Partial / contradictory presence: reject
-            return false
-        }
-
-        currentResults.append(verificationResult)
-        currentReceipts.append(specialistReceipt)
-        outcomeVerificationResults[runID] = currentResults
-        outcomeReceipts[runID] = currentReceipts
-        return true
-    }
-
-    /// Bounded, requirement-scoped receipt projection from canonical durable tool facts.
-    ///
-    /// One canonical mechanical fact yields at most one logical receipt per operation, keyed by
-    /// `taskID` + `runID` + the real provider tool-call identity + operation, so declared
-    /// requirements co-consume the same receipt instead of multiplying causality. Distinct real
-    /// invocations of one declared witness stay distinct facts, so the frozen assessor can observe
-    /// PASS + FAIL contradiction rather than a silent first-write-wins.
-    ///
-    /// `turnID` carries the owning assistant turn's real identity; tool-call causality is carried by
-    /// the receipt's canonical `callID` (observation-derived, or `sourceCallID` for frozen
-    /// observation cases that cannot express a call identity). The two are different identities and
-    /// are never substituted for one another.
-    private func accumulateOutcomeReceipts(runID: UUID, assistantMessageID: UUID, record: ToolCallRecord) {
-        if record.name == "computer_use", let fact = record.mechanicalTerminalFact?.computerUseTerminal {
-            lastComputerUseTerminal[runID] = (record.providerCallID, Date(), (lastComputerUseTerminal[runID]?.dispatched ?? false) || (fact.status == .dispatched && fact.osEventStarted))
-        }
-        guard let declaration = outcomeDeclarations[runID] else { return }
-        var receipts = outcomeReceipts[runID] ?? []
-        let turnID = assistantMessageID.uuidString
-        func hasReceipt(operation: EvidenceOperation) -> Bool {
-            receipts.contains {
-                $0.taskID == declaration.taskID && $0.runID == runID && $0.callID == record.providerCallID && $0.operation == operation
-            }
-        }
-        let matchesOperation = declaration.requirements.contains { requirement in
-            guard case .operation(_, let operation, let toolName, _, let expectedResource) = requirement else { return false }
-            return operation == .toolExecuted && expectedResource == nil && toolName == record.name
-        }
-        // Only frozen-contract terminal states may become mechanical success/failure claims.
-        if !hasReceipt(operation: .toolExecuted) && matchesOperation && (record.state == .completed || record.state == .failed) {
-            receipts.append(EvidenceReceipt(taskID: declaration.taskID, runID: runID, turnID: turnID, sourceCallID: record.providerCallID, observation: .toolExecuted(toolName: record.name, callID: record.providerCallID, success: record.state == .completed), reportedCanonicalOwnerDomain: "conversation_history"))
-        }
-        // Exact deterministic-test evidence requires the durable *typed* mechanical terminal fact.
-        // Presentation text (`output`), `errorMessage`, stdout/stderr, and assistant prose are never
-        // parsed, and a missing/unknown exit code yields no receipt rather than a fabricated PASS/FAIL.
-        guard record.name == "shell_execute",
-              let command = Self.shellCommand(from: record.input),
-              let terminal = record.mechanicalTerminalFact?.shellTerminal,
-              !terminal.timedOut, !terminal.cancelled,
-              let exitCode = terminal.exitCode else {
-            // Representation materialization is a different bounded typed fact on the same
-            // canonical record. It never consumes or rewrites the shell fact.
-            if let representationFact = record.mechanicalTerminalFact?.representationArtifact {
-                for receipt in projectRepresentationArtifactReceipts(representationFact, declaration: declaration, record: record, runID: runID, turnID: turnID) {
-                    guard !hasReceipt(operation: receipt.operation) else { continue }
-                    receipts.append(receipt)
-                }
-            }
-            outcomeReceipts[runID] = receipts; return
-        }
-        for witness in declaration.deterministicTestWitnesses where witness.toolName == record.name && witness.exactCommand == command {
-            guard !hasReceipt(operation: .verifiedByTest) else { continue }
-            receipts.append(EvidenceReceipt(taskID: declaration.taskID, runID: runID, turnID: turnID, sourceCallID: record.providerCallID, observation: .deterministicTest(testID: witness.testID, targetArtifactID: nil, targetRevisionID: nil, passed: exitCode == 0, exitCode: exitCode, detail: nil), reportedCanonicalOwnerDomain: "conversation_history"))
-        }
-        outcomeReceipts[runID] = receipts
-    }
-
-    /// Projects the bounded representation-materialization fact of a durable tool record into
-    /// requirement-scoped mechanical receipts.
-    ///
-    /// Only the durable typed fact is read: the real source resource identity, the exact derived
-    /// artifact identity, the conversion attempt, and the separate materialized/reopened booleans.
-    /// Tool prose, extracted text, and source bytes are never inspected. Success is taken from the
-    /// fact itself, so a real partial side effect (materialized but not reopened) stays expressible.
-    private func projectRepresentationArtifactReceipts(
-        _ fact: (sourceRef: ResourceRef, artifactRef: ArtifactRef, attemptID: UUID, materialized: Bool, reopened: Bool),
-        declaration: OutcomeRunDeclaration,
-        record: ToolCallRecord,
-        runID: UUID,
-        turnID: String
-    ) -> [EvidenceReceipt] {
-        func declares(_ operation: EvidenceOperation) -> Bool {
-            declaration.requirements.contains { requirement in
-                guard case .operation(_, let op, _, _, let expectedResource) = requirement else { return false }
-                return op == operation && expectedResource == fact.sourceRef
-            }
-        }
-
-        var receipts: [EvidenceReceipt] = []
-        guard fact.materialized else { return receipts }
-
-        if declares(.materialized) {
-            receipts.append(EvidenceReceipt(
-                taskID: declaration.taskID,
-                runID: runID,
-                turnID: turnID,
-                sourceCallID: record.providerCallID,
-                resourceRef: fact.sourceRef,
-                artifactRef: fact.artifactRef,
-                observation: .materialized(artifactID: fact.artifactRef.artifactID, success: true),
-                reportedCanonicalOwnerDomain: ResourceOwnerDomain.artifactAuthority.rawValue
-            ))
-        }
-        if declares(.reopened) {
-            receipts.append(EvidenceReceipt(
-                taskID: declaration.taskID,
-                runID: runID,
-                turnID: turnID,
-                sourceCallID: record.providerCallID,
-                resourceRef: fact.sourceRef,
-                artifactRef: fact.artifactRef,
-                observation: .reopened(artifactID: fact.artifactRef.artifactID, success: fact.reopened),
-                reportedCanonicalOwnerDomain: ResourceOwnerDomain.artifactAuthority.rawValue
-            ))
-        }
-        return receipts
-    }
-
-    /// Read-only acceptance diagnostic over the ephemeral, run-scoped receipt accumulator.
-    /// It is not an authority, store, or registry: it only reads in-process run state the
-    /// existing run lifecycle already owns, and yields nothing once the terminal transition
-    /// detaches that run's receipts.
-    func accumulatedOutcomeReceipts(runID: UUID) -> [EvidenceReceipt] {
-        outcomeReceipts[runID] ?? []
-    }
-
-    /// Read-only acceptance diagnostic over the ephemeral, run-scoped verification result accumulator.
-    func accumulatedVerificationResults(runID: UUID) -> [VerificationResult] {
-        outcomeVerificationResults[runID] ?? []
-    }
-
-    private static func shellCommand(from input: String) -> String? {
-        guard let data = input.data(using: .utf8), let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        return object["command"] as? String
     }
 
     private func updateConversationMessages(conversationID: UUID, messages: [ChatMessage], expectedRunID: UUID? = nil) {
@@ -3755,6 +3392,12 @@ final class ConversationRunCoordinator {
         return text
     }
 
+    private func previewMemoryWorkspace(conversationID: UUID, workspaceURL: URL?) -> URL? {
+        guard let conversationStore, conversationStore.effectiveWorkspaceConfiguration(for: conversationID) != nil else { return nil }
+        let url = workspaceURL ?? conversationStore.effectiveWorkingDirectory(for: conversationID)
+        return conversationStore.isManagedWorkingDirectory(url) ? nil : url
+    }
+
     /// The folder the model is told it works in: the Project folder, else the conversation's own.
     func promptWorkingDirectory(conversationID: UUID, workspaceURL: URL?) -> (url: URL?, hasProject: Bool) {
         let record = conversationStore?.conversations.first(where: { $0.id == conversationID })
@@ -3980,7 +3623,7 @@ No tools, shell, browser, or file system access are available for this turn. Res
         let shouldProject = conversationStore?.shouldProjectMemory(for: conversationID) ?? true
         let memoryFragment = memorySnapshot != nil
             ? memorySnapshot?.prompt?.fragment(includeWriteInstructions: includeWriteInstructions)
-            : memory?.projectPromptFragment(enabled: shouldProject, includeWriteInstructions: includeWriteInstructions)
+            : memory?.projectPromptSnapshot(enabled: shouldProject, workspace: previewMemoryWorkspace(conversationID: conversationID, workspaceURL: workspaceURL))?.fragment(includeWriteInstructions: includeWriteInstructions)
         if let memoryFragment {
             prompt += "\n\n" + memoryFragment
         }
@@ -4006,7 +3649,7 @@ No tools, shell, browser, or file system access are available for this turn. Res
         if toolExecutor.supportsDelegation {
             let exposure = delegationToolExposure(for: conversationID)
             if exposure.canCreateNewChild {
-                tools.append(toolExecutor.usesNativeDelegation ? HarnessToolDefinitions.nativeDelegateTaskDefinition : HarnessToolDefinitions.delegateTaskDefinition)
+                tools.append(HarnessToolDefinitions.nativeDelegateTaskDefinition)
             }
             if toolExecutor.usesNativeDelegation, exposure.canCreateNewChild || exposure.canSuperviseExistingChild {
                 tools.append(HarnessToolDefinitions.delegationControlDefinition)

@@ -334,7 +334,15 @@ public final class ComputerUseV2Engine: @unchecked Sendable {
         let target: WindowTarget
         do {
             let active = await targetStore.getTarget(conversationID: convIDStr, runID: runIDStr)
-            if let active, (input.targetApp == nil || active.bundleID.caseInsensitiveCompare(input.targetApp!) == .orderedSame), (input.windowID == nil || input.windowID == active.windowID) {
+            // The model can supply either the app name or its bundle ID. Compare canonical
+            // identities so repeating a name does not discard the preceding observation.
+            let requestedBundleID: String?
+            if let requested = input.targetApp {
+                requestedBundleID = try await targetStore.resolveApplicationBundleID(driver: driver, identity: requested)
+            } else {
+                requestedBundleID = nil
+            }
+            if let active, (requestedBundleID == nil || active.bundleID.caseInsensitiveCompare(requestedBundleID!) == .orderedSame), (input.windowID == nil || input.windowID == active.windowID) {
                 do {
                     _ = try await targetStore.verifyTargetAlive(driver: driver, target: active)
                     target = active

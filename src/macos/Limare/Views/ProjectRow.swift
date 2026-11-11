@@ -108,9 +108,9 @@ struct ProjectRow: View {
                 .frame(width: 12, height: 12)
                 .accessibilityHidden(true)
 
-            Image(systemName: project.isPinned ? "pin.fill" : "folder")
+            Image(systemName: "folder")
                 .font(AppTypography.interfaceSubheadline)
-                .foregroundStyle(project.isPinned ? Color.accentColor : Color.secondary)
+                .foregroundStyle(Color.secondary)
                 .accessibilityHidden(true)
 
             Text(project.name)

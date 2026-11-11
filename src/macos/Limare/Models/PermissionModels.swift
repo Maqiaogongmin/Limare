@@ -1,5 +1,16 @@
 import Foundation
 
+public struct MCPToolGrant: Codable, Hashable, Sendable {
+    public let serverID: String
+    public let toolName: String
+    public let serverFingerprint: String
+    public init(serverID: String, toolName: String, serverFingerprint: String) {
+        self.serverID = serverID
+        self.toolName = toolName
+        self.serverFingerprint = serverFingerprint
+    }
+}
+
 enum PermissionMode: String, CaseIterable, Codable, Sendable {
     case requestApproval
     case helpMeApprove
@@ -61,6 +72,8 @@ public struct ToolPermissionRequest: Sendable {
     public let isHighRisk: Bool
     /// A shell command that asks to run outside the sandbox (`require_escalated`).
     public let leavesSandbox: Bool
+    public let mcpTool: MCPToolGrant?
+    public let browserSite: String?
 
     public init(
         requestID: UUID = UUID(),
@@ -76,7 +89,9 @@ public struct ToolPermissionRequest: Sendable {
         environmentKeys: [String] = [],
         requestsNetwork: Bool = false,
         isHighRisk: Bool = false,
-        leavesSandbox: Bool = false
+        leavesSandbox: Bool = false,
+        mcpTool: MCPToolGrant? = nil,
+        browserSite: String? = nil
     ) {
         self.requestID = requestID
         self.conversationID = conversationID
@@ -92,6 +107,8 @@ public struct ToolPermissionRequest: Sendable {
         self.requestsNetwork = requestsNetwork
         self.isHighRisk = isHighRisk
         self.leavesSandbox = leavesSandbox
+        self.mcpTool = mcpTool
+        self.browserSite = browserSite
     }
 
     public func attributed(
@@ -113,7 +130,9 @@ public struct ToolPermissionRequest: Sendable {
             environmentKeys: environmentKeys,
             requestsNetwork: requestsNetwork,
             isHighRisk: isHighRisk,
-            leavesSandbox: leavesSandbox
+            leavesSandbox: leavesSandbox,
+            mcpTool: mcpTool,
+            browserSite: browserSite
         )
     }
 }
@@ -169,6 +188,8 @@ struct PendingApproval: Identifiable, Sendable {
     let environmentKeys: [String]
     let requestsNetwork: Bool
     let isHighRisk: Bool
+    let mcpTool: MCPToolGrant?
+    let browserSite: String?
 
     init(
         id: UUID = UUID(),
@@ -184,7 +205,9 @@ struct PendingApproval: Identifiable, Sendable {
         affectedPaths: [String] = [],
         environmentKeys: [String] = [],
         requestsNetwork: Bool = false,
-        isHighRisk: Bool = false
+        isHighRisk: Bool = false,
+        mcpTool: MCPToolGrant? = nil,
+        browserSite: String? = nil
     ) {
         self.id = id
         self.requestID = requestID
@@ -200,6 +223,8 @@ struct PendingApproval: Identifiable, Sendable {
         self.environmentKeys = environmentKeys
         self.requestsNetwork = requestsNetwork
         self.isHighRisk = isHighRisk
+        self.mcpTool = mcpTool
+        self.browserSite = browserSite
     }
 }
 

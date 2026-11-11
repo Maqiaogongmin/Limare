@@ -13,6 +13,8 @@ struct SyntaxLanguage {
         case markup
         /// Unified diffs, coloured by each line's first character.
         case diff
+        /// Markdown source is coloured from its parsed syntax tree.
+        case markdown
     }
 
     var mode: Mode = .code
@@ -135,6 +137,6 @@ extension SyntaxLanguage {
     }
 
     private static let plainTextNames: Set<String> = [
-        "text", "txt", "plain", "plaintext", "output", "log", "markdown", "md", "mermaid", "latex", "tex",
+        "text", "txt", "plain", "plaintext", "output", "log", "mermaid", "latex", "tex",
     ]
 }

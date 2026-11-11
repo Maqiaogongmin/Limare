@@ -604,6 +604,37 @@ public final class ArtifactStore: @unchecked Sendable {
 
     // MARK: - Resolution and Authority Enforcement
 
+    /// Grant only the artifacts present in the frozen fork history, never the parent's future files.
+    func shareForFork(artifactIDs: Set<UUID>, from source: UUID, to target: UUID) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        var updated = descriptors
+        for id in artifactIDs {
+            guard var descriptor = updated[id] else { continue } // A historical file may already be unavailable.
+            // Text in a transcript can mention an unrelated UUID. Never turn that mention
+            // into access, and do not prevent an otherwise valid fork.
+            guard descriptor.conversationID == source || (descriptor.sharedConversationIDs ?? []).contains(source) else { continue }
+            var readers = descriptor.sharedConversationIDs ?? []
+            if !readers.contains(target) { readers.append(target) }
+            descriptor.sharedConversationIDs = readers
+            updated[id] = descriptor
+        }
+        try saveMetadataToDiskLocked(updatedDescriptors: updated)
+        descriptors = updated
+    }
+
+    func revokeForkAccess(conversationID: UUID) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        var updated = descriptors
+        for (id, var descriptor) in updated where (descriptor.sharedConversationIDs ?? []).contains(conversationID) {
+            descriptor.sharedConversationIDs?.removeAll { $0 == conversationID }
+            updated[id] = descriptor
+        }
+        try saveMetadataToDiskLocked(updatedDescriptors: updated)
+        descriptors = updated
+    }
+
     /// Resolves descriptor verifying conversation-scoped authorization and physical availability.
     public func resolveDescriptor(
         artifactID: UUID,
@@ -616,7 +647,7 @@ public final class ArtifactStore: @unchecked Sendable {
         }
         lock.unlock()
 
-        guard descriptor.conversationID == conversationID else {
+        guard descriptor.conversationID == conversationID || (descriptor.sharedConversationIDs ?? []).contains(conversationID) else {
             throw ArtifactStoreError.unauthorizedAccess(
                 artifactID: artifactID,
                 requestedConversationID: conversationID
@@ -665,7 +696,7 @@ public final class ArtifactStore: @unchecked Sendable {
         }
         lock.unlock()
 
-        guard descriptor.conversationID == conversationID else {
+        guard descriptor.conversationID == conversationID || (descriptor.sharedConversationIDs ?? []).contains(conversationID) else {
             throw ArtifactStoreError.unauthorizedAccess(
                 artifactID: artifactID,
                 requestedConversationID: conversationID
@@ -754,7 +785,7 @@ public final class ArtifactStore: @unchecked Sendable {
             throw ArtifactStoreError.artifactNotFound(artifactID)
         }
 
-        guard descriptor.conversationID == conversationID else {
+        guard descriptor.conversationID == conversationID || (descriptor.sharedConversationIDs ?? []).contains(conversationID) else {
             throw ArtifactStoreError.unauthorizedAccess(
                 artifactID: artifactID,
                 requestedConversationID: conversationID
@@ -823,6 +854,7 @@ public final class ArtifactStore: @unchecked Sendable {
             guard descriptor.retentionClass == .temporaryExtraction else {
                 continue
             }
+            guard (descriptor.sharedConversationIDs ?? []).isEmpty else { continue }
 
             if let olderThan, descriptor.createdAt > olderThan {
                 continue
@@ -925,6 +957,12 @@ public final class ArtifactStore: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
 
+        // The original directory owns the bytes. Never delete it while another conversation
+        // still has an explicit reference; the caller can retry once those references are gone.
+        guard !descriptors.values.contains(where: { $0.conversationID == conversationID && !($0.sharedConversationIDs ?? []).isEmpty }) else {
+            throw ArtifactStoreError.deletionFailed(path: conversationID.uuidString, underlying: "Artifacts are shared with another conversation.")
+        }
+
         try ensureQuarantineDirectoryLocked()
 
         var updated = descriptors
@@ -1004,7 +1042,7 @@ public final class ArtifactStore: @unchecked Sendable {
     public func allDescriptors(for conversationID: UUID) -> [ArtifactDescriptor] {
         lock.lock()
         defer { lock.unlock() }
-        return descriptors.values.filter { $0.conversationID == conversationID }
+        return descriptors.values.filter { $0.conversationID == conversationID || ($0.sharedConversationIDs ?? []).contains(conversationID) }
     }
 
     // MARK: - Internal Test Helpers

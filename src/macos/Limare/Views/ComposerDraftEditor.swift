@@ -58,7 +58,7 @@ public struct ComposerDraftEditor: View {
 // MARK: - AppKit Representable
 
 @MainActor
-private struct NativeDraftTextViewRepresentable: NSViewRepresentable {
+struct NativeDraftTextViewRepresentable: NSViewRepresentable {
     @Binding var text: String
     let placeholder: String
     let font: NSFont
@@ -99,7 +99,9 @@ private struct NativeDraftTextViewRepresentable: NSViewRepresentable {
         textView.autoresizingMask = [.width]
         textView.onFilesDropped = onFilesDropped
         textView.onSend = onSend
-        textView.onFocusChange = onFocusChange
+        textView.onFocusChange = { [weak coordinator = context.coordinator] focused in
+            coordinator?.reportFocusChange(focused)
+        }
         textView.onMenuKey = onMenuKey
         textView.onMarkedTextChange = { [weak coordinator = context.coordinator] in
             coordinator?.markedTextDidChange()
@@ -134,7 +136,9 @@ private struct NativeDraftTextViewRepresentable: NSViewRepresentable {
         context.coordinator.parent = self
         textView.onFilesDropped = onFilesDropped
         textView.onSend = onSend
-        textView.onFocusChange = onFocusChange
+        textView.onFocusChange = { [weak coordinator = context.coordinator] focused in
+            coordinator?.reportFocusChange(focused)
+        }
         textView.onMenuKey = onMenuKey
         textView.placeholder = placeholder
         if context.coordinator.lastFocusToken != focusToken {
@@ -151,29 +155,10 @@ private struct NativeDraftTextViewRepresentable: NSViewRepresentable {
             heightMayHaveChanged = true
         }
 
-        // Marked text belongs to the input method until it is committed. A
-        // SwiftUI update must not replace it with the still-empty draft binding.
-        if !textView.hasMarkedText(), textView.string != text {
-            let selectedRanges = textView.selectedRanges.map(\.rangeValue)
-            let caretWasAtEnd = selectedRanges.count == 1
-                && selectedRanges[0].length == 0
-                && selectedRanges[0].location == (textView.string as NSString).length
-            textView.string = text
-            textView.needsDisplay = true
-            // A caret at the end stays at the end (a completed command); any other selection
-            // keeps its place, within the new text.
-            let length = (text as NSString).length
-            if caretWasAtEnd {
-                textView.setSelectedRange(NSRange(location: length, length: 0))
-            } else if !selectedRanges.isEmpty {
-                textView.selectedRanges = selectedRanges.map { range in
-                    let location = min(range.location, length)
-                    return NSValue(range: NSRange(location: location, length: min(range.length, length - location)))
-                }
-            }
-            heightMayHaveChanged = true
-            textView.scrollRangeToVisible(textView.selectedRange())
-        }
+        // Replacing NSTextView's text can synchronously enter the input method and spin a
+        // nested run loop. Doing that while SwiftUI is updating its view graph can deadlock
+        // the graph when a conversation switch clears the draft. Apply it after this update.
+        context.coordinator.scheduleTextSynchronization()
         if heightMayHaveChanged {
             let coordinator = context.coordinator
             DispatchQueue.main.async { coordinator.measureAndReportHeight() }
@@ -186,11 +171,70 @@ private struct NativeDraftTextViewRepresentable: NSViewRepresentable {
         weak var textView: NativeAppKitDraftTextView?
         weak var scrollView: NSScrollView?
         var lastFocusToken = 0
+        private var textSynchronizationScheduled = false
+        private var heightReportScheduled = false
+        private var pendingHeight: CGFloat?
+        private var lastReportedHeight: CGFloat?
         nonisolated(unsafe) private var frameObserver: (any NSObjectProtocol)?
 
         init(_ parent: NativeDraftTextViewRepresentable) {
             self.parent = parent
             super.init()
+        }
+
+        func reportFocusChange(_ focused: Bool) {
+            // AppKit can change focus while SwiftUI is laying out the representable.
+            DispatchQueue.main.async { [weak self] in self?.parent.onFocusChange(focused) }
+        }
+
+        private func reportHeight(_ height: CGFloat) {
+            pendingHeight = height
+            guard !heightReportScheduled else { return }
+            heightReportScheduled = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.heightReportScheduled = false
+                guard let height = self.pendingHeight else { return }
+                self.pendingHeight = nil
+                guard self.lastReportedHeight != height else { return }
+                self.lastReportedHeight = height
+                self.parent.onContentHeightChange?(height)
+            }
+        }
+
+        func scheduleTextSynchronization() {
+            guard !textSynchronizationScheduled else { return }
+            textSynchronizationScheduled = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.textSynchronizationScheduled = false
+                self.synchronizeText()
+            }
+        }
+
+        private func synchronizeText() {
+            guard let textView, !textView.hasMarkedText() else { return }
+            // Read the latest binding, rather than the value from the update that queued this
+            // work: the user may have typed or switched conversations again in the meantime.
+            let text = parent.text
+            guard textView.string != text else { return }
+            let selectedRanges = textView.selectedRanges.map(\.rangeValue)
+            let caretWasAtEnd = selectedRanges.count == 1
+                && selectedRanges[0].length == 0
+                && selectedRanges[0].location == (textView.string as NSString).length
+            textView.string = text
+            textView.needsDisplay = true
+            let length = (text as NSString).length
+            if caretWasAtEnd {
+                textView.setSelectedRange(NSRange(location: length, length: 0))
+            } else if !selectedRanges.isEmpty {
+                textView.selectedRanges = selectedRanges.map { range in
+                    let location = min(range.location, length)
+                    return NSValue(range: NSRange(location: location, length: min(range.length, length - location)))
+                }
+            }
+            textView.scrollRangeToVisible(textView.selectedRange())
+            measureAndReportHeight()
         }
 
         func setupScrollViewObserver(_ sv: NSScrollView) {
@@ -231,6 +275,7 @@ private struct NativeDraftTextViewRepresentable: NSViewRepresentable {
             guard let textView else { return }
             measureAndReportHeight()
             textView.scrollRangeToVisible(textView.selectedRange())
+            if !textView.hasMarkedText() { scheduleTextSynchronization() }
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
@@ -255,7 +300,7 @@ private struct NativeDraftTextViewRepresentable: NSViewRepresentable {
                     sv.contentView.scroll(to: .zero)
                     sv.reflectScrolledClipView(sv.contentView)
                 }
-                parent.onContentHeightChange?(minHeight)
+                reportHeight(minHeight)
                 return
             }
 
@@ -288,7 +333,7 @@ private struct NativeDraftTextViewRepresentable: NSViewRepresentable {
                 }
             }
 
-            parent.onContentHeightChange?(calculated)
+            reportHeight(calculated)
         }
     }
 }
@@ -297,6 +342,16 @@ private struct NativeDraftTextViewRepresentable: NSViewRepresentable {
 
 final class NativeAppKitDraftTextView: NSTextView {
     var onFilesDropped: (([URL]) -> Void)?
+
+    /// Ends an in-progress input-method composition before the owning conversation changes.
+    /// Return the visible content so the old conversation can archive it first.
+    func endCompositionForConversationSwitch() -> String? {
+        guard hasMarkedText() else { return nil }
+        let visibleDraft = string
+        inputContext?.discardMarkedText()
+        if hasMarkedText() { unmarkText() }
+        return visibleDraft
+    }
 
     private func droppedFiles(_ sender: any NSDraggingInfo) -> [URL] {
         (sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []

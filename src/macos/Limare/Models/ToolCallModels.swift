@@ -89,6 +89,9 @@ struct ToolCallRecord: Identifiable, Codable, Sendable, Equatable {
     /// How the user resolved an `ask_user_question` card, for the transcript. The model reads
     /// `output`; this is never sent to it.
     var questionResolution: RecordedQuestionResolution? = nil
+    /// Observed shell execution times; absent on older records and other tools.
+    var shellStartedAt: Date? = nil
+    var shellLastOutputAt: Date? = nil
 
     init(
         id: UUID = UUID(),
@@ -118,7 +121,7 @@ struct ToolCallRecord: Identifiable, Codable, Sendable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case id, providerCallID, name, input, state, output, durationMilliseconds, errorMessage, approvalState, resultParts, mechanicalTerminalFact, owningRunID
-        case questionResolution
+        case questionResolution, shellStartedAt, shellLastOutputAt
     }
 
     init(from decoder: Decoder) throws {
@@ -136,6 +139,8 @@ struct ToolCallRecord: Identifiable, Codable, Sendable, Equatable {
         self.mechanicalTerminalFact = try container.decodeIfPresent(ToolMechanicalTerminalFact.self, forKey: .mechanicalTerminalFact)
         self.owningRunID = try container.decodeIfPresent(UUID.self, forKey: .owningRunID)
         self.questionResolution = try container.decodeIfPresent(RecordedQuestionResolution.self, forKey: .questionResolution)
+        self.shellStartedAt = try container.decodeIfPresent(Date.self, forKey: .shellStartedAt)
+        self.shellLastOutputAt = try container.decodeIfPresent(Date.self, forKey: .shellLastOutputAt)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -153,6 +158,8 @@ struct ToolCallRecord: Identifiable, Codable, Sendable, Equatable {
         try container.encodeIfPresent(mechanicalTerminalFact, forKey: .mechanicalTerminalFact)
         try container.encodeIfPresent(owningRunID, forKey: .owningRunID)
         try container.encodeIfPresent(questionResolution, forKey: .questionResolution)
+        try container.encodeIfPresent(shellStartedAt, forKey: .shellStartedAt)
+        try container.encodeIfPresent(shellLastOutputAt, forKey: .shellLastOutputAt)
     }
 }
 
@@ -283,6 +290,8 @@ struct ToolExecutionUpdate: Sendable {
     let state: ToolExecutionState
     let approvalState: ToolApprovalState
     let output: String
+    var shellStartedAt: Date? = nil
+    var shellOutputAt: Date? = nil
 }
 
 extension ToolExecutionState {
@@ -319,6 +328,8 @@ extension ToolCallRecord {
             return false
         }
         state = update.state
+        if let startedAt = update.shellStartedAt, shellStartedAt == nil { shellStartedAt = startedAt }
+        if let outputAt = update.shellOutputAt { shellLastOutputAt = outputAt }
         approvalState = update.approvalState
         output = update.output
         if update.state == .failed || update.state == .timedOut || update.state == .cancelled || update.state == .denied || update.state == .interrupted {

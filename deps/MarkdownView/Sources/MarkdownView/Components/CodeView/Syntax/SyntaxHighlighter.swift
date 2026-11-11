@@ -1,4 +1,5 @@
 import Foundation
+import MarkdownParser
 
 /// Colours code with a single lexical pass.
 ///
@@ -12,6 +13,35 @@ import Foundation
 enum SyntaxHighlighter {
     static func highlight(_ content: String, language info: String?) -> CodeHighlighter.HighlightMap {
         guard let language = SyntaxLanguage.named(info), !content.isEmpty else { return [:] }
+        if language.mode == .markdown {
+            // Flatten nested parser spans into non-overlapping runs so a child (e.g. inline
+            // code inside a heading) deterministically wins over its parent.
+            var tokens = [SyntaxToken?](repeating: nil, count: content.utf16.count)
+            for span in MarkdownParser().syntaxSpans(content) {
+                let token: SyntaxToken = switch span.kind {
+                case .heading: .keyword
+                case .strong: .type
+                case .emphasis: .meta
+                case .code: .string
+                case .link: .attribute
+                case .quote: .comment
+                case .marker: .meta
+                }
+                let end = min(tokens.count, span.range.upperBound)
+                guard span.range.location >= 0, span.range.location < end else { continue }
+                for i in span.range.location..<end { tokens[i] = token }
+            }
+            var result: CodeHighlighter.HighlightMap = [:]
+            var start = 0
+            while start < tokens.count {
+                let token = tokens[start]
+                var end = start + 1
+                while end < tokens.count && tokens[end] == token { end += 1 }
+                if let token { result[NSRange(location: start, length: end - start)] = token }
+                start = end
+            }
+            return result
+        }
         let units = Array(content.utf16)
         return units.withUnsafeBufferPointer { buffer in
             var scanner = SyntaxScanner(units: buffer, language: language)
@@ -48,6 +78,7 @@ private struct SyntaxScanner {
         case .code: scanCode()
         case .markup: scanMarkup()
         case .diff: scanDiff()
+        case .markdown: break // handled by MarkdownParser above
         }
     }
 

@@ -4,6 +4,7 @@ import Observation
 @MainActor
 @Observable
 final class PermissionStore {
+    @ObservationIgnored let fileReadVersions = FileReadVersions()
     /// Called when an approval request is shown (the Background Alerts notifier listens).
     @ObservationIgnored var onApprovalPresented: ((PendingApproval) -> Void)?
     /// Whether a run is an unattended scheduled run (ConversationRunCoordinator.isUnattended);
@@ -13,6 +14,9 @@ final class PermissionStore {
     private let defaults: UserDefaults
     @ObservationIgnored
     private let defaultsKey: String
+    private let grantsKey = "mcpToolGrants"
+    private(set) var mcpToolGrants: Set<MCPToolGrant> = []
+    private(set) var browserSiteGrants: [UUID: Set<String>] = [:]
 
     var mode: PermissionMode {
         didSet {
@@ -52,10 +56,21 @@ final class PermissionStore {
         self.mode = initialMode ?? PermissionMode(rawValue: stored ?? "") ?? .requestApproval
         self.autoReviewer = autoReviewer
         self.logs = logs
+        if let data = defaults.data(forKey: grantsKey), let grants = try? JSONDecoder().decode(Set<MCPToolGrant>.self, from: data) {
+            self.mcpToolGrants = grants
+        }
     }
 
     func setAutoReviewer(_ reviewer: PermissionReviewing?) {
         self.autoReviewer = reviewer
+    }
+
+    func hasRememberedGrant(for request: ToolPermissionRequest) -> Bool {
+        if let grant = request.mcpTool, mcpToolGrants.contains(grant) { return true }
+        if request.toolName == "browser_use", let id = request.conversationID, let site = request.browserSite {
+            return browserSiteGrants[id]?.contains(site) == true
+        }
+        return false
     }
 
     func authorize(
@@ -88,6 +103,7 @@ final class PermissionStore {
             logs.info("Permission", "Full Access active; bypassed approval for \(request.toolName).")
             return .notRequired
         }
+        if hasRememberedGrant(for: request) { return .notRequired }
 
         let evaluation = PermissionEvaluator.evaluate(request, allowedReadDirectories: allowedReadDirectories, memoryLocations: memoryLocations)
         switch evaluation {
@@ -143,7 +159,9 @@ final class PermissionStore {
             affectedPaths: request.affectedURLs.map(\.path),
             environmentKeys: request.environmentKeys,
             requestsNetwork: request.requestsNetwork,
-            isHighRisk: request.isHighRisk
+            isHighRisk: request.isHighRisk,
+            mcpTool: request.mcpTool,
+            browserSite: request.browserSite
         )
 
         let approved = await withTaskCancellationHandler {
@@ -178,7 +196,7 @@ final class PermissionStore {
         onApprovalPresented?(first.approval)
     }
 
-    func resolvePendingApproval(id: UUID? = nil, approved: Bool) {
+    func resolvePendingApproval(id: UUID? = nil, approved: Bool, rememberMCPTool: Bool = false, rememberBrowserSite: Bool = false) {
         guard let first = approvalQueue.first else {
             pendingApproval = nil
             return
@@ -188,10 +206,38 @@ final class PermissionStore {
             return
         }
         let current = approvalQueue.removeFirst()
+        if approved, rememberMCPTool, let grant = current.approval.mcpTool {
+            mcpToolGrants = mcpToolGrants.filter { $0.serverID != grant.serverID || $0.toolName != grant.toolName }
+            mcpToolGrants.insert(grant)
+            persistMCPGrants()
+        }
+        if approved, rememberBrowserSite, let conversationID = current.approval.conversationID,
+           let site = current.approval.browserSite {
+            browserSiteGrants[conversationID, default: []].insert(site)
+        }
         let toolName = current.approval.toolName
         logs.info("Permission", "\(approved ? "Human Approved" : "Human Denied") \(toolName).")
         current.continuation.resume(returning: approved)
         presentNextApproval()
+    }
+
+    func revokeMCPToolGrant(_ grant: MCPToolGrant) {
+        mcpToolGrants.remove(grant)
+        persistMCPGrants()
+    }
+
+    func revokeBrowserSite(_ site: String, conversationID: UUID) {
+        browserSiteGrants[conversationID]?.remove(site)
+        if browserSiteGrants[conversationID]?.isEmpty == true { browserSiteGrants[conversationID] = nil }
+    }
+
+    func forgetConversation(_ id: UUID) {
+        browserSiteGrants[id] = nil
+        fileReadVersions.forget(conversationID: id)
+    }
+
+    private func persistMCPGrants() {
+        if let data = try? JSONEncoder().encode(mcpToolGrants) { defaults.set(data, forKey: grantsKey) }
     }
 
     func cancelQueuedApproval(id: UUID) {

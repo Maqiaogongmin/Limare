@@ -14,6 +14,10 @@ enum PermissionEvaluator {
             return .requiresApproval(reason: trigger.detail, triggers: [trigger])
         }
 
+        if request.mcpTool != nil {
+            return .requiresApproval(reason: String(localized: "This MCP tool can perform actions through its server."))
+        }
+
         var triggers: [PermissionTrigger] = []
 
         // 1. Check for sensitive files / credential paths in affected URLs

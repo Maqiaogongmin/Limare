@@ -78,7 +78,7 @@ extension CodeView {
     @objc func handleAction(_ sender: Any?) {
         guard let tag = (sender as? PlatformView)?.tag else { return }
         guard actions.indices.contains(tag) else { return }
-        actions[tag].handler(CodeBlock(language: language.isEmpty ? nil : language, content: content))
+        actions[tag].handler(CodeBlock(language: language.isEmpty ? nil : language, content: copyContent))
     }
 
     #if canImport(UIKit)

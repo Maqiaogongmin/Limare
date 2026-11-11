@@ -27,7 +27,7 @@ struct CodeSheetContent {
         // "swift" reads as "Swift", and "objectiveC" keeps its inner capital.
         title = language.isEmpty ? CodeSheetText.code : language.prefix(1).uppercased() + language.dropFirst()
         code = codeView.textView.attributedText
-        text = codeView.content
+        text = codeView.copyContent
         fileName = CodeFileName.fileName(forLanguage: codeView.language)
     }
 

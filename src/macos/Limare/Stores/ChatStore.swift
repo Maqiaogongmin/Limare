@@ -4,7 +4,6 @@ import Observation
 @MainActor
 @Observable
 final class ChatStore {
-    private(set) var outcomeHandoffsByConversation: [UUID: OutcomeHandoff] = [:]
     private enum InteractiveSendMode {
         case steerOrSend
         case queue
@@ -296,8 +295,6 @@ final class ChatStore {
         runSubscription = runCoordinator.observe { [weak self] event in
             guard let self else { return }
             switch event {
-            case .outcomeHandoff(let conversationID, let handoff):
-                outcomeHandoffsByConversation[conversationID] = handoff
             case .providerHistoryUpdated(let conversationID, let history):
                 guard isViewing(conversationID: conversationID) else { return }
                 conversation = history
@@ -467,14 +464,14 @@ final class ChatStore {
         let mode: InteractiveSendMode = queueing ? .queue : .steerOrSend
         let mentioned = Self.mentionedImageFiles(in: draft)
         if mentioned.isEmpty {
-            submit(mode: mode, outcomeDeclaration: nil)
+            submit(mode: mode)
             return
         }
         let conversationID = viewedConversationID ?? standaloneConversationID
         if let source = interaction.modelSource(for: viewedConversationID),
            let refusal = interaction.imageInputRefusal(for: source) {
             logs.info("Chat", "Mentioned images stay as paths: \(refusal)")
-            submit(mode: mode, outcomeDeclaration: nil)
+            submit(mode: mode)
             return
         }
 
@@ -518,7 +515,7 @@ final class ChatStore {
                 return
             }
         }
-        submit(mode: mode, outcomeDeclaration: nil)
+        submit(mode: mode)
     }
 
     func addAttachment(_ attachment: ChatAttachment) throws {
@@ -564,24 +561,27 @@ final class ChatStore {
         rebuildRequestHistory(conversationID: record.id)
     }
 
-    /// Moves the composer to another conversation. Its content is only cleared once it is safe:
-    /// archived, already identical to an archived draft, or held in memory after a failed
-    /// archive write (with the failure shown to the user).
+    /// Saves the current composer and restores the destination conversation's composer.
     private func switchComposer(to nextConversationID: UUID?) {
-        if draftArchive != nil, let previous = composerConversationID,
-           let composerDraft = archivableComposerDraft() {
+        if let previous = composerConversationID {
+            let hasContent = !draft.isEmpty || !pendingAttachments.isEmpty
+            let composerDraft = hasContent ? ArchivedDraft(text: draft, attachments: pendingAttachments, origin: .composerDraft) : nil
             do {
-                try draftArchive?.archive(composerDraft, conversationID: previous)
+                if let draftArchive {
+                    try draftArchive.saveCurrentDraft(composerDraft, previouslyRestoredID: restoredDraftID, conversationID: previous)
+                } else {
+                    unarchivedComposers[previous] = (composerDraft ?? ArchivedDraft(text: "", attachments: [], origin: .composerDraft), restoredDraftID)
+                }
             } catch {
                 logs.error("Chat", "Failed to archive the composer draft of conversation '\(previous)': \(error.localizedDescription)")
-                unarchivedComposers[previous] = (composerDraft, restoredDraftID)
+                unarchivedComposers[previous] = (composerDraft ?? ArchivedDraft(text: "", attachments: [], origin: .composerDraft), restoredDraftID)
                 // The pending attachments now belong to the in-memory draft; nothing is deleted.
                 pendingAttachments.removeAll()
                 draft = ""
                 restoredDraftID = nil
                 errorMessage = String(localized: "The previous conversation's input couldn't be saved as a draft (\(error.localizedDescription)). It is held for now and goes back into the composer when you return to that conversation; deal with it before you quit Limare.")
                 composerConversationID = nextConversationID
-                restoreUnarchivedComposer(for: nextConversationID)
+                restoreComposer(for: nextConversationID)
                 return
             }
             pendingAttachments.removeAll()
@@ -590,7 +590,16 @@ final class ChatStore {
         clearPendingAttachments()
         restoredDraftID = nil
         composerConversationID = nextConversationID
-        restoreUnarchivedComposer(for: nextConversationID)
+        restoreComposer(for: nextConversationID)
+    }
+
+    private func restoreComposer(for conversationID: UUID?) {
+        guard let conversationID else { return }
+        if unarchivedComposers[conversationID] != nil {
+            restoreUnarchivedComposer(for: conversationID)
+        } else if let current = draftArchive?.currentDraft(for: conversationID) {
+            _ = restoreArchivedDraft(current.id)
+        }
     }
 
     private func restoreUnarchivedComposer(for conversationID: UUID?) {
@@ -604,18 +613,25 @@ final class ChatStore {
     /// instruction). Content the user typed is archived first instead of being overwritten.
     @discardableResult
     func replaceComposerText(_ text: String) -> Bool {
-        if let archive = draftArchive,
-           let conversationID = composerConversationID ?? viewedConversationID,
-           let composerDraft = archivableComposerDraft() {
+        if let archive = draftArchive, let conversationID = composerConversationID ?? viewedConversationID {
+            let composerDraft = archivableComposerDraft()
             do {
-                try archive.archive(composerDraft, conversationID: conversationID)
+                if let composerDraft { try archive.archive(composerDraft, conversationID: conversationID) }
+                if draft != text, let restoredDraftID {
+                    try archive.clearCurrentPointer(ifOwnedBy: restoredDraftID, conversationID: conversationID)
+                }
             } catch {
                 errorMessage = String(localized: "The current input couldn't be saved, so it wasn't replaced: \(error.localizedDescription)")
                 return false
             }
-            pendingAttachments.removeAll()
-            restoredDraftID = nil
+            if composerDraft != nil {
+                pendingAttachments.removeAll()
+                restoredDraftID = nil
+            }
         }
+        // The replacement is a different composer value. Do not later overwrite the archived
+        // source snapshot when saving this new value on a conversation switch.
+        if draft != text { restoredDraftID = nil }
         draft = text
         return true
     }
@@ -674,94 +690,17 @@ final class ChatStore {
     }
 
     func send() {
-        submit(mode: .steerOrSend, outcomeDeclaration: nil)
-    }
-
-    /// Explicit outcome-aware run entry.
-    ///
-    /// Requires an idle conversation and an admitted run. An explicit outcome declaration is
-    /// never silently downgraded to a steer, a queue entry, or an ordinary send: if the run
-    /// cannot start, this returns `false` and no message is committed.
-    @discardableResult
-    func sendOutcomeRun(declaration: OutcomeRunDeclaration) -> Bool {
-        let conversationID = viewedConversationID ?? standaloneConversationID
-        guard canSend, runCoordinator.canStartRun(conversationID: conversationID) else { return false }
-        return submit(mode: .steerOrSend, outcomeDeclaration: declaration)
-    }
-
-    /// Records a verification result against the active run of a conversation.
-    /// Returns false if no active non-terminal run exists, or if the declaration rejects the result.
-    @discardableResult
-    func recordVerificationResult(conversationID: UUID, result: VerificationResult) -> Bool {
-        guard let activeRun = runCoordinator.run(for: conversationID), !activeRun.status.isTerminal else { return false }
-        return runCoordinator.recordVerificationResult(runID: activeRun.id, result: result)
-    }
-
-    /// Records a verification result against the current active conversation run.
-    @discardableResult
-    func recordVerificationResult(result: VerificationResult) -> Bool {
-        let conversationID = viewedConversationID ?? standaloneConversationID
-        return recordVerificationResult(conversationID: conversationID, result: result)
-    }
-
-    /// Records an atomic mechanical verification result and evidence receipt pair against the active run of a conversation.
-    /// Returns false if no active non-terminal run exists, or if atomic admission rejects the pair.
-    @discardableResult
-    func recordMechanicalVerification(conversationID: UUID, result: VerificationResult, receipt: EvidenceReceipt) -> Bool {
-        guard let activeRun = runCoordinator.run(for: conversationID), !activeRun.status.isTerminal else { return false }
-        return runCoordinator.recordMechanicalVerification(runID: activeRun.id, verificationResult: result, evidenceReceipt: receipt)
-    }
-
-    /// Records an atomic mechanical verification result and evidence receipt pair against the current active conversation run.
-    @discardableResult
-    func recordMechanicalVerification(result: VerificationResult, receipt: EvidenceReceipt) -> Bool {
-        let conversationID = viewedConversationID ?? standaloneConversationID
-        return recordMechanicalVerification(conversationID: conversationID, result: result, receipt: receipt)
-    }
-
-    /// Records an atomic semantic verification result and specialist receipt pair against the active run of a conversation.
-    /// Returns false if no active non-terminal run exists, or if atomic admission rejects the pair (EC-C01).
-    @discardableResult
-    func recordSemanticVerification(
-        conversationID: UUID,
-        result: VerificationResult,
-        receipt: EvidenceReceipt,
-        artifactStore: ArtifactStore? = nil
-    ) -> Bool {
-        guard let activeRun = runCoordinator.run(for: conversationID), !activeRun.status.isTerminal else { return false }
-        return runCoordinator.recordSemanticVerification(
-            runID: activeRun.id,
-            verificationResult: result,
-            specialistReceipt: receipt,
-            artifactStore: artifactStore
-        )
-    }
-
-    /// Records an atomic semantic verification result and specialist receipt pair against the current active conversation run (EC-C01).
-    @discardableResult
-    func recordSemanticVerification(
-        result: VerificationResult,
-        receipt: EvidenceReceipt,
-        artifactStore: ArtifactStore? = nil
-    ) -> Bool {
-        let conversationID = viewedConversationID ?? standaloneConversationID
-        return recordSemanticVerification(
-            conversationID: conversationID,
-            result: result,
-            receipt: receipt,
-            artifactStore: artifactStore
-        )
+        submit(mode: .steerOrSend)
     }
 
     func queue() {
-        submit(mode: .queue, outcomeDeclaration: nil)
+        submit(mode: .queue)
     }
 
     /// Admits an interactive input. Returns `true` only when the input was either attached to a
     /// live run (ordinary steer/queue) or durably admitted and handed to `startRun`.
-    /// An explicit outcome declaration is never downgraded into steer/queue.
     @discardableResult
-    private func submit(mode: InteractiveSendMode, outcomeDeclaration: OutcomeRunDeclaration?) -> Bool {
+    private func submit(mode: InteractiveSendMode) -> Bool {
         guard viewedConversation?.isNativeDelegationChild != true else {
             errorMessage = String(localized: "A subtask's history is maintained by its own run. Steer or continue it from the parent conversation.")
             return false
@@ -777,7 +716,6 @@ final class ChatStore {
             text: draft,
             attachments: attachmentsToSend,
             mode: mode == .queue ? .queue : .steerOrSend,
-            outcomeDeclaration: outcomeDeclaration,
             // The in-memory transcript stands in only when there is no ConversationStore at all.
             unpersistedTranscript: conversationStore == nil ? messages : nil
         )
@@ -792,9 +730,6 @@ final class ChatStore {
         case .committedNotStarted:
             showAdmittedInput(conversationID: targetConversationID, prompt: prompt, attachments: attachmentsToSend)
             // A run that failed while starting has already reported its own error.
-            if outcomeDeclaration != nil && errorMessage == nil {
-                errorMessage = String(localized: "The explicit outcome run was not admitted because this conversation is busy.")
-            }
             return false
         case .refused(let refusal):
             errorMessage = Self.message(for: refusal)
@@ -878,7 +813,9 @@ final class ChatStore {
         }
         let archived = draftArchive?.referencedAttachmentIDs ?? []
         for msg in messages {
-            for att in msg.attachments where !archived.contains(att.id) {
+            for att in msg.attachments where !archived.contains(att.id) && !(conversationStore?.conversations.contains(where: {
+                $0.id != viewedConversationID && $0.messages.contains(where: { $0.attachments.contains(where: { $0.id == att.id }) })
+            }) ?? false) {
                 attachmentStore.deleteAttachment(att)
             }
         }
@@ -1111,7 +1048,6 @@ final class ChatStore {
 
         messages = conversationStore?.conversations.first(where: { $0.id == conversationID })?.messages ?? []
         rebuildRequestHistory(conversationID: conversationID)
-        outcomeHandoffsByConversation[conversationID] = nil
         errorMessage = nil
         draft = target.content
         pendingAttachments = target.attachments
@@ -1139,6 +1075,11 @@ final class ChatStore {
         return draftArchive?.drafts(for: conversationID) ?? []
     }
 
+    /// The active draft is already in the composer; only older displaced drafts need recovery.
+    var recoverableHistoricalDrafts: [ArchivedDraft] {
+        archivedDrafts.filter { $0.id != restoredDraftID }
+    }
+
     /// Fills the composer from an archived draft, archiving the composer's current content first.
     /// The draft stays archived until the composer content is sent.
     @discardableResult
@@ -1148,6 +1089,14 @@ final class ChatStore {
         if let composerDraft = archivableComposerDraft() {
             do {
                 try archive.archive(composerDraft, conversationID: conversationID)
+            } catch {
+                errorMessage = String(localized: "The current draft couldn't be saved: \(error.localizedDescription)")
+                return false
+            }
+        }
+        if archive.currentDraft(for: conversationID)?.id != entry.id {
+            do {
+                try archive.saveCurrentDraft(entry, previouslyRestoredID: entry.id, conversationID: conversationID)
             } catch {
                 errorMessage = String(localized: "The current draft couldn't be saved: \(error.localizedDescription)")
                 return false

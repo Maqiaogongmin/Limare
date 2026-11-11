@@ -142,6 +142,30 @@ struct LimareApp: App {
                     appState.focusedWindow.composerFocusRequest += 1
                 }
                 .keyboardShortcut("l", modifiers: .command)
+                let historicalDrafts = appState.focusedWindow.chat.recoverableHistoricalDrafts
+                if !historicalDrafts.isEmpty {
+                    Menu("Recover Draft") {
+                        ForEach(historicalDrafts) { draft in
+                            let summary = draft.text.isEmpty
+                                ? String(localized: "(attachments only)")
+                                : String(draft.text.replacingOccurrences(of: "\n", with: " ").prefix(60))
+                            Menu {
+                                Button("Restore") {
+                                    let window = appState.focusedWindow
+                                    if window.chat.restoreArchivedDraft(draft.id) {
+                                        window.screen = .chat
+                                        window.composerFocusRequest += 1
+                                    }
+                                }
+                                Button("Delete This Draft", role: .destructive) {
+                                    appState.focusedWindow.chat.deleteArchivedDraft(draft.id)
+                                }
+                            } label: {
+                                Text(verbatim: "\(summary) — \(draft.createdAt.formatted(date: .abbreviated, time: .shortened))")
+                            }
+                        }
+                    }
+                }
                 Button(appState.focusedWindow.workSurface.isPresented ? "Hide Work Surface" : "Show Work Surface") {
                     appState.focusedWindow.workSurface.togglePresented()
                 }

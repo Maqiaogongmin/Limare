@@ -57,6 +57,8 @@ struct ShellExecutionResult: Sendable {
     /// Only the original process group is observed. Detached descendants and
     /// prior external effects are not represented as stopped/reverted.
     var originalProcessGroupAbsent: Bool? = nil
+    var silentMillisecondsAtTimeout: Int? = nil
+    var elapsedMillisecondsAtTimeout: Int? = nil
 }
 
 enum ShellStreamEvent: Sendable {

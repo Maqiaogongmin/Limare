@@ -113,6 +113,8 @@ public struct ArtifactDescriptor: Codable, Identifiable, Equatable, Sendable {
     public let representationProfile: RepresentationProfileIdentity?
     public var retentionState: ArtifactRetentionState
     public var retentionClass: ArtifactRetentionClass
+    /// Explicit readers that inherited this artifact in a conversation fork.
+    public var sharedConversationIDs: [UUID]?
 
     public init(
         artifactID: UUID = UUID(),
@@ -152,5 +154,6 @@ public struct ArtifactDescriptor: Codable, Identifiable, Equatable, Sendable {
         self.representationProfile = representationProfile
         self.retentionState = retentionState
         self.retentionClass = retentionClass
+        self.sharedConversationIDs = nil
     }
 }

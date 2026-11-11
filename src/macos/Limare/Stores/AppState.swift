@@ -171,6 +171,7 @@ final class AppState {
             persistence: persistence,
             logs: logs,
             attachmentStore: attachments,
+            artifactStore: artifactStore,
             defaultSubModelSource: { [weak modelGroups] in
                 guard let groupID = modelGroups?.defaultSubGroupId,
                       modelGroups?.group(for: groupID) != nil else { return nil }
@@ -221,6 +222,7 @@ final class AppState {
                 skills?.enabledSkillDirectories ?? []
             },
             memoryLocations: { [memory.globalFileURL, memory.dailyDirectoryURL] },
+            memoryLongTermLocations: { [memory.globalFileURL] },
             mcpStore: mcp,
             attachmentStore: attachments,
             artifactStore: artifactStore,
@@ -324,8 +326,9 @@ final class AppState {
         chat.runCoordinator.worktreeStore = worktrees
         conversations.worktreeOperationInProgress = { [weak worktrees] id in worktrees?.operations[id] != nil }
         browser.hasActiveRun = { [weak coordinator = chat.runCoordinator] conversationID in coordinator?.isActive(conversationID: conversationID) == true }
-        conversations.onConversationDeleted = { [weak browser, weak chat, weak undoJournal, weak runtimeEvents, weak computerUseAppAuthorization] conversationID in
+        conversations.onConversationDeleted = { [weak browser, weak chat, weak undoJournal, weak runtimeEvents, weak computerUseAppAuthorization, weak permissions] conversationID in
             browser?.releaseSession(ownedBy: conversationID)
+            permissions?.forgetConversation(conversationID)
             computerUseAppAuthorization?.forget(conversationID: conversationID)
             runtimeEvents?.removeEvents(conversationID: conversationID)
             chat?.discardArchivedDrafts(conversationID: conversationID)

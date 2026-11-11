@@ -20,9 +20,6 @@ struct ConversationRow: View {
         if isSelected {
             return Color.primary.opacity(0.85)
         }
-        if conversation.isPinned {
-            return Color.accentColor.opacity(0.85)
-        }
         return Color.secondary
     }
 

@@ -53,6 +53,8 @@ def stdio(record_dir):
             tools.append({"name": "grown", "description": "Added at runtime", "inputSchema": {"type": "object"}})
             send({"jsonrpc": "2.0", "id": request_id, "result": {"content": [{"type": "text", "text": "grew"}]}})
             send({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
+        elif method == "tools/call" and message["params"]["name"] == "grown":
+            send({"jsonrpc": "2.0", "id": request_id, "result": {"content": [{"type": "text", "text": "ready"}]}})
         elif method == "notifications/cancelled":
             cancelled.set()
         elif request_id is not None:

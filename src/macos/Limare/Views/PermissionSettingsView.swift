@@ -31,12 +31,43 @@ struct PermissionSettingsView: View {
                 modeRow(
                     mode: .fullAccess,
                     title: "Full access",
-                    badge: "Danger",
-                    badgeTone: .danger,
+                    badge: nil,
                     description: "\(PermissionMode.fullAccess.detail)",
                     reviewer: "None",
                     note: "Higher risk of data loss, leaks, or unintended system modifications."
                 )
+            }
+
+            if !appState.permissions.mcpToolGrants.isEmpty {
+                SettingsSection(title: "Allowed MCP Tools") {
+                    ForEach(appState.permissions.mcpToolGrants.sorted {
+                        ($0.serverID, $0.toolName) < ($1.serverID, $1.toolName)
+                    }, id: \.self) { grant in
+                        HStack {
+                            Text("\(grant.serverID) / \(grant.toolName)").textSelection(.enabled)
+                            Spacer()
+                            Button("Revoke") { appState.permissions.revokeMCPToolGrant(grant) }
+                        }
+                    }
+                }
+            }
+
+            if !appState.permissions.browserSiteGrants.isEmpty {
+                SettingsSection(title: "Browser Sites Allowed for Conversations") {
+                    ForEach(appState.permissions.browserSiteGrants.keys.sorted { $0.uuidString < $1.uuidString }, id: \.self) { conversationID in
+                        ForEach((appState.permissions.browserSiteGrants[conversationID] ?? []).sorted(), id: \.self) { site in
+                            HStack {
+                                VStack(alignment: .leading) {
+                                    Text(site).textSelection(.enabled)
+                                    Text(appState.conversations.conversations.first(where: { $0.id == conversationID })?.title ?? conversationID.uuidString)
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Button("Revoke") { appState.permissions.revokeBrowserSite(site, conversationID: conversationID) }
+                            }
+                        }
+                    }
+                }
             }
 
             Text("Shell commands run in a macOS sandbox, as in Codex; Full access and approved requests run outside it.")
@@ -46,7 +77,7 @@ struct PermissionSettingsView: View {
         }
         .alert("Enable Full Access?", isPresented: $showFullAccessWarning) {
             Button("Cancel", role: .cancel) {}
-            Button("Enable Full Access", role: .destructive) {
+            Button("Enable Full Access") {
                 appState.permissions.mode = .fullAccess
             }
         } message: {
@@ -98,7 +129,7 @@ struct PermissionSettingsView: View {
                 if let note {
                     Text(note)
                         .font(.caption)
-                        .foregroundStyle(mode == .fullAccess ? AppColors.dangerText : Color.secondary)
+                        .foregroundStyle(Color.secondary)
                         .padding(.top, 1)
                 }
             }

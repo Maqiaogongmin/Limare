@@ -10,7 +10,13 @@ import Observation
 @MainActor
 @Observable
 final class DraftArchiveStore {
+    private struct StoredDrafts: Codable {
+        var drafts: [ArchivedDraft]
+        var currentDraftID: UUID?
+    }
+
     private(set) var draftsByConversation: [UUID: [ArchivedDraft]] = [:]
+    private(set) var currentDraftIDByConversation: [UUID: UUID] = [:]
     let directoryURL: URL
     @ObservationIgnored private let fileManager: FileManager
     @ObservationIgnored private let logs: DebugLogStore
@@ -37,6 +43,49 @@ final class DraftArchiveStore {
         draftsByConversation[conversationID]?.first(where: { $0.id == id })
     }
 
+    func currentDraft(for conversationID: UUID) -> ArchivedDraft? {
+        guard let id = currentDraftIDByConversation[conversationID] else { return nil }
+        return draft(id: id, conversationID: conversationID)
+    }
+
+    /// Demotes a composer's old snapshot to history when another value replaces it.
+    func clearCurrentPointer(ifOwnedBy draftID: UUID, conversationID: UUID) throws {
+        guard currentDraftIDByConversation[conversationID] == draftID else { return }
+        try save(draftsByConversation[conversationID] ?? [], currentDraftID: nil, conversationID: conversationID)
+        currentDraftIDByConversation[conversationID] = nil
+    }
+
+    /// Saves the composer and its identity in one atomic file. A changed current composer
+    /// replaces its previous snapshot, while other archived drafts remain recoverable.
+    func saveCurrentDraft(_ snapshot: ArchivedDraft?, previouslyRestoredID: UUID?, conversationID: UUID) throws {
+        guard snapshot != nil || previouslyRestoredID != nil else { return }
+        var list = draftsByConversation[conversationID] ?? []
+        let currentID = currentDraftIDByConversation[conversationID]
+        var nextID = currentID
+        if let snapshot {
+            if let previousID = previouslyRestoredID,
+               let index = list.firstIndex(where: { $0.id == previousID }),
+               list[index].matches(text: snapshot.text, attachments: snapshot.attachments) {
+                nextID = previousID
+            } else {
+                // Only replace the snapshot owned by this composer. Another window may have
+                // saved a newer current draft while this one was open.
+                if let previousID = previouslyRestoredID, previousID == currentID,
+                   let index = list.firstIndex(where: { $0.id == previousID && $0.origin == .composerDraft }) {
+                    list.remove(at: index)
+                }
+                list.insert(snapshot, at: 0)
+                nextID = snapshot.id
+            }
+        } else if let previousID = previouslyRestoredID, previousID == currentID {
+            list.removeAll { $0.id == previousID }
+            nextID = nil
+        }
+        try save(list, currentDraftID: nextID, conversationID: conversationID)
+        draftsByConversation[conversationID] = list.isEmpty ? nil : list
+        currentDraftIDByConversation[conversationID] = nextID
+    }
+
     /// Every attachment some archived draft still refers to.
     var referencedAttachmentIDs: Set<UUID> {
         Set(draftsByConversation.values.joined().flatMap { $0.attachments.map(\.id) })
@@ -48,7 +97,7 @@ final class DraftArchiveStore {
     func archive(_ draft: ArchivedDraft, conversationID: UUID) throws {
         var list = draftsByConversation[conversationID] ?? []
         list.insert(draft, at: 0)
-        try save(list, conversationID: conversationID)
+        try save(list, currentDraftID: currentDraftIDByConversation[conversationID], conversationID: conversationID)
         draftsByConversation[conversationID] = list
     }
 
@@ -57,8 +106,10 @@ final class DraftArchiveStore {
         var list = draftsByConversation[conversationID] ?? []
         guard let index = list.firstIndex(where: { $0.id == draftID }) else { return nil }
         let removed = list.remove(at: index)
-        try save(list, conversationID: conversationID)
+        let currentID = currentDraftIDByConversation[conversationID] == draftID ? nil : currentDraftIDByConversation[conversationID]
+        try save(list, currentDraftID: currentID, conversationID: conversationID)
         draftsByConversation[conversationID] = list.isEmpty ? nil : list
+        currentDraftIDByConversation[conversationID] = currentID
         return removed
     }
 
@@ -66,6 +117,7 @@ final class DraftArchiveStore {
     @discardableResult
     func removeAll(conversationID: UUID) -> [ArchivedDraft] {
         let removed = draftsByConversation.removeValue(forKey: conversationID) ?? []
+        currentDraftIDByConversation.removeValue(forKey: conversationID)
         try? fileManager.removeItem(at: fileURL(for: conversationID))
         return removed
     }
@@ -74,7 +126,7 @@ final class DraftArchiveStore {
         directoryURL.appendingPathComponent("\(conversationID.uuidString).json")
     }
 
-    private func save(_ list: [ArchivedDraft], conversationID: UUID) throws {
+    private func save(_ list: [ArchivedDraft], currentDraftID: UUID?, conversationID: UUID) throws {
         let url = fileURL(for: conversationID)
         guard !list.isEmpty else {
             if fileManager.fileExists(atPath: url.path) {
@@ -85,7 +137,7 @@ final class DraftArchiveStore {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        try encoder.encode(list).write(to: url, options: .atomic)
+        try encoder.encode(StoredDrafts(drafts: list, currentDraftID: currentDraftID)).write(to: url, options: .atomic)
         try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 
@@ -96,7 +148,19 @@ final class DraftArchiveStore {
         for file in files where file.pathExtension == "json" {
             guard let id = UUID(uuidString: file.deletingPathExtension().lastPathComponent) else { continue }
             do {
-                let list = try decoder.decode([ArchivedDraft].self, from: Data(contentsOf: file))
+                let data = try Data(contentsOf: file)
+                let list: [ArchivedDraft]
+                if let stored = try? decoder.decode(StoredDrafts.self, from: data) {
+                    list = stored.drafts
+                    if let currentID = stored.currentDraftID, list.contains(where: { $0.id == currentID }) {
+                        currentDraftIDByConversation[id] = currentID
+                    }
+                } else {
+                    list = try decoder.decode([ArchivedDraft].self, from: data)
+                    // Older versions archived the composer when leaving a conversation. The
+                    // newest entry is the best available candidate for automatic restoration.
+                    currentDraftIDByConversation[id] = list.first?.id
+                }
                 if !list.isEmpty { draftsByConversation[id] = list }
             } catch {
                 logs.error("DraftArchive", "Unreadable draft archive '\(file.lastPathComponent)': \(error.localizedDescription)")

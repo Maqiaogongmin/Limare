@@ -78,13 +78,15 @@ final class WorktreeStore {
     /// The project folder an empty, unbound conversation would branch from.
     func explicitLocal(for conversationID: UUID) -> URL? {
         guard let conversation = record(conversationID), !conversation.isNativeDelegationChild else { return nil }
+        if let forkDirectory = conversation.forkWorkingDirectory { return forkDirectory.url }
         if conversation.projectID != nil { return conversations.project(for: conversation)?.workspace?.url }
         return conversation.workspace?.url
     }
 
     /// An empty conversation whose folder is a Git repository can start in a new worktree.
     func canOfferWorktree(for conversationID: UUID) -> Bool {
-        guard let conversation = record(conversationID), conversation.messages.isEmpty, conversation.worktree == nil,
+        guard let conversation = record(conversationID),
+              (conversation.messages.isEmpty || (conversation.forkParentConversationID != nil && conversation.forkPointMessageID == conversation.messages.last?.id)), conversation.worktree == nil,
               let local = explicitLocal(for: conversationID) else { return false }
         return FileManager.default.fileExists(atPath: local.appendingPathComponent(".git").path)
     }
@@ -119,9 +121,14 @@ final class WorktreeStore {
         }
         operations[id] = .creating
         defer { operations.removeValue(forKey: id) }
+        guard let original = record(id), original.worktree == nil, !runs.isActive(conversationID: id),
+              original.messages.isEmpty || (original.forkParentConversationID != nil && original.forkPointMessageID == original.messages.last?.id) else {
+            throw GitWorktreeService.Failure.unavailable(String(localized: "The conversation cannot start in a worktree."))
+        }
         let created = try await service.create(repositoryRoot: local, conversationID: id, baseBranch: baseBranch,
                                                managedRoot: managedRoot, branchPrefix: preferences.value.branchPrefix)
-        guard let current = record(id), current.messages.isEmpty, current.worktree == nil else {
+        guard let current = record(id), current.messages == original.messages, current.worktree == nil,
+              !runs.isActive(conversationID: id) else {
             _ = try? await service.remove(created.worktree)
             throw GitWorktreeService.Failure.unavailable(String(localized: "The conversation changed while its worktree was being created."))
         }
@@ -194,6 +201,11 @@ final class WorktreeStore {
     /// when Git refuses the removal. `stopping` stops the conversation first, as deleting it does.
     func remove(conversationID id: UUID, keepFolder: Bool, stopping: Bool = false) async throws {
         let worktree = try boundWorktree(id)
+        if !keepFolder, conversations.conversations.contains(where: {
+            $0.id != id && $0.forkWorkingDirectory?.url.standardizedFileURL == worktree.workspace.url.standardizedFileURL
+        }) {
+            throw GitWorktreeService.Failure.unavailable(String(localized: "Another conversation shares this worktree. Keep the folder or move that conversation before removing it."))
+        }
         if stopping {
             runs.stop(conversationID: id)
             guard operations[id] == nil else { throw GitWorktreeService.Failure.unavailable(String(localized: "The worktree is being changed.")) }

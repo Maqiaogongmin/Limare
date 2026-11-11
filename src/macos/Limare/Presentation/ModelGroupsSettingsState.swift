@@ -135,6 +135,7 @@ final class ModelGroupsSettingsState {
     func summary(for group: ModelGroup) -> String {
         let count = group.memberEntryIds.count
         let countStr = String(localized: "\(count) models")
+        guard count > 1 else { return countStr }
         let stratStr = group.strategy == .fallback ? String(localized: "Fallback") : String(localized: "Load Balance")
         return "\(countStr) · \(stratStr)"
     }

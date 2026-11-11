@@ -37,6 +37,8 @@ final class ConversationStore {
     @ObservationIgnored
     private let attachmentStore: AttachmentStore?
     @ObservationIgnored
+    private let artifactStore: ArtifactStore?
+    @ObservationIgnored
     private(set) weak var runCoordinator: ConversationRunCoordinator?
     @ObservationIgnored
     private var hasIssuedMutationSink = false
@@ -49,6 +51,7 @@ final class ConversationStore {
         persistence: ConversationPersistence,
         logs: DebugLogStore,
         attachmentStore: AttachmentStore? = nil,
+        artifactStore: ArtifactStore? = nil,
         defaultSubModelSource: (@MainActor () -> ConversationModelSource?)? = nil,
         hasRetainedDrafts: ((UUID) -> Bool)? = nil
     ) {
@@ -58,6 +61,7 @@ final class ConversationStore {
         self.hasRetainedDrafts = hasRetainedDrafts
         self.logs = logs
         self.attachmentStore = attachmentStore
+        self.artifactStore = artifactStore
         if let defaultSubModelSource {
             self.defaultSubModelSource = defaultSubModelSource
         }
@@ -78,6 +82,11 @@ final class ConversationStore {
         persistence.ensureWorkingDirectoryExists(for: conversationID)
     }
 
+    func isManagedWorkingDirectory(_ url: URL) -> Bool {
+        let managedRoot = persistence.workingDirectoryURL(for: UUID()).deletingLastPathComponent()
+        return WorkspacePathResolver.isInsideWorkspace(url, workspaceURL: managedRoot)
+    }
+
     /// Resolve configured scope without checking filesystem availability (SR-I03).
     func effectiveWorkspaceConfiguration(for conversationID: UUID) -> WorkspaceConfiguration? {
         guard let conv = conversations.first(where: { $0.id == conversationID }) else {
@@ -86,6 +95,7 @@ final class ConversationStore {
         // Native child admission binds an immutable explicit workspace; no UI/global/project fallback.
         if conv.isNativeDelegationChild, let workspace = conv.workspace { return workspace }
         if let worktree = conv.worktree { return worktree.workspace }
+        if let shared = conv.forkWorkingDirectory { return shared }
         // Step 1: Project Workspace
         if conv.projectID != nil, let parent = project(for: conv), let parentWorkspace = parent.workspace {
             return parentWorkspace
@@ -199,6 +209,81 @@ final class ConversationStore {
     }
 
     // MARK: - Conversation Operations
+
+    /// Create a new durable conversation from a completed prefix, leaving all runtime state behind.
+    @discardableResult
+    func forkConversation(id: UUID, through messageID: UUID) throws -> ConversationRecord {
+        guard let source = conversations.first(where: { $0.id == id }), !source.isNativeDelegationChild else {
+            throw RuntimePersistenceError.conversationNotFound(id)
+        }
+        let current = runCoordinator?.conversationMessages(for: id) ?? source.messages
+        guard let index = current.firstIndex(where: { $0.id == messageID }) else {
+            throw RuntimePersistenceError.writeFailed("The selected message is no longer available.")
+        }
+        let prefix = Array(current[...index])
+        guard prefix.allSatisfy({ $0.state != .streaming && $0.toolCalls.allSatisfy { $0.state.isTerminal } }) else {
+            throw RuntimePersistenceError.writeFailed("Wait for the selected part of the conversation to finish before forking.")
+        }
+        var history = prefix
+        for messageIndex in history.indices {
+            for callIndex in history[messageIndex].toolCalls.indices {
+                history[messageIndex].toolCalls[callIndex].owningRunID = nil
+            }
+        }
+        var fork = ConversationRecord(title: source.displayTitle + " (分支)", projectID: source.projectID,
+                                      workspace: source.workspace, providerID: source.providerID, modelID: source.modelID,
+                                      modelSource: source.modelSource, subModelSource: source.subModelSource,
+                                      subagentEnabled: source.subagentEnabled, thinkingLevelOverride: source.thinkingLevelOverride,
+                                      messages: history, memoryEnabled: source.memoryEnabled)
+        fork.forkParentConversationID = id
+        fork.forkPointMessageID = messageID
+        fork.forkWorkingDirectory = .from(url: effectiveWorkingDirectory(for: id))
+        let artifactIDs = Self.forkArtifactIDs(in: history)
+        if !artifactIDs.isEmpty {
+            guard let artifactStore else { throw ArtifactStoreError.storeUnavailable }
+            try artifactStore.shareForFork(artifactIDs: artifactIDs, from: id, to: fork.id)
+        }
+        do { try persistence.saveConversation(fork) }
+        catch {
+            try? artifactStore?.revokeForkAccess(conversationID: fork.id)
+            throw error
+        }
+        conversations.insert(fork, at: 0)
+        if let pid = fork.projectID, let projectIndex = projects.firstIndex(where: { $0.id == pid }) {
+            projects[projectIndex].conversationIDs.append(fork.id)
+            try? persistence.saveProjects(projects)
+            expandedProjectIDs.insert(pid)
+        }
+        selectConversation(id: fork.id)
+        return fork
+    }
+
+    private static func forkArtifactIDs(in messages: [ChatMessage]) -> Set<UUID> {
+        var result = Set<UUID>()
+        // Tools can refer to an artifact by URI or bare UUID. The artifact store still checks
+        // the source's authority before granting the fork access to any matched identifier.
+        let pattern = try? NSRegularExpression(pattern: "(?<![0-9a-fA-F-])([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(?![0-9a-fA-F-])")
+        for message in messages {
+            let texts = [message.content] + message.toolCalls.flatMap { call in
+                [call.input, call.output] + (call.resultParts ?? []).compactMap { part in
+                    switch part {
+                    case .text(let value), .error(let value): value
+                    case .artifact: nil
+                    }
+                }
+            }
+            for text in texts {
+                let fullRange = NSRange(text.startIndex..., in: text)
+                for match in pattern?.matches(in: text, range: fullRange) ?? [] {
+                    if let range = Range(match.range(at: 1), in: text), let id = UUID(uuidString: String(text[range])) { result.insert(id) }
+                }
+            }
+            for call in message.toolCalls {
+                for case let .artifact(id, _, _) in call.resultParts ?? [] { result.insert(id) }
+            }
+        }
+        return result
+    }
 
     @discardableResult
     func newConversation(
@@ -507,12 +592,25 @@ final class ConversationStore {
         }
         guard let index = conversations.firstIndex(where: { $0.id == id }) else { return }
         let removed = conversations.remove(at: index)
-        try? persistence.deleteConversation(id: id)
+        let managed = persistence.workingDirectoryURL(for: id).standardizedFileURL
+        let isShared = conversations.contains { $0.forkWorkingDirectory?.url.standardizedFileURL == managed }
+        try? persistence.deleteConversation(id: id, preserveWorkingDirectory: isShared)
+        try? artifactStore?.revokeForkAccess(conversationID: id)
+
+        // A fork may be the last remaining reference to its deleted parent's managed folder.
+        if let folder = removed.forkWorkingDirectory?.url.standardizedFileURL,
+           let owner = UUID(uuidString: folder.lastPathComponent),
+           persistence.workingDirectoryURL(for: owner).standardizedFileURL == folder,
+           !conversations.contains(where: { $0.id == owner || $0.forkWorkingDirectory?.url.standardizedFileURL == folder }) {
+            persistence.deleteWorkingDirectory(for: owner)
+        }
 
         if let attachmentStore {
             for msg in removed.messages {
                 for att in msg.attachments {
-                    attachmentStore.deleteAttachment(att)
+                    if !conversations.contains(where: { $0.messages.contains(where: { $0.attachments.contains(where: { $0.id == att.id }) }) }) {
+                        attachmentStore.deleteAttachment(att)
+                    }
                 }
             }
         }
@@ -545,6 +643,8 @@ final class ConversationStore {
         }
 
         conversations[index].projectID = toProjectID
+        // A deliberate move changes the folder scope; fork provenance remains historical.
+        conversations[index].forkWorkingDirectory = nil
         if let toProjectID {
             if let pIndex = projects.firstIndex(where: { $0.id == toProjectID }) {
                 if !projects[pIndex].conversationIDs.contains(id) {

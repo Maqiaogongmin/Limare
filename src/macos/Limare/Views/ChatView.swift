@@ -186,6 +186,17 @@ struct ChatView: View {
 
                 UndoPlanBanner()
 
+                if let id = window.conversationID,
+                   appState.conversationRuns.isRunning(conversationID: id) || appState.conversationRuns.isPaused(conversationID: id) {
+                    let items = TranscriptTurnGrouping.currentPlan(in: window.chat.messages)
+                    if !items.isEmpty {
+                        TurnPlanView(items: items)
+                            .frame(maxWidth: AppLayout.transcriptMaximumWidth)
+                            .padding(.horizontal, AppSpacing.chatHorizontal)
+                            .padding(.bottom, AppSpacing.small)
+                    }
+                }
+
                 ConversationApprovalArea(questionMaximumHeight: proxy.size.height * 0.6)
 
                 if let child = window.conversation, child.isNativeDelegationChild {

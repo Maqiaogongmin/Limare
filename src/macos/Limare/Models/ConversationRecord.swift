@@ -92,6 +92,10 @@ struct ConversationRecord: Identifiable, Codable, Equatable, Sendable {
     var retractedRecoveryRunID: UUID?
     /// Finished Compact commands, oldest first.
     var compactionMarkers: [CompactionMarker] = []
+    /// The fork's provenance and frozen working directory, independent of runtime recovery.
+    var forkParentConversationID: UUID? = nil
+    var forkPointMessageID: UUID? = nil
+    var forkWorkingDirectory: WorkspaceConfiguration? = nil
     var isNativeDelegationChild: Bool { nativeDelegationTaskID != nil }
     var schemaVersion: Int
 
@@ -193,7 +197,7 @@ struct ConversationRecord: Identifiable, Codable, Equatable, Sendable {
         case id, title, createdAt, updatedAt, projectID, workspace, worktree, providerID, modelID, modelSource, subModelSource, subagentEnabled
         case thinkingLevelOverride, messages, memoryEnabled, status, pinnedAt, archivedAt, schemaVersion
         case nativeDelegationTaskID, nativeDelegationParentID, generatedTitleSourceMessageID
-        case retractedRecoveryRunID, compactionMarkers
+        case retractedRecoveryRunID, compactionMarkers, forkParentConversationID, forkPointMessageID, forkWorkingDirectory
     }
 
     init(from decoder: Decoder) throws {
@@ -224,6 +228,9 @@ struct ConversationRecord: Identifiable, Codable, Equatable, Sendable {
         generatedTitleSourceMessageID = try container.decodeIfPresent(UUID.self, forKey: .generatedTitleSourceMessageID)
         retractedRecoveryRunID = try container.decodeIfPresent(UUID.self, forKey: .retractedRecoveryRunID)
         compactionMarkers = try container.decodeIfPresent([CompactionMarker].self, forKey: .compactionMarkers) ?? []
+        forkParentConversationID = try container.decodeIfPresent(UUID.self, forKey: .forkParentConversationID)
+        forkPointMessageID = try container.decodeIfPresent(UUID.self, forKey: .forkPointMessageID)
+        forkWorkingDirectory = try container.decodeIfPresent(WorkspaceConfiguration.self, forKey: .forkWorkingDirectory)
         schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
     }
 }

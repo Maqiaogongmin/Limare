@@ -373,8 +373,8 @@ actor HookCommandRunner {
             errorString = "Hook process exited with code \(output.exitCode)"
         }
 
-        // Parse stdout only if not cancelled, not timed out, and process spawned successfully
-        if !output.isCancelled && !output.isTimeout && output.exitCode != -1 {
+        // Exit 2 is a denial; its stdout must not override the decision.
+        if !output.isCancelled && !output.isTimeout && output.exitCode != -1 && output.exitCode != 2 {
             let trimmedStdout = output.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmedStdout.isEmpty {
                 if let data = trimmedStdout.data(using: .utf8),

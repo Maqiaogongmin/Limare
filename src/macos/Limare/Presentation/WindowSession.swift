@@ -51,6 +51,14 @@ final class WindowSession: Identifiable {
     /// session if that conversation holds it and has no run in progress. Other windows are not
     /// touched.
     func show(_ record: ConversationRecord) {
+        if chat.lastLoadedConversationID != record.id,
+           let editor = hostWindow?.firstResponder as? NativeAppKitDraftTextView,
+           let visibleDraft = editor.endCompositionForConversationSwitch() {
+            // The input method owns marked text and may not have sent textDidChange yet.
+            // Preserve what is visible in the old conversation before ending composition;
+            // otherwise its late callbacks can write into the newly selected conversation.
+            chat.draft = visibleDraft
+        }
         guard let app else {
             chat.loadConversation(record)
             return

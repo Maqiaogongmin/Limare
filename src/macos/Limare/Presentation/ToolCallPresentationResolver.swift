@@ -138,6 +138,24 @@ enum ToolCallPresentationResolver {
             return questions.count > 1 ? String(localized: "\(header) and \(questions.count - 1) more questions") : header
         }
 
+        if (name == "update_plan" || name.hasSuffix("update_plan")),
+           MCPToolNamespace.parse(exposedName: name) == nil {
+            if let explanation = (json["explanation"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !explanation.isEmpty {
+                return explanation
+            }
+            if let plan = json["plan"] as? [[String: Any]] {
+                if let active = plan.first(where: { ($0["status"] as? String) == "in_progress" })?["step"] as? String {
+                    let trimmed = active.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty { return trimmed }
+                }
+                if let first = plan.first?["step"] as? String {
+                    let trimmed = first.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty { return trimmed }
+                }
+            }
+        }
+
         if name.contains("file_") {
             if let path = json["path"] as? String {
                 return displayPath(path, workspace: workspace)

@@ -11,6 +11,7 @@ final class NativeProtocolTests: XCTestCase {
             toolsJSON: tools, maxTokens: 4096, thinking: "xhigh", supportsReasoning: true, effortValues: ["xhigh", "max"])
         XCTAssertEqual(request.url?.path, "/v1/messages")
         let body = try JSONSerialization.jsonObject(with: request.httpBody!) as! [String: Any]
+        XCTAssertEqual((body["cache_control"] as? [String: String])?["type"], "ephemeral")
         XCTAssertEqual(body["max_tokens"] as? Int, 4096)
         XCTAssertNil(body["maxTokens"])
         XCTAssertEqual((body["output_config"] as? [String: Any])?["effort"] as? String, "xhigh")
@@ -78,6 +79,7 @@ final class NativeProtocolTests: XCTestCase {
                     maxTokens: 4096, thinking: effort, supportsReasoning: true, effortValues: ["low", "high", "max"], kimiCodeProfile: true)
                 XCTAssertEqual(request.url?.path, "/coding/v1/messages")
                 let body = try JSONSerialization.jsonObject(with: request.httpBody!) as! [String: Any]
+                XCTAssertNil(body["cache_control"])
                 XCTAssertEqual(body["model"] as? String, id)
                 XCTAssertEqual((body["output_config"] as? [String: Any])?["effort"] as? String, effort)
                 XCTAssertNil((body["thinking"] as? [String: Any])?["budget_tokens"])

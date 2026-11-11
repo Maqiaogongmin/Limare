@@ -8,6 +8,47 @@ import Litext
 
 @MainActor
 final class MarkdownViewIntegrationTests: XCTestCase {
+    func testChatKeepsFencedPromptAsCode() {
+        let source = "前言\n\n```\n# 任务\n\n## 边界\n\n**保留**原文。\n\n- 第一项\n```"
+        let coordinator = LimareMarkdownRepresentable.Coordinator()
+        let view = LimareStreamView()
+        let profile = LimareMarkdownView.Profile.chat(isStreaming: false, messageId: "prompt")
+        let theme = LimareMarkdownRepresentable.makeTheme(conversationPointSize: 14, codePointSize: 12, profile: profile)
+        coordinator.apply(source: source, profile: profile, theme: theme, to: view, isInitial: true)
+        let blocks = coordinator.lastParseResult?.document ?? []
+        XCTAssertFalse(blocks.contains { if case .heading = $0 { return true }; return false })
+        XCTAssertTrue(blocks.contains { if case .codeBlock = $0 { return true }; return false })
+        XCTAssertEqual(coordinator.lastSource, source)
+    }
+
+    func testMarkdownHighlightUsesParsedRangesWithoutChangingSource() {
+        let source = "# 标题 🌟\n- 项目 **粗体** 和 `x`\n> 引用 [链接](https://example.com)\n"
+        let map = CodeHighlighter.current.highlight(key: nil, content: source, language: "markdown")
+        let alias = CodeHighlighter.current.highlight(key: nil, content: source, language: "md")
+        XCTAssertEqual(map, alias)
+        func token(_ text: String) -> SyntaxToken? {
+            let range = (source as NSString).range(of: text)
+            return map.first { NSLocationInRange(range.location, $0.key) }?.value
+        }
+        XCTAssertEqual(token("标题"), .keyword)
+        XCTAssertEqual(token("粗体"), .type)
+        XCTAssertEqual(token("`x`"), .string)
+        XCTAssertEqual(token("链接"), .attribute)
+        XCTAssertEqual(token(">"), .comment)
+        XCTAssertTrue(CodeHighlighter.current.highlight(key: nil, content: source, language: nil).isEmpty)
+        let rendered = map.apply(to: source, with: .default)
+        XCTAssertEqual(rendered.string, source)
+    }
+
+    func testCodeBlockCopyKeepsTrailingWhitespace() throws {
+        let source = "```markdown\n# 标题  \n\n```"
+        let theme = LimareMarkdownRepresentable.makeThemeFromPreferences()
+        let view = LimareStreamView()
+        view.setContentImmediately(MarkdownContent(parserResult: MarkdownParser().parse(source), theme: theme), theme: theme)
+        let block = try XCTUnwrap(view.contextViews.compactMap { $0 as? CodeView }.first)
+        XCTAssertEqual(block.copyContent, "# 标题  \n\n")
+        XCTAssertEqual(CodeSheetContent(block).text, block.copyContent)
+    }
 
     // MARK: - 1. Theme & Typography Alignment & Code Size Contract
 

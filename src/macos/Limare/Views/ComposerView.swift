@@ -171,8 +171,6 @@ struct ComposerView: View {
                     .accessibilityLabel("Attachments")
                     .disabled(isDictatingHere)
 
-                    ComposerDraftHistoryButton()
-
                     if isDictatingHere && appState.voiceInput.state.isRecording {
                         HStack(spacing: 6) {
                             Circle()
@@ -548,103 +546,6 @@ private struct ComposerCommandMenu: View {
         guard !query.isEmpty, let range = name.range(of: typed, options: [.caseInsensitive, .anchored])
                 ?? name.range(of: query, options: .caseInsensitive) else { return Text(name) }
         return Text(name[..<range.lowerBound]) + Text(name[range]).bold() + Text(name[range.upperBound...])
-    }
-}
-
-/// Opens the conversation's archived drafts — retracted messages and drafts that were replaced
-/// or left behind — to bring one back into the composer. Hidden while the archive is empty.
-private struct ComposerDraftHistoryButton: View {
-    @Environment(AppState.self) private var appState
-    @Environment(WindowSession.self) private var window
-    @State private var isPresented = false
-
-    var body: some View {
-        let drafts = window.chat.archivedDrafts
-        if !drafts.isEmpty {
-            Button {
-                isPresented.toggle()
-            } label: {
-                Image(systemName: "clock.arrow.circlepath")
-            }
-            .buttonStyle(GhostIconButtonStyle())
-            .help("Recover Draft")
-            .accessibilityLabel("Recover Draft")
-            .accessibilityIdentifier("composer.draftHistory")
-            .popover(isPresented: $isPresented, arrowEdge: .top) {
-                ComposerDraftHistoryList(
-                    drafts: drafts,
-                    onRestore: { id in
-                        if window.chat.restoreArchivedDraft(id) {
-                            isPresented = false
-                        }
-                    },
-                    onDelete: { id in
-                        window.chat.deleteArchivedDraft(id)
-                    }
-                )
-            }
-        }
-    }
-}
-
-private struct ComposerDraftHistoryList: View {
-    let drafts: [ArchivedDraft]
-    let onRestore: (UUID) -> Void
-    let onDelete: (UUID) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Recover Draft")
-                .font(.headline)
-                .padding(.horizontal, AppSpacing.medium)
-                .padding(.vertical, AppSpacing.small)
-            Divider()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(drafts) { draft in
-                        row(for: draft)
-                        if draft.id != drafts.last?.id {
-                            Divider()
-                        }
-                    }
-                }
-            }
-            .frame(maxHeight: 320)
-        }
-        .frame(width: 340)
-    }
-
-    private func row(for draft: ArchivedDraft) -> some View {
-        HStack(alignment: .top, spacing: AppSpacing.small) {
-            VStack(alignment: .leading, spacing: AppSpacing.xxSmall) {
-                Text(draft.text.isEmpty ? String(localized: "(attachments only)") : draft.text)
-                    .font(AppTypography.interfaceCaption)
-                    .lineLimit(2)
-                    .foregroundStyle(Color.primary)
-                HStack(spacing: AppSpacing.xSmall) {
-                    Text(draft.origin == .retractedMessage ? "Retracted message" : "Unsent draft")
-                    Text(draft.createdAt, style: .relative)
-                    if !draft.attachments.isEmpty {
-                        Label("\(draft.attachments.count)", systemImage: "paperclip")
-                    }
-                }
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: AppSpacing.small)
-            Button("Restore") { onRestore(draft.id) }
-                .controlSize(.small)
-            Button {
-                onDelete(draft.id)
-            } label: {
-                Image(systemName: "trash")
-            }
-            .buttonStyle(.borderless)
-            .controlSize(.small)
-            .help("Delete This Draft")
-        }
-        .padding(.horizontal, AppSpacing.medium)
-        .padding(.vertical, AppSpacing.small)
     }
 }
 

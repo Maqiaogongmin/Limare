@@ -107,10 +107,10 @@ private struct ToolApprovalDecisionCard: View {
     let approval: PendingApproval
 
     var body: some View {
-        ApprovalCardContainer(tint: approval.isHighRisk ? AppColors.statusError : AppColors.statusWarning) {
+        ApprovalCardContainer(tint: AppColors.statusWarning) {
             HStack(alignment: .firstTextBaseline, spacing: AppSpacing.small) {
-                Image(systemName: approval.isHighRisk ? "exclamationmark.triangle.fill" : "exclamationmark.shield.fill")
-                    .foregroundStyle(approval.isHighRisk ? AppColors.statusError : AppColors.statusWarning)
+                Image(systemName: "exclamationmark.shield.fill")
+                    .foregroundStyle(AppColors.statusWarning)
                 Text("Approval Required")
                     .font(AppTypography.interfaceSemibold)
                 Text(approval.toolName)
@@ -122,6 +122,13 @@ private struct ToolApprovalDecisionCard: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if approval.mcpTool != nil {
+                Text(approval.summary).font(.subheadline).textSelection(.enabled)
+            }
+            if let site = approval.browserSite {
+                Text(site).font(.caption.monospaced()).textSelection(.enabled)
+            }
 
             VStack(alignment: .leading, spacing: AppSpacing.xxSmall) {
                 if let command = approval.command, !command.isEmpty {
@@ -164,6 +171,16 @@ private struct ToolApprovalDecisionCard: View {
                     appState.permissions.resolvePendingApproval(id: approval.id, approved: false)
                 }
                 .accessibilityIdentifier("approval.deny")
+                if approval.mcpTool != nil {
+                    Button("Always Allow This MCP Tool") {
+                        appState.permissions.resolvePendingApproval(id: approval.id, approved: true, rememberMCPTool: true)
+                    }
+                }
+                if approval.browserSite != nil && approval.conversationID != nil {
+                    Button("Allow Site for This Conversation") {
+                        appState.permissions.resolvePendingApproval(id: approval.id, approved: true, rememberBrowserSite: true)
+                    }
+                }
                 Button("Allow Once") {
                     appState.permissions.resolvePendingApproval(id: approval.id, approved: true)
                 }

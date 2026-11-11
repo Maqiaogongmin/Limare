@@ -121,12 +121,12 @@ final class ConversationPersistence {
         try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
     }
 
-    func deleteConversation(id: UUID) throws {
+    func deleteConversation(id: UUID, preserveWorkingDirectory: Bool = false) throws {
         let fileURL = conversationsDirURL.appendingPathComponent("\(id.uuidString).json")
         if fileManager.fileExists(atPath: fileURL.path) {
             try fileManager.removeItem(at: fileURL)
         }
-        deleteWorkingDirectory(for: id)
+        if !preserveWorkingDirectory { deleteWorkingDirectory(for: id) }
     }
 
     // MARK: - Managed Working Directory

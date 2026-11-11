@@ -107,20 +107,4 @@ struct HookConfigLoader {
         )
     }
 
-    static func discoverCodexUserHooks() -> HookSource? {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let userHooks = home.appendingPathComponent(".codex").appendingPathComponent("hooks.json")
-        if FileManager.default.fileExists(atPath: userHooks.path) {
-            return try? loadSource(from: userHooks, sourceKind: .codexUser, nameOverride: String(localized: "Codex User Config"))
-        }
-        return nil
-    }
-
-    static func discoverCodexProjectHooks(workspaceURL: URL) -> HookSource? {
-        let projectHooks = workspaceURL.appendingPathComponent(".codex").appendingPathComponent("hooks.json")
-        if FileManager.default.fileExists(atPath: projectHooks.path) {
-            return try? loadSource(from: projectHooks, sourceKind: .codexProject, nameOverride: String(localized: "Codex Project Config"))
-        }
-        return nil
-    }
 }

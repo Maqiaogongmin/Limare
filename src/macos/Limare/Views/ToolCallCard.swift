@@ -134,7 +134,15 @@ struct ToolCallCard: View {
                             .fixedSize()
                     }
 
-                    if let duration = ToolCallDurationFormat.compact(milliseconds: toolCall.durationMilliseconds) {
+                    if ShellRunPresentation.isShell(toolCall), toolCall.state == .running, let start = toolCall.shellStartedAt {
+                        TimelineView(.periodic(from: start, by: 1)) { context in
+                            let duration = ShellRunPresentation.duration(Int(context.date.timeIntervalSince(start)))
+                            Text(duration)
+                                .font(AppTypography.interfaceCaption.monospacedDigit())
+                                .foregroundStyle(.tertiary)
+                                .fixedSize()
+                        }
+                    } else if let duration = ToolCallDurationFormat.compact(milliseconds: toolCall.durationMilliseconds) {
                         Text(duration)
                             .font(AppTypography.interfaceCaption.monospacedDigit())
                             .foregroundStyle(.tertiary)
@@ -153,6 +161,26 @@ struct ToolCallCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+
+            if ShellRunPresentation.isShell(toolCall), toolCall.state == .running, let start = toolCall.shellStartedAt {
+                TimelineView(.periodic(from: start, by: 1)) { context in
+                    if let seconds = ShellRunPresentation.silenceSeconds(toolCall, now: context.date), seconds >= 60 {
+                        Label("No output for \(seconds) seconds", systemImage: "exclamationmark.triangle.fill")
+                            .font(AppTypography.interfaceCaption)
+                            .foregroundStyle(AppColors.statusWarning)
+                            .padding(.leading, Self.contentIndent)
+                    }
+                }
+            }
+
+            if let timeout = ShellRunPresentation.timeoutMessage(toolCall) {
+                Text(timeout)
+                    .font(AppTypography.interfaceCaption)
+                    .foregroundStyle(AppColors.statusWarning)
+                    .textSelection(.enabled)
+                    .padding(.leading, Self.contentIndent)
+                    .padding(.vertical, AppSpacing.xxSmall)
+            }
 
             if let notice = changeNotice {
                 HStack(spacing: AppSpacing.xSmall) {
@@ -243,7 +271,7 @@ private struct ToolCallDetails: View {
                 if let approval = ToolCallPresentationResolver.approvalLabel(for: toolCall.approvalState) {
                     Label(approval, systemImage: "hand.raised")
                 }
-                if let error = toolCall.errorMessage, !error.isEmpty {
+                if ShellRunPresentation.timeoutMessage(toolCall) == nil, let error = toolCall.errorMessage, !error.isEmpty {
                     Text(error)
                         .foregroundStyle(AppColors.statusError)
                         .lineLimit(2)

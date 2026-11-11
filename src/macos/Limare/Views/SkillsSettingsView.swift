@@ -136,7 +136,9 @@ private struct SkillRowView: View {
                         .foregroundStyle(skill.isEnabled ? AppColors.textPrimary : AppColors.textSecondary)
                         .lineLimit(1)
 
-                    SettingsBadge(skill.location.displayName)
+                    if skill.location.isWorkspace && state.filterScope == .all {
+                        SettingsBadge(skill.location.displayName)
+                    }
                 }
 
                 if !skill.description.isEmpty {

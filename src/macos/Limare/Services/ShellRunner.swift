@@ -33,6 +33,9 @@ private final class ShellExecution: @unchecked Sendable {
     private var stderrBuffer = BoundedTextBuffer()
     private var sequence = 0
     private var startedAt = ContinuousClock.now
+    private var lastOutputAt: ContinuousClock.Instant?
+    private var silentMillisecondsAtTimeout: Int?
+    private var elapsedMillisecondsAtTimeout: Int?
     private var stdoutEnded = false
     private var stderrEnded = false
     private var processEnded = false
@@ -168,6 +171,11 @@ private final class ShellExecution: @unchecked Sendable {
         }
         self.cancelled = self.cancelled || cancelled
         self.timedOut = self.timedOut || timedOut
+        if timedOut, silentMillisecondsAtTimeout == nil {
+            let now = ContinuousClock.now
+            silentMillisecondsAtTimeout = elapsedMilliseconds((lastOutputAt ?? startedAt).duration(to: now))
+            elapsedMillisecondsAtTimeout = elapsedMilliseconds(startedAt.duration(to: now))
+        }
         guard processLaunched, processPID > 0,
               ownsProcessGroup || (!processEnded && !didFinish) else {
             lock.unlock()
@@ -230,6 +238,7 @@ private final class ShellExecution: @unchecked Sendable {
         }
 
         let text: String
+        lastOutputAt = .now
         switch stream {
         case .stdout:
             text = stdoutDecoder.append(data)
@@ -314,7 +323,9 @@ private final class ShellExecution: @unchecked Sendable {
             processGroupID: ownsProcessGroup ? processPID : nil,
             processExitObserved: processEnded,
             originalProcessGroupAbsent: ownsProcessGroup
-                ? (Darwin.kill(-processPID, 0) == -1 && errno == ESRCH) : nil
+                ? (Darwin.kill(-processPID, 0) == -1 && errno == ESRCH) : nil,
+            silentMillisecondsAtTimeout: silentMillisecondsAtTimeout,
+            elapsedMillisecondsAtTimeout: elapsedMillisecondsAtTimeout
         )
     }
 

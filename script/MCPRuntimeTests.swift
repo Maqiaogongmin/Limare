@@ -83,6 +83,32 @@ struct MCPRuntimeTests {
         try check(store.tools(for: "fixture").map(\.name).contains("grown") && store.status(for: "fixture") == .connected(toolCount: 3),
                   "tools/list_changed replaces the catalog with the complete new list")
 
+        let approvalDefaults = UserDefaults(suiteName: "limare.mcp.approval.\(UUID().uuidString)")!
+        let approvalStore = PermissionStore(logs: logs, defaults: approvalDefaults, initialMode: .requestApproval)
+        let approvalExecutor = ToolExecutor(workspace: promptWorkspace, permissions: approvalStore, logs: logs, mcpStore: store)
+        func tool(_ name: String) -> ProviderToolCall {
+            ProviderToolCall(id: UUID().uuidString,
+                function: .init(name: MCPToolNamespace.exposedName(serverID: "fixture", toolName: name), arguments: "{}"))
+        }
+        let firstCall = Task { await approvalExecutor.execute(tool("grown")) { _ in } }
+        for _ in 0..<100 where approvalStore.pendingApproval == nil { await Task.yield() }
+        guard let firstApproval = approvalStore.pendingApproval else { throw RuntimeFailure(description: "local MCP approval was not shown") }
+        try check(firstApproval.mcpTool?.serverID == "fixture" && firstApproval.mcpTool?.toolName == "grown",
+                  "local MCP tool requests approval with the exact server and tool")
+        approvalStore.resolvePendingApproval(id: firstApproval.id, approved: true, rememberMCPTool: true)
+        let firstResult = await firstCall.value
+        try check(!firstResult.isError, "approved local MCP tool executes")
+        let rememberedResult = await approvalExecutor.execute(tool("grown")) { _ in }
+        try check(!rememberedResult.isError && approvalStore.pendingApproval == nil,
+                  "remembered local MCP tool executes without a second prompt")
+        let otherCall = Task { await approvalExecutor.execute(tool("slow")) { _ in } }
+        for _ in 0..<100 where approvalStore.pendingApproval == nil { await Task.yield() }
+        guard let otherApproval = approvalStore.pendingApproval else { throw RuntimeFailure(description: "other MCP tool did not ask for approval") }
+        try check(otherApproval.mcpTool?.toolName == "slow", "another tool has a separate approval")
+        approvalStore.resolvePendingApproval(id: otherApproval.id, approved: false)
+        let otherResult = await otherCall.value
+        try check(otherResult.isError, "denied local MCP tool does not execute")
+
         // Disconnect terminates the whole process group, descendants included, and reaps the child.
         let grandchild = pid_t(try String(contentsOf: records.appendingPathComponent("grandchild.pid"), encoding: .utf8))!
         try check(kill(grandchild, 0) == 0, "fixture descendant is running before disconnect")

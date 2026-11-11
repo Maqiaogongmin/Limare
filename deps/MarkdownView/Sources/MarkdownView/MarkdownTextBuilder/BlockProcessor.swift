@@ -103,12 +103,14 @@ final class BlockProcessor {
         highlightMap: CodeHighlighter.HighlightMap?,
         highlightKey: Int,
     ) -> (NSAttributedString, CodeView) {
+        let originalContent = content
         let content = content.deletingSuffix(of: .whitespacesAndNewlines)
         let codeView = viewProvider.acquireCodeView()
         codeView.theme = theme
         codeView.language = language ?? ""
         codeView.highlightKey = highlightKey
         codeView.setContent(content, highlightMap: highlightMap, highlightKey: highlightKey)
+        codeView.originalContent = originalContent
         let appearance = ContextViewAttachment.Appearance.of(codeView)
         let text = buildWithParagraphSync { paragraph in
             // Reserve exactly what the view will occupy. Estimating the height from

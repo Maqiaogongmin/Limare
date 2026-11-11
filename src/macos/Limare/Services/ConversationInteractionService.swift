@@ -31,7 +31,6 @@ final class ConversationInteractionService {
         /// chosen before it exists. An existing conversation keeps its own (ConversationStore).
         var modelSource: ConversationModelSource?
         var thinkingLevelOverride: ThinkingLevel?
-        var outcomeDeclaration: OutcomeRunDeclaration?
         /// Only for a ChatStore that has no ConversationStore at all: the transcript of its
         /// in-memory conversation. With a ConversationStore it must be nil, so an id the store
         /// does not hold is refused instead of running without a durable commit.
@@ -49,7 +48,6 @@ final class ConversationInteractionService {
             mode: Mode,
             modelSource: ConversationModelSource? = nil,
             thinkingLevelOverride: ThinkingLevel? = nil,
-            outcomeDeclaration: OutcomeRunDeclaration? = nil,
             unpersistedTranscript: [ChatMessage]? = nil,
             onRunAdmitted: ((_ conversationID: UUID, _ runID: UUID) throws -> Void)? = nil
         ) {
@@ -60,7 +58,6 @@ final class ConversationInteractionService {
             self.mode = mode
             self.modelSource = modelSource
             self.thinkingLevelOverride = thinkingLevelOverride
-            self.outcomeDeclaration = outcomeDeclaration
             self.unpersistedTranscript = unpersistedTranscript
             self.onRunAdmitted = onRunAdmitted
         }
@@ -97,8 +94,6 @@ final class ConversationInteractionService {
         case nativeChild
         case noModel
         case imageInputUnsupported(String)
-        /// An explicit outcome run needs an idle conversation; it is never turned into a steer or queue entry.
-        case outcomeRequiresIdle
         case held(String)
         case worktreeUnavailable(path: String, reason: String)
         case persistenceFailed(String)
@@ -115,7 +110,6 @@ final class ConversationInteractionService {
             case .nativeChild: String(localized: "A subtask's history is maintained by its own run. Steer or continue it from the parent conversation.")
             case .noModel: String(localized: "No model configured. Please connect a Provider or select a Model Group in Settings.")
             case .imageInputUnsupported(let reason): reason
-            case .outcomeRequiresIdle: String(localized: "Cannot start an explicit outcome run while this conversation is busy.")
             case .held(let reason): reason
             case .worktreeUnavailable(let path, let reason): String(localized: "Worktree unavailable at \(path): \(reason)")
             case .persistenceFailed(let reason): String(localized: "Failed to save message: \(reason)")
@@ -223,7 +217,7 @@ final class ConversationInteractionService {
         guard !prompt.isEmpty || !input.attachments.isEmpty else { return .refused(.empty) }
 
         // A command, as in Claude Code and Codex, not a message.
-        if prompt == ComposerCommand.compact.invocation, input.attachments.isEmpty, input.outcomeDeclaration == nil {
+        if prompt == ComposerCommand.compact.invocation, input.attachments.isEmpty {
             guard let conversationID = input.conversationID else { return .refused(.compactUnavailable) }
             return compact(conversationID: conversationID)
         }
@@ -251,16 +245,10 @@ final class ConversationInteractionService {
         }
         let conversationID = input.conversationID ?? UUID()
 
-        // Checked before the user message is committed, so a rejected declaration leaves no orphan input.
-        if input.outcomeDeclaration != nil && !runs.canStartRun(conversationID: conversationID) {
-            return .refused(.outcomeRequiresIdle)
-        }
-
         let userMessage = ChatMessage(role: .user, content: prompt, attachments: input.attachments)
 
         // A Compact in progress: the message waits in the queue and is sent once it ends.
         if !runs.isActive(conversationID: conversationID), runs.compactions[conversationID]?.isRunning == true {
-            if input.outcomeDeclaration != nil { return .refused(.outcomeRequiresIdle) }
             guard runs.enqueue(conversationID: conversationID, message: userMessage, modelSource: modelSource) else {
                 return .refused(.queuePersistenceFailed)
             }
@@ -274,8 +262,6 @@ final class ConversationInteractionService {
         }
 
         if runs.isActive(conversationID: conversationID) {
-            // Steering is a different, non-deterministic semantic: an explicit outcome run is never absorbed by a live run.
-            if input.outcomeDeclaration != nil { return .refused(.outcomeRequiresIdle) }
             switch input.mode {
             case .steerOrSend:
                 let wasPausedOrPausing = runs.isPaused(conversationID: conversationID) || runs.isPausing(conversationID: conversationID)
@@ -332,7 +318,6 @@ final class ConversationInteractionService {
             modelSource: modelSource,
             prompt: prompt,
             initialMessages: committedTranscript,
-            outcomeDeclaration: input.outcomeDeclaration,
             onRunAdmitted: input.onRunAdmitted
         )
         // startRun can register a run and fail it synchronously (its recovery marker could not

@@ -11,7 +11,28 @@ struct ChatRunStatusView: View {
     }
 
     var body: some View {
-        if let line {
+        if appState.conversationRuns.isRunning(conversationID: conversationID),
+           let shell = window.chat.messages.reversed().lazy.flatMap(\.toolCalls).first(where: {
+            ShellRunPresentation.isShell($0) && $0.state == .running && $0.shellStartedAt != nil
+        }), let start = shell.shellStartedAt {
+            TimelineView(.periodic(from: start, by: 1)) { context in
+                let description = ToolCallPresentationResolver.resolveSummary(name: shell.name, input: shell.input) ?? String(localized: "command")
+                let duration = ShellRunPresentation.duration(Int(context.date.timeIntervalSince(start)))
+                HStack(spacing: AppSpacing.small) {
+                    ProgressView().controlSize(.small)
+                    Text("Running \(description) · \(duration)")
+                        .font(AppTypography.interfaceSubheadline)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer()
+                }
+                .padding(.horizontal, AppSpacing.medium)
+                .padding(.vertical, AppSpacing.xxSmall)
+                .overlay(RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous).stroke(AppColors.hairline, lineWidth: 1))
+                .padding(.horizontal, AppSpacing.standard)
+                .padding(.top, AppSpacing.xSmall)
+            }
+        } else if let line {
             HStack(spacing: AppSpacing.small) {
                 Image(systemName: line.symbolName)
                     .foregroundStyle(color(for: line.tone))
