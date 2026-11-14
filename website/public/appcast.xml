@@ -5,6 +5,13 @@
     <link>https://limare.app/</link>
     <description>Limare release updates</description>
     <item>
+      <title>Limare 0.1.9</title>
+      <pubDate>Sat, 14 Nov 2026 09:46:11 +0000</pubDate>
+      <sparkle:releaseNotesLink>https://github.com/Maqiaogongmin/Limare/releases/tag/v0.1.9</sparkle:releaseNotesLink>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/Maqiaogongmin/Limare/releases/download/v0.1.9/Limare.dmg" length="87955969" type="application/octet-stream" sparkle:version="10" sparkle:shortVersionString="0.1.9" sparkle:edSignature="76gpfakaB44oKZODliCLlN/6aZ03Zn4oOeT3PYsQlc44gX0V7J9NTYFldIqiNfhoZ0/nllBGaD4nmUPe3dfcAw==" />
+    </item>
+    <item>
       <title>Limare 0.1.8</title>
       <pubDate>Wed, 11 Nov 2026 08:25:10 +0000</pubDate>
       <sparkle:releaseNotesLink>https://github.com/Maqiaogongmin/Limare/releases/tag/v0.1.8</sparkle:releaseNotesLink>
