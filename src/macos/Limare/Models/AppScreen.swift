@@ -5,6 +5,7 @@ enum AppScreen: String, Hashable {
     case settingsGeneral
     case settingsProviders
     case settingsModelGroups
+    case settingsUsage
     case settingsSkills
     case settingsSoul
     case settingsArchived
@@ -23,6 +24,7 @@ enum AppScreen: String, Hashable {
         case .settingsGeneral: String(localized: "General")
         case .settingsProviders: String(localized: "Providers")
         case .settingsModelGroups: String(localized: "Model Groups")
+        case .settingsUsage: String(localized: "Usage")
         case .settingsSkills: String(localized: "Skills")
         case .settingsSoul: String(localized: "Personalization")
         case .settingsArchived: String(localized: "Archived")

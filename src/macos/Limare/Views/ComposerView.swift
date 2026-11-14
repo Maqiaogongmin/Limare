@@ -16,6 +16,7 @@ struct ComposerView: View {
     @State private var commandMenuDismissedDraft: String?
     /// Bumped to make the editor first responder (Focus Composer).
     @State private var focusToken = 0
+    @State private var focusAtEnd = false
     /// The highlighted row of the @ mention menu.
     @State private var mentionSelection = 0
     /// A new conversation centres the composer in a narrower column, without the disclaimer.
@@ -135,7 +136,8 @@ struct ComposerView: View {
                             importFiles(urls.map { HostFileSelection.droppedByUser(url: $0) })
                         },
                         onMenuKey: handleMenuKey,
-                        focusToken: focusToken
+                        focusToken: focusToken,
+                        focusAtEnd: focusAtEnd
                     )
                     .frame(height: visibleDraftHeight)
 
@@ -315,6 +317,9 @@ struct ComposerView: View {
         .onChange(of: window.composerFocusRequest) { _, _ in
             serveFocusRequest()
         }
+        .onChange(of: window.composerFocusAtEndRequest) { _, _ in
+            focusEditor(atEnd: true)
+        }
         // An idle conversation shows what its next request would use; a run writes its own.
         .task(id: contextPreviewTrigger) {
             guard let trigger = contextPreviewTrigger, !trigger.isBusy else { return }
@@ -346,7 +351,8 @@ struct ComposerView: View {
         focusEditor()
     }
 
-    private func focusEditor() {
+    private func focusEditor(atEnd: Bool = false) {
+        focusAtEnd = atEnd
         window.composerFocusServed = window.composerFocusRequest
         focusToken += 1
     }

@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct MessageListView: View {
     let messages: [ChatMessage]
@@ -457,9 +458,7 @@ private struct MessageRow: View, Equatable {
                     UserMessageActionBar(
                         message: message,
                         isVisible: isHovered,
-                        onRetract: retractAction,
-                        canOfferForkWorktree: canOfferForkWorktree,
-                        onFork: canFork ? fork : nil
+                        onRetract: retractAction
                     )
                 }
                 // Bubble, gap and bar are one hover region. Hovering only what draws (the bubble
@@ -617,7 +616,11 @@ private struct MessageRow: View, Equatable {
 
     @ViewBuilder
     private var userTextContent: some View {
-        UserMessageTextView(content: scheduledMessage?.body ?? message.content, onCollapse: onCollapse)
+        UserMessageTextView(
+            content: scheduledMessage?.body ?? message.content,
+            onCollapse: onCollapse,
+            onSelectionBecameActive: onSelectionBecameActive
+        )
     }
 
     @ViewBuilder
@@ -663,7 +666,11 @@ private struct MessageRow: View, Equatable {
             LimareMarkdownView(
                 source: message.content,
                 profile: .chat(isStreaming: message.state == .streaming, messageId: message.id.uuidString),
-                onSelectionBecameActive: onSelectionBecameActive
+                onSelectionBecameActive: onSelectionBecameActive,
+                onQuote: { text in
+                    window.chat.draft = ComposerQuote.appending(text, to: window.chat.draft)
+                    window.composerFocusAtEndRequest += 1
+                }
             )
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -673,14 +680,50 @@ private struct MessageRow: View, Equatable {
 /// A user message collapses when its rendered height passes the collapsed maximum; the 1pt
 /// tolerance keeps a message that just fits from flipping on rounding.
 enum UserMessageCollapse {
+    enum ClickDisposition: Equatable {
+        case none
+        case expand
+        case collapse
+    }
+
+    static let maximumClickDrift: CGFloat = 3
+
     static func isCollapsible(measuredHeight: CGFloat, collapsedMaximum: CGFloat) -> Bool {
         measuredHeight > collapsedMaximum + 1
+    }
+
+    static func dispositionForClick(
+        isCollapsible: Bool,
+        isExpanded: Bool,
+        downInsideBubble: Bool,
+        upInsideBubble: Bool,
+        inWindowContent: Bool,
+        isInteractiveTarget: Bool,
+        hadSelectionBefore: Bool,
+        hasSelectionAfter: Bool,
+        dragDistance: CGFloat
+    ) -> ClickDisposition {
+        guard isCollapsible,
+              inWindowContent,
+              !isInteractiveTarget,
+              !hadSelectionBefore,
+              !hasSelectionAfter,
+              dragDistance <= maximumClickDrift
+        else {
+            return .none
+        }
+        if !isExpanded {
+            return (downInsideBubble && upInsideBubble) ? .expand : .none
+        } else {
+            return (!downInsideBubble && !upInsideBubble) ? .collapse : .none
+        }
     }
 }
 
 private struct UserMessageTextView: View {
     let content: String
     var onCollapse: (@MainActor () -> Void)? = nil
+    var onSelectionBecameActive: (() -> Void)? = nil
     @State private var isExpanded = false
     /// The rendered message's natural height, measured before the collapsed clamp.
     @State private var measuredHeight: CGFloat = 0
@@ -689,76 +732,234 @@ private struct UserMessageTextView: View {
         UserMessageCollapse.isCollapsible(measuredHeight: measuredHeight, collapsedMaximum: collapsedMaxHeight)
     }
 
+    private var isCollapsed: Bool {
+        isCollapsible && !isExpanded
+    }
+
     private let collapsedMaxHeight: CGFloat = AppLayout.userMessageCollapsedMaximumHeight
-    private let expandedMaxHeight: CGFloat = AppLayout.userMessageExpandedMaximumHeight
     private let fadeHeight: CGFloat = AppLayout.userMessageCollapseFadeHeight
 
     var body: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.xxSmall) {
-            if isCollapsible && isExpanded {
-                ScrollView(.vertical) {
-                    LimareMarkdownView(source: content, profile: .typed)
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                        .padding(.trailing, 2)
-                }
-                .frame(maxHeight: expandedMaxHeight)
+        // Rendered like the assistant's replies, so a table or list the user sent reads
+        // as one. Whether it collapses depends on its rendered height, not its length:
+        // the natural height is measured before the clamp, and a collapsed message
+        // fades out at the collapsed height. Expanding removes the clamp in place on
+        // the same view instance to preserve layout width and selection state.
+        LimareMarkdownView(
+            source: content,
+            profile: .typed,
+            onSelectionBecameActive: onSelectionBecameActive
+        )
+        .fixedSize(horizontal: false, vertical: true)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+            if abs(height - measuredHeight) > 1 { measuredHeight = height }
+        }
+        .frame(maxHeight: isCollapsed ? collapsedMaxHeight : nil, alignment: .top)
+        .mask {
+            if isCollapsed {
+                LinearGradient(
+                    stops: [
+                        .init(color: .black, location: 0),
+                        .init(color: .black, location: max(0, 1 - fadeHeight / collapsedMaxHeight)),
+                        .init(color: .clear, location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
             } else {
-                // Rendered like the assistant's replies, so a table or list the user sent reads
-                // as one. Whether it collapses depends on its rendered height, not its length:
-                // the natural height is measured before the clamp, and a collapsed message
-                // fades out at the collapsed height.
-                LimareMarkdownView(source: content, profile: .typed)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                        if abs(height - measuredHeight) > 1 { measuredHeight = height }
+                Rectangle()
+            }
+        }
+        .background(
+            UserMessageClickMonitor(
+                isCollapsible: isCollapsible,
+                isExpanded: isExpanded,
+                onExpand: {
+                    isExpanded = true
+                },
+                onCollapse: { shouldReanchor in
+                    if shouldReanchor {
+                        onCollapse?()
                     }
-                    .frame(maxHeight: isCollapsible ? collapsedMaxHeight : nil, alignment: .top)
-                    .mask {
-                        if isCollapsible {
-                            LinearGradient(
-                                stops: [
-                                    .init(color: .black, location: 0),
-                                    .init(color: .black, location: max(0, 1 - fadeHeight / collapsedMaxHeight)),
-                                    .init(color: .clear, location: 1),
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        } else {
-                            Rectangle()
-                        }
-                    }
+                    isExpanded = false
+                }
+            )
+        )
+    }
+}
+
+/// Click-to-expand and click-blank-area-to-collapse controller for collapsible user bubbles.
+/// Installed via an AppKit local event monitor only when `isCollapsible == true`, because Litext
+/// text views consume primary mouse events before SwiftUI tap gestures can see them.
+private struct UserMessageClickMonitor: NSViewRepresentable {
+    let isCollapsible: Bool
+    let isExpanded: Bool
+    let onExpand: @MainActor () -> Void
+    let onCollapse: @MainActor (_ shouldReanchor: Bool) -> Void
+
+    func makeNSView(context: Context) -> MonitorView {
+        let view = MonitorView()
+        updateState(on: view)
+        return view
+    }
+
+    func updateNSView(_ nsView: MonitorView, context: Context) {
+        updateState(on: nsView)
+    }
+
+    private func updateState(on view: MonitorView) {
+        view.isCollapsible = isCollapsible
+        view.isExpanded = isExpanded
+        view.onExpand = onExpand
+        view.onCollapse = onCollapse
+        view.syncMonitor()
+    }
+
+    @MainActor
+    final class MonitorView: NSView {
+        private struct PendingMouseDown {
+            let location: CGPoint
+            let insideBubble: Bool
+            let hadSelection: Bool
+            let isInteractiveOrContent: Bool
+        }
+
+        var isCollapsible = false
+        var isExpanded = false
+        var onExpand: (@MainActor () -> Void)?
+        var onCollapse: (@MainActor (_ shouldReanchor: Bool) -> Void)?
+
+        nonisolated(unsafe) private var monitor: Any?
+        private var pendingMouseDown: PendingMouseDown?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            syncMonitor()
+        }
+
+        func syncMonitor() {
+            guard isCollapsible, let _ = window else {
+                removeMonitor()
+                pendingMouseDown = nil
+                return
+            }
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { [weak self] event in
+                self?.handle(event)
+                return event
+            }
+        }
+
+        private func handle(_ event: NSEvent) {
+            guard isCollapsible,
+                  let window,
+                  event.window === window,
+                  window.attachedSheet == nil
+            else {
+                pendingMouseDown = nil
+                return
             }
 
-            if isCollapsible {
-                HStack(spacing: AppSpacing.small) {
-                    Button {
-                        if isExpanded {
-                            onCollapse?()
-                            isExpanded = false
-                        } else {
-                            isExpanded = true
-                        }
-                    } label: {
-                        HStack(spacing: 3) {
-                            Text(isExpanded ? "Show less" : "Show more")
-                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                                .font(.system(size: 9, weight: .semibold))
-                        }
-                        .font(AppTypography.interfaceCaption2.weight(.medium))
-                        .foregroundStyle(AppColors.textSecondary)
+            let location = event.locationInWindow
+            let rawBubbleRect = convert(
+                bounds.insetBy(dx: -UserBubbleChrome.horizontalPadding, dy: -UserBubbleChrome.verticalPadding),
+                to: nil
+            )
+            let transcriptVisibleRect = visibleTranscriptWindowRect(in: window)
+            let visibleBubbleRect = rawBubbleRect.intersection(transcriptVisibleRect)
+
+            switch event.type {
+            case .leftMouseDown:
+                pendingMouseDown = nil
+                guard !event.modifierFlags.contains(.control), event.clickCount == 1 else { return }
+                let insideBubble = visibleBubbleRect.contains(location)
+                let hadSelection = if insideBubble {
+                    LimareMarkdownInteractionProbe.hasSelection(withinWindowRect: visibleBubbleRect, in: window)
+                } else {
+                    LimareMarkdownInteractionProbe.hasSelection(at: location, in: window)
+                }
+                let isInteractive = LimareMarkdownInteractionProbe.isInteractiveOrContentHit(
+                    at: location,
+                    in: window,
+                    rejectTextContent: isExpanded
+                )
+                pendingMouseDown = PendingMouseDown(
+                    location: location,
+                    insideBubble: insideBubble,
+                    hadSelection: hadSelection,
+                    isInteractiveOrContent: isInteractive
+                )
+
+            case .leftMouseUp:
+                guard let down = pendingMouseDown else { return }
+                pendingMouseDown = nil
+                guard !event.modifierFlags.contains(.control), event.clickCount == 1 else { return }
+
+                let dragDistance = hypot(location.x - down.location.x, location.y - down.location.y)
+                let upInsideBubble = visibleBubbleRect.contains(location)
+                let inWindowContent = transcriptVisibleRect.contains(down.location) && transcriptVisibleRect.contains(location)
+                let upInteractive = LimareMarkdownInteractionProbe.isInteractiveOrContentHit(
+                    at: location,
+                    in: window,
+                    rejectTextContent: isExpanded
+                )
+                let hasSelectionAfter = if !isExpanded {
+                    LimareMarkdownInteractionProbe.hasSelection(withinWindowRect: visibleBubbleRect, in: window)
+                } else {
+                    LimareMarkdownInteractionProbe.hasSelection(at: location, in: window)
+                }
+
+                let disposition = UserMessageCollapse.dispositionForClick(
+                    isCollapsible: isCollapsible,
+                    isExpanded: isExpanded,
+                    downInsideBubble: down.insideBubble,
+                    upInsideBubble: upInsideBubble,
+                    inWindowContent: inWindowContent,
+                    isInteractiveTarget: down.isInteractiveOrContent || upInteractive,
+                    hadSelectionBefore: down.hadSelection,
+                    hasSelectionAfter: hasSelectionAfter,
+                    dragDistance: dragDistance
+                )
+
+                switch disposition {
+                case .none:
+                    break
+                case .expand:
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, self.isCollapsible, !self.isExpanded else { return }
+                        self.onExpand?()
                     }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-
-                    if isExpanded {
-                        Text("\(content.count) chars")
-                            .font(AppTypography.interfaceCaption2)
-                            .foregroundStyle(.secondary)
+                case .collapse:
+                    let isTopAboveViewport = rawBubbleRect.intersects(transcriptVisibleRect)
+                        && rawBubbleRect.maxY > transcriptVisibleRect.maxY
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, self.isCollapsible, self.isExpanded else { return }
+                        self.onCollapse?(isTopAboveViewport)
                     }
                 }
-                .padding(.top, 2)
+
+            default:
+                break
+            }
+        }
+
+        private func visibleTranscriptWindowRect(in window: NSWindow) -> CGRect {
+            if let clipView = enclosingScrollView?.contentView {
+                return clipView.convert(clipView.bounds, to: nil).intersection(window.contentLayoutRect)
+            }
+            return window.contentLayoutRect
+        }
+
+        private func removeMonitor() {
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+                self.monitor = nil
+            }
+        }
+
+        deinit {
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
             }
         }
     }
@@ -790,14 +991,17 @@ private struct ScheduledMessageBadge: View {
 /// A user's message: a white card with a hairline edge and a faint contact shadow on the
 /// canvas. A reply has no chrome.
 private struct UserBubbleChrome: ViewModifier {
+    static let horizontalPadding: CGFloat = 14
+    static let verticalPadding: CGFloat = 9
+
     let isUser: Bool
 
     func body(content: Content) -> some View {
         if isUser {
             let shape = RoundedRectangle(cornerRadius: AppRadius.bubble, style: .continuous)
             content
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
+                .padding(.horizontal, Self.horizontalPadding)
+                .padding(.vertical, Self.verticalPadding)
                 .background(
                     shape
                         .fill(AppColors.userBubble)
@@ -851,10 +1055,7 @@ private struct UserMessageActionBar: View {
     let isVisible: Bool
     /// Present only on the retractable last user message.
     var onRetract: (@MainActor () -> Void)? = nil
-    var canOfferForkWorktree = false
-    var onFork: (@MainActor (Bool) -> Void)? = nil
-
-    private enum Action: Hashable { case retract, copy, fork }
+    private enum Action: Hashable { case retract, copy }
     /// The bar's buttons are focus stops only where the system makes buttons focusable (Full
     /// Keyboard Access); a focused button shows the bar instead of leaving an invisible stop.
     @FocusState private var focusedAction: Action?
@@ -879,10 +1080,6 @@ private struct UserMessageActionBar: View {
                 CopyMessageButton(message: message)
                     .focused($focusedAction, equals: .copy)
             }
-            if let onFork {
-                ForkActionMenu(canOfferWorktree: canOfferForkWorktree, onFork: onFork)
-                .focused($focusedAction, equals: .fork)
-            }
         }
         .frame(height: 14)
         .opacity(isShown ? 1 : 0)
@@ -905,12 +1102,15 @@ private struct ForkActionMenu: View {
         } label: {
             Image(systemName: "arrow.triangle.branch")
                 .font(.system(size: 11))
+                .foregroundStyle(Color.secondary)
                 .frame(width: 14, height: 14)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .foregroundStyle(.secondary)
+        // The native borderless menu draws its symbol at full label colour even when
+        // its SwiftUI label asks for secondary. Dim the control itself to match Copy.
+        .opacity(0.5)
         .help("Fork from this message")
         .accessibilityLabel("Fork from this message")
     }
@@ -1166,7 +1366,7 @@ struct TranscriptRow: Identifiable, Equatable, Sendable {
 
     func canFork(allowsFork: Bool, isDelegationChild: Bool) -> Bool {
         allowsFork && !isDelegationChild && message.state == .complete && !message.isSystemNotice
-            && (message.role == .user || (message.role == .assistant && turnCopyPayload != nil))
+            && message.role == .assistant && turnCopyPayload != nil
     }
 
     init(

@@ -266,7 +266,8 @@ final class VisionGroupResolver {
         let options = ChatInferenceOptions(
             thinkingLevel: .off,
             maxOutputTokens: 2048,
-            model: model
+            model: model,
+            usageKind: .vision
         )
 
         let client = self.client

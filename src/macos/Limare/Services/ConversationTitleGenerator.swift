@@ -134,7 +134,8 @@ final class ConversationTitleGenerator {
             options: ChatInferenceOptions(
                 thinkingLevel: .off,
                 maxOutputTokens: maximumOutputTokens,
-                model: model
+                model: model,
+                usageKind: .title
             )
         )
     }

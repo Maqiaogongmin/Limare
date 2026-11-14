@@ -1,7 +1,7 @@
 import SwiftUI
+import AppKit
 
 #if canImport(MarkdownView)
-import AppKit
 import MarkdownView
 import MarkdownParser
 import Litext
@@ -17,15 +17,18 @@ public struct LimareMarkdownView: View {
     public let source: String
     public let profile: Profile
     public let onSelectionBecameActive: (@MainActor () -> Void)?
+    public let onQuote: (@MainActor (String) -> Void)?
 
     public init(
         source: String,
         profile: Profile,
-        onSelectionBecameActive: (@MainActor () -> Void)? = nil
+        onSelectionBecameActive: (@MainActor () -> Void)? = nil,
+        onQuote: (@MainActor (String) -> Void)? = nil
     ) {
         self.source = source
         self.profile = profile
         self.onSelectionBecameActive = onSelectionBecameActive
+        self.onQuote = onQuote
     }
 
     /// Where a clicked link goes: the surrounding view's `openURL` (the chat routes web links
@@ -43,6 +46,7 @@ public struct LimareMarkdownView: View {
             conversationPointSize: CGFloat(typography.conversationSize),
             codePointSize: CGFloat(typography.codeSize),
             onSelectionBecameActive: onSelectionBecameActive,
+            onQuote: onQuote,
             openURL: openURL
         )
         // A reply fills the column; what a person typed hugs its text, so a two-word message
@@ -54,11 +58,142 @@ public struct LimareMarkdownView: View {
 @MainActor
 final class LimareStreamView: MarkdownStreamView {
     var onSelectionBecameActive: (@MainActor () -> Void)?
+    var onQuote: (@MainActor (String) -> Void)? {
+        didSet {
+            if onQuote == nil {
+                quotePopover?.dismiss()
+                quotePopover = nil
+            }
+        }
+    }
+    private(set) var quotePopover: SelectionQuotePopover?
+    var openFileLink: ((URL) -> Void)?
+    private var pendingFileOpen: DispatchWorkItem?
 
     override func textLabelView(_ label: TextLabelView, didChangeSelection selection: NSRange?) {
         super.textLabelView(label, didChangeSelection: selection)
         if let selection, selection.length > 0 {
             onSelectionBecameActive?()
+        }
+        guard onQuote != nil else { return }
+        if quotePopover == nil, let selection, selection.length > 0 {
+            quotePopover = SelectionQuotePopover { [weak self] text in self?.onQuote?(text) }
+        }
+        // A right click (or Control-click) may select a word before opening the native menu.
+        // Do not put a popover over that menu.
+        if let event = NSApp.currentEvent,
+           event.type == .rightMouseDown || (event.type == .leftMouseDown && event.modifierFlags.contains(.control)) {
+            quotePopover?.dismiss()
+        } else {
+            quotePopover?.selectionChanged(in: label)
+        }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { quotePopover?.dismiss() }
+    }
+
+    override func textLabelView(_ label: TextLabelView, didTapHighlightRegion region: TextLabel.HighlightRegion, at location: CGPoint) {
+        let value = region.attributes[.link]
+        let url = (value as? URL) ?? (value as? String).flatMap { URL(string: $0) }
+        guard let url, url.isFileURL else {
+            super.textLabelView(label, didTapHighlightRegion: region, at: location)
+            return
+        }
+        pendingFileOpen?.cancel()
+        if (NSApp.currentEvent?.clickCount ?? 1) >= 2 {
+            filePathMenu(for: url).popUp(positioning: nil, at: location, in: label)
+        } else {
+            let work = DispatchWorkItem { [weak self] in self?.openFileLink?(url) }
+            pendingFileOpen = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval, execute: work)
+        }
+    }
+
+    func filePathMenu(for url: URL) -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let exists = FileManager.default.fileExists(atPath: url.path)
+        let open = NSMenuItem(title: String(localized: "Open File"), action: #selector(openPath(_:)), keyEquivalent: "")
+        open.target = self
+        open.representedObject = url
+        open.isEnabled = exists
+        menu.addItem(open)
+        let reveal = NSMenuItem(title: String(localized: "Reveal in Finder"), action: #selector(revealPath(_:)), keyEquivalent: "")
+        reveal.target = self
+        reveal.representedObject = url
+        reveal.isEnabled = exists
+        menu.addItem(reveal)
+        let copy = NSMenuItem(title: String(localized: "Copy Path"), action: #selector(copyPath(_:)), keyEquivalent: "")
+        copy.target = self
+        copy.representedObject = url
+        menu.addItem(copy)
+        if !exists {
+            menu.addItem(.separator())
+            let missing = NSMenuItem(title: String(localized: "File not found"), action: nil, keyEquivalent: "")
+            missing.isEnabled = false
+            menu.addItem(missing)
+        }
+        return menu
+    }
+
+    @objc private func openPath(_ item: NSMenuItem) {
+        if let url = item.representedObject as? URL { openFileLink?(url) }
+    }
+
+    @objc private func revealPath(_ item: NSMenuItem) {
+        if let url = item.representedObject as? URL { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+    }
+
+    @objc private func copyPath(_ item: NSMenuItem) {
+        guard let url = item.representedObject as? URL else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.path, forType: .string)
+    }
+}
+
+/// Add links to complete local paths in chat without changing Markdown source or code blocks.
+enum ChatFilePaths {
+    static func url(_ value: String) -> URL? {
+        guard !value.isEmpty, value.count <= 4096, !value.hasPrefix("//"),
+              !value.contains("\n"), !value.contains("\r"),
+              value.hasPrefix("/") || value.hasPrefix("~/") else { return nil }
+        return URL(fileURLWithPath: (value as NSString).expandingTildeInPath)
+    }
+
+    static func inline(_ nodes: [MarkdownInlineNode]) -> [MarkdownInlineNode] {
+        nodes.map { node in
+            switch node {
+            case .code(let value), .text(let value):
+                guard let url = url(value) else { return node }
+                return .link(destination: url.absoluteString, children: [node])
+            case .emphasis(let children): return .emphasis(children: inline(children))
+            case .strong(let children): return .strong(children: inline(children))
+            case .strikethrough(let children): return .strikethrough(children: inline(children))
+            default: return node // Explicit links and images keep their original destination.
+            }
+        }
+    }
+
+    static func blocks(_ nodes: [MarkdownBlockNode]) -> [MarkdownBlockNode] {
+        nodes.map { node in
+            switch node {
+            case .paragraph(let content): return .paragraph(content: inline(content))
+            case .heading(let level, let content): return .heading(level: level, content: inline(content))
+            case .blockquote(let children): return .blockquote(children: blocks(children))
+            case .bulletedList(let tight, let items):
+                return .bulletedList(isTight: tight, items: items.map { RawListItem(children: blocks($0.children)) })
+            case .numberedList(let tight, let start, let items):
+                return .numberedList(isTight: tight, start: start, items: items.map { RawListItem(children: blocks($0.children)) })
+            case .taskList(let tight, let items):
+                return .taskList(isTight: tight, items: items.map { RawTaskListItem(isCompleted: $0.isCompleted, children: blocks($0.children)) })
+            case .table(let alignments, let rows):
+                return .table(columnAlignments: alignments, rows: rows.map { row in
+                    RawTableRow(cells: row.cells.map { RawTableCell(content: inline($0.content)) })
+                })
+            default: return node
+            }
         }
     }
 }
@@ -70,6 +205,7 @@ struct LimareMarkdownRepresentable: NSViewRepresentable {
     let conversationPointSize: CGFloat
     let codePointSize: CGFloat
     let onSelectionBecameActive: (@MainActor () -> Void)?
+    let onQuote: (@MainActor (String) -> Void)?
     let openURL: OpenURLAction
 
     /// The theme for the given sizes. The sizes come in explicitly (from the observing body),
@@ -219,7 +355,9 @@ struct LimareMarkdownRepresentable: NSViewRepresentable {
         view.setContentHuggingPriority(.defaultLow, for: .horizontal)
         view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         view.onSelectionBecameActive = onSelectionBecameActive
+        view.onQuote = onQuote
         context.coordinator.openURL = openURL
+        view.openFileLink = { [weak coordinator = context.coordinator] url in coordinator?.openURL?(url) }
         // Set once: the handler reads the coordinator, so updates never re-sync it into every
         // table and code block.
         view.linkHandler = { [weak coordinator = context.coordinator] payload, _, _ in
@@ -243,6 +381,7 @@ struct LimareMarkdownRepresentable: NSViewRepresentable {
 
     func updateNSView(_ nsView: LimareStreamView, context: Context) {
         nsView.onSelectionBecameActive = onSelectionBecameActive
+        nsView.onQuote = onQuote
         context.coordinator.openURL = openURL
         let theme = Self.makeTheme(
             conversationPointSize: conversationPointSize,
@@ -290,10 +429,17 @@ struct LimareMarkdownRepresentable: NSViewRepresentable {
                 return nil
             }
             let size = view.boundingSize(for: fittingWidth)
-            // Measuring again at the hugged width wraps the same lines: the label rounds its
-            // width up, never past the width it measured at.
-            let width = hugsText ? min(fittingWidth, ceil(size.width)) : fittingWidth
-            return CGSize(width: width, height: ceil(size.height))
+            guard hugsText else {
+                return CGSize(width: fittingWidth, height: ceil(size.height))
+            }
+            let huggedWidth = min(fittingWidth, ceil(size.width))
+            // Re-measuring at `huggedWidth` keeps wrapped line count accurate and aligns Litext's
+            // measurement fill width with the eventual bounds width so `layout()` reuses it.
+            guard huggedWidth > 0, huggedWidth < fittingWidth else {
+                return CGSize(width: huggedWidth, height: ceil(size.height))
+            }
+            let huggedSize = view.boundingSize(for: huggedWidth)
+            return CGSize(width: huggedWidth, height: ceil(huggedSize.height))
         }
 
         func apply(
@@ -310,6 +456,11 @@ struct LimareMarkdownRepresentable: NSViewRepresentable {
 
             view.streamIdentity = messageId
             view.isStreaming = isStreaming
+            if case .chat = profile {
+                view.recognizesStandaloneFilePaths = true
+            } else {
+                view.recognizesStandaloneFilePaths = false
+            }
 
             let parsedSource = isStreaming
                 ? MarkdownParser.StreamingTail(closing: source).applied(to: source)
@@ -326,7 +477,15 @@ struct LimareMarkdownRepresentable: NSViewRepresentable {
                 ? lastParseResult!
                 : MarkdownParser().parse(parsedSource)
 
-            let content = MarkdownContent(parserResult: parseResult, theme: theme)
+            let parsedContent = MarkdownContent(parserResult: parseResult, theme: theme)
+            let content: MarkdownContent
+            if case .chat = profile {
+                content = MarkdownContent(blocks: ChatFilePaths.blocks(parsedContent.blocks),
+                                          rendered: parsedContent.rendered, highlightMaps: parsedContent.highlightMaps,
+                                          locale: parsedContent.locale)
+            } else {
+                content = parsedContent
+            }
 
             lastSource = source
             lastParsedSource = parsedSource
@@ -364,15 +523,18 @@ public struct LimareMarkdownView: View {
     public let source: String
     public let profile: Profile
     public let onSelectionBecameActive: (@MainActor () -> Void)?
+    public let onQuote: (@MainActor (String) -> Void)?
 
     public init(
         source: String,
         profile: Profile,
-        onSelectionBecameActive: (@MainActor () -> Void)? = nil
+        onSelectionBecameActive: (@MainActor () -> Void)? = nil,
+        onQuote: (@MainActor (String) -> Void)? = nil
     ) {
         self.source = source
         self.profile = profile
         self.onSelectionBecameActive = onSelectionBecameActive
+        self.onQuote = onQuote
     }
 
     public var body: some View {
@@ -386,3 +548,149 @@ public struct LimareMarkdownView: View {
 }
 
 #endif
+
+/// Hit-testing and selection queries used by collapsible user bubbles to tell a plain click on
+/// a bubble or blank transcript area apart from selection drags, links, buttons, and editors.
+@MainActor
+enum LimareMarkdownInteractionProbe {
+    private static let interactiveRoles: Set<NSAccessibility.Role> = [
+        .button, .menuButton, .popUpButton, .checkBox, .radioButton,
+        .slider, .incrementor, .link, .textField, .textArea,
+        .disclosureTriangle, .tabGroup, .menuItem, .row, .cell,
+    ]
+
+    /// Whether any selectable text view intersecting `windowRect` currently holds a non-empty selection.
+    static func hasSelection(withinWindowRect windowRect: CGRect, in window: NSWindow) -> Bool {
+        guard let contentView = window.contentView else { return false }
+        if let textView = window.firstResponder as? NSTextView,
+           textView.selectedRange().length > 0,
+           textView.convert(textView.bounds, to: nil).intersects(windowRect) {
+            return true
+        }
+        #if canImport(MarkdownView)
+        return hasSelectableLabelSelection(in: contentView, intersecting: windowRect)
+        #else
+        return false
+        #endif
+    }
+
+    /// Whether the selectable view directly under `windowPoint` currently holds a non-empty selection.
+    static func hasSelection(at windowPoint: CGPoint, in window: NSWindow) -> Bool {
+        guard let (contentView, hitView) = hitTestContentView(at: windowPoint, in: window) else { return false }
+        var current: NSView? = hitView
+        while let node = current {
+            if let textView = node as? NSTextView, textView.selectedRange().length > 0 {
+                return true
+            }
+            if node === contentView { break }
+            current = node.superview
+        }
+        #if canImport(MarkdownView)
+        if let label = enclosingTextLabel(of: hitView, root: contentView) {
+            return (label.selectionRange?.length ?? 0) > 0
+        }
+        #endif
+        return false
+    }
+
+    /// Whether a click at `windowPoint` hit an interactive UI element, link, or (when `rejectTextContent`
+    /// is true) non-blank message content such as text lines, code blocks, or tables.
+    static func isInteractiveOrContentHit(
+        at windowPoint: CGPoint,
+        in window: NSWindow,
+        rejectTextContent: Bool
+    ) -> Bool {
+        guard let (contentView, hitView) = hitTestContentView(at: windowPoint, in: window) else { return false }
+
+        if isControlOrEditableText(hitView, root: contentView, rejectContextCards: rejectTextContent) {
+            return true
+        }
+
+        #if canImport(MarkdownView)
+        if let label = enclosingTextLabel(of: hitView, root: contentView) {
+            let labelPoint = label.convert(windowPoint, from: nil)
+            if label.highlightRegion(at: labelPoint) != nil {
+                return true
+            }
+            if rejectTextContent {
+                if (label.selectionRange?.length ?? 0) > 0 {
+                    return true
+                }
+                if label.layoutLines.contains(where: {
+                    label.viewRect(fromLayoutRect: $0.rect).insetBy(dx: -4, dy: -6).contains(labelPoint)
+                }) {
+                    return true
+                }
+            }
+        }
+        #endif
+
+        return hasInteractiveAccessibilityElement(at: window.convertPoint(toScreen: windowPoint), in: window)
+    }
+
+    private static func hitTestContentView(at windowPoint: CGPoint, in window: NSWindow) -> (contentView: NSView, hitView: NSView)? {
+        guard let contentView = window.contentView else { return nil }
+        // `NSView.hitTest(_:)` takes a point in the receiver's superview coordinate space.
+        let superviewPoint = contentView.superview?.convert(windowPoint, from: nil) ?? windowPoint
+        guard let hitView = contentView.hitTest(superviewPoint) else { return nil }
+        return (contentView, hitView)
+    }
+
+    private static func isControlOrEditableText(_ view: NSView, root: NSView, rejectContextCards: Bool) -> Bool {
+        var current: NSView? = view
+        while let node = current {
+            if node is NSControl {
+                return true
+            }
+            if let textView = node as? NSTextView, textView.isEditable {
+                return true
+            }
+            #if canImport(MarkdownView)
+            if rejectContextCards,
+               let markdownView = node as? MarkdownTextView,
+               view !== markdownView,
+               !view.isDescendant(of: markdownView.textLabelView) {
+                return true
+            }
+            #endif
+            if node === root { break }
+            current = node.superview
+        }
+        return false
+    }
+
+    private static func hasInteractiveAccessibilityElement(at screenPoint: CGPoint, in window: NSWindow) -> Bool {
+        var current: Any? = window.accessibilityHitTest(screenPoint)
+        for _ in 0..<8 {
+            guard let element = current as? NSAccessibilityProtocol else { break }
+            if let role = element.accessibilityRole(), interactiveRoles.contains(role) {
+                return true
+            }
+            current = element.accessibilityParent()
+        }
+        return false
+    }
+
+    #if canImport(MarkdownView)
+    private static func hasSelectableLabelSelection(in view: NSView, intersecting windowRect: CGRect) -> Bool {
+        if let label = view as? TextLabelView,
+           (label.selectionRange?.length ?? 0) > 0,
+           label.convert(label.bounds, to: nil).intersects(windowRect) {
+            return true
+        }
+        return view.subviews.contains { hasSelectableLabelSelection(in: $0, intersecting: windowRect) }
+    }
+
+    private static func enclosingTextLabel(of view: NSView, root: NSView) -> TextLabelView? {
+        var current: NSView? = view
+        while let node = current {
+            if let label = node as? TextLabelView {
+                return label
+            }
+            if node === root { break }
+            current = node.superview
+        }
+        return nil
+    }
+    #endif
+}

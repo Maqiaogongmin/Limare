@@ -36,6 +36,7 @@ final class CodeView: PlatformView {
                 resetCopyFeedback()
                 reloadActions()
                 markNeedsLayout()
+                if recognizesStandaloneFilePaths { rebuildText() }
             }
         }
     }
@@ -58,13 +59,44 @@ final class CodeView: PlatformView {
             guard oldValue != content || needsTextRebuild else { return }
             needsTextRebuild = false
             cachedLineCount = max(content.components(separatedBy: .newlines).count, 1)
-            textView.attributedText = highlightMap.apply(to: content, with: theme)
+            rebuildText()
             lineNumberView.updateForContent(content)
             updateLineNumberView()
             // A line can grow without the frame changing, and the text
             // view and scroll extent are sized in layout.
             markNeedsLayout()
         }
+    }
+
+    /// Opt-in for hosts that want standalone local paths in unlabeled blocks
+    /// to be clickable. Ordinary code and the copied source stay unchanged.
+    var recognizesStandaloneFilePaths = false {
+        didSet { if oldValue != recognizesStandaloneFilePaths { rebuildText() } }
+    }
+
+    private func rebuildText() {
+        let rendered = NSMutableAttributedString(attributedString: highlightMap.apply(to: content, with: theme))
+        #if canImport(AppKit)
+            if recognizesStandaloneFilePaths && language.isEmpty {
+                let source = content as NSString
+                source.enumerateSubstrings(in: NSRange(location: 0, length: source.length), options: .byLines) { line, range, _, _ in
+                    guard let line else { return }
+                    let path = line.trimmingCharacters(in: .whitespaces)
+                    guard path.count <= 4096, !path.hasPrefix("//"),
+                          path.hasPrefix("/") || path.hasPrefix("~/") else { return }
+                    let expanded = (path as NSString).expandingTildeInPath
+                    let offset = (line as NSString).range(of: path)
+                    guard offset.location != NSNotFound else { return }
+                    let linkRange = NSRange(location: range.location + offset.location, length: offset.length)
+                    rendered.addAttributes([
+                        .link: URL(fileURLWithPath: expanded),
+                        .foregroundColor: NSColor.linkColor,
+                        .underlineStyle: NSUnderlineStyle.single.rawValue,
+                    ], range: linkRange)
+                }
+            }
+        #endif
+        textView.attributedText = rendered
     }
 
     /// The parser's block content, including trailing whitespace hidden from layout.
@@ -310,14 +342,14 @@ final class CodeView: PlatformView {
                 return button.hitTest(buttonPoint) ?? button
             }
 
+            let scrollPoint = scrollView.convert(point, from: self)
             let textPoint = textView.convert(point, from: self)
-            if textView.bounds.contains(textPoint),
+            if scrollView.bounds.contains(scrollPoint), textView.bounds.contains(textPoint),
                let target = textView.hitTest(textPoint)
             {
                 return target
             }
 
-            let scrollPoint = scrollView.convert(point, from: self)
             if scrollView.bounds.contains(scrollPoint),
                let documentView = scrollView.documentView,
                documentView.bounds.width > scrollView.bounds.width + 1

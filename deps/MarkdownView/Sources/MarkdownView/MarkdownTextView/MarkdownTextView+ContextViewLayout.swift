@@ -71,6 +71,7 @@ extension MarkdownTextView {
         codeView.textView.delegate = self
         codeView.previewAction = codePreviewHandler
         codeView.actionProvider = codeBlockActionProvider
+        codeView.recognizesStandaloneFilePaths = recognizesStandaloneFilePaths
         placeContextView(
             codeView,
             at: contextViewFrame(for: run, height: codeView.intrinsicContentSize.height),

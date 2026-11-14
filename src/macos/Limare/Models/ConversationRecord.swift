@@ -80,6 +80,8 @@ struct ConversationRecord: Identifiable, Codable, Equatable, Sendable {
     var status: String?
     var pinnedAt: Date?
     var archivedAt: Date?
+    /// A manual marker or a reply that completed while the conversation was not being read.
+    var isUnread: Bool = false
     var nativeDelegationTaskID: UUID?
     var nativeDelegationParentID: UUID?
     /// The user message an automatically generated title was derived from; nil for titles the
@@ -191,11 +193,12 @@ struct ConversationRecord: Identifiable, Codable, Equatable, Sendable {
             && (title.isEmpty || title == Self.defaultTitle)
             && pinnedAt == nil
             && archivedAt == nil
+            && !isUnread
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, title, createdAt, updatedAt, projectID, workspace, worktree, providerID, modelID, modelSource, subModelSource, subagentEnabled
-        case thinkingLevelOverride, messages, memoryEnabled, status, pinnedAt, archivedAt, schemaVersion
+        case thinkingLevelOverride, messages, memoryEnabled, status, pinnedAt, archivedAt, isUnread, schemaVersion
         case nativeDelegationTaskID, nativeDelegationParentID, generatedTitleSourceMessageID
         case retractedRecoveryRunID, compactionMarkers, forkParentConversationID, forkPointMessageID, forkWorkingDirectory
     }
@@ -223,6 +226,7 @@ struct ConversationRecord: Identifiable, Codable, Equatable, Sendable {
         status = try container.decodeIfPresent(String.self, forKey: .status)
         pinnedAt = try container.decodeIfPresent(Date.self, forKey: .pinnedAt)
         archivedAt = try container.decodeIfPresent(Date.self, forKey: .archivedAt)
+        isUnread = try container.decodeIfPresent(Bool.self, forKey: .isUnread) ?? false
         nativeDelegationTaskID = try container.decodeIfPresent(UUID.self, forKey: .nativeDelegationTaskID)
         nativeDelegationParentID = try container.decodeIfPresent(UUID.self, forKey: .nativeDelegationParentID)
         generatedTitleSourceMessageID = try container.decodeIfPresent(UUID.self, forKey: .generatedTitleSourceMessageID)

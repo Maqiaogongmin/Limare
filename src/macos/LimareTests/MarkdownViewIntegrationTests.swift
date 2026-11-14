@@ -8,6 +8,108 @@ import Litext
 
 @MainActor
 final class MarkdownViewIntegrationTests: XCTestCase {
+    func testQuotePopoverAndOriginalTextMenu() throws {
+        let view = LimareStreamView()
+        let theme = LimareMarkdownRepresentable.makeThemeFromPreferences()
+        view.frame = NSRect(x: 0, y: 0, width: 400, height: 100)
+        let window = NSWindow(contentRect: view.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = view
+        window.orderFront(nil)
+        defer { window.close() }
+        view.setContentImmediately(MarkdownContent(parserResult: MarkdownParser().parse("Hello **world**"), theme: theme), theme: theme)
+        view.layoutSubtreeIfNeeded()
+        var quoted: String?
+        view.onQuote = { quoted = $0 }
+        let label = view.textLabelView
+        let selectedRect = try XCTUnwrap(label.textLayout.rects(for: NSRange(location: 6, length: 5)).first)
+        let rect = label.viewRect(fromLayoutRect: selectedRect)
+        let point = label.convert(NSPoint(x: rect.midX, y: rect.midY), to: nil)
+        let down = try XCTUnwrap(NSEvent.mouseEvent(with: .leftMouseDown, location: point, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 2, pressure: 1))
+        let up = try XCTUnwrap(NSEvent.mouseEvent(with: .leftMouseUp, location: point, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 2, clickCount: 2, pressure: 0))
+        label.mouseDown(with: down)
+        label.mouseUp(with: up)
+        XCTAssertEqual(label.selectedPlainText(), "world")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        XCTAssertTrue(try XCTUnwrap(view.quotePopover).popover.isShown, "window=\(String(describing: label.window)), frame=\(label.frame), visible=\(label.visibleRect), selected=\(String(describing: label.selectionRange)), lines=\(label.layoutLines.count), rects=\(label.textLayout.rects(for: label.selectionRange ?? NSRange()).count), buttons=\(NSEvent.pressedMouseButtons)")
+        let event = try XCTUnwrap(NSEvent.mouseEvent(with: .rightMouseDown, location: point, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0))
+        let menu = try XCTUnwrap(label.menu(for: event))
+        XCTAssertTrue(menu.items.contains { $0.action == #selector(NSText.copy(_:)) })
+        XCTAssertFalse(menu.items.contains { $0.title == String(localized: "Quote") })
+        let button = try XCTUnwrap(try XCTUnwrap(view.quotePopover).popover.contentViewController?.view.subviews.first as? NSButton)
+        button.performClick(nil)
+        XCTAssertEqual(quoted, "world")
+        XCTAssertFalse(try XCTUnwrap(view.quotePopover).popover.isShown)
+        label.selectionRange = nil
+        label.selectionRange = NSRange(location: 0, length: 5)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        XCTAssertTrue(try XCTUnwrap(view.quotePopover).popover.isShown)
+        label.selectionRange = nil
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        XCTAssertFalse(try XCTUnwrap(view.quotePopover).popover.isShown)
+    }
+
+    func testDraggingReplyTextShowsQuoteButton() throws {
+        let view = LimareStreamView()
+        let theme = LimareMarkdownRepresentable.makeThemeFromPreferences()
+        view.frame = NSRect(x: 0, y: 0, width: 400, height: 100)
+        let window = NSWindow(contentRect: view.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = view
+        window.orderFront(nil)
+        defer { window.close() }
+        view.setContentImmediately(MarkdownContent(parserResult: MarkdownParser().parse("Select this reply text"), theme: theme), theme: theme)
+        view.layoutSubtreeIfNeeded()
+        let label = view.textLabelView
+        let start = label.viewRect(fromLayoutRect: try XCTUnwrap(label.textLayout.rects(for: NSRange(location: 0, length: 1)).first))
+        let end = label.viewRect(fromLayoutRect: try XCTUnwrap(label.textLayout.rects(for: NSRange(location: 16, length: 1)).first))
+        let a = label.convert(NSPoint(x: start.minX + 1, y: start.midY), to: nil)
+        let b = label.convert(NSPoint(x: end.maxX - 1, y: end.midY), to: nil)
+        func event(_ type: NSEvent.EventType, _ point: NSPoint) throws -> NSEvent {
+            try XCTUnwrap(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+        }
+        var quoted: String?
+        view.onQuote = { quoted = $0 }
+        label.mouseDown(with: try event(.leftMouseDown, a))
+        label.mouseDragged(with: try event(.leftMouseDragged, b))
+        label.mouseUp(with: try event(.leftMouseUp, b))
+        let selected = try XCTUnwrap(label.selectedPlainText())
+        XCTAssertTrue(selected.contains("reply"))
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        XCTAssertTrue(try XCTUnwrap(view.quotePopover).popover.isShown)
+        let button = try XCTUnwrap(try XCTUnwrap(view.quotePopover).popover.contentViewController?.view.subviews.first as? NSButton)
+        button.performClick(nil)
+        XCTAssertEqual(quoted, selected)
+    }
+
+    func testTableQuoteUsesGroupedSelectionAndKeepsTableMenu() throws {
+        let view = LimareStreamView()
+        let theme = LimareMarkdownRepresentable.makeThemeFromPreferences()
+        view.frame = NSRect(x: 0, y: 0, width: 400, height: 160)
+        let window = NSWindow(contentRect: view.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = view
+        window.orderFront(nil)
+        defer { window.close() }
+        let source = "| One | Two |\n| --- | --- |\n| Alpha | Beta |"
+        view.setContentImmediately(MarkdownContent(parserResult: MarkdownParser().parse(source), theme: theme), theme: theme)
+        view.layoutSubtreeIfNeeded()
+        let table = try XCTUnwrap(view.contextViews.compactMap { $0 as? TableView }.first)
+        table.updateSelectionGroup()
+        let label = try XCTUnwrap(table.selectionGroup.labels.first)
+        var quoted: String?
+        view.onQuote = { quoted = $0 }
+        label.selectionRange = NSRange(location: 0, length: 3)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        XCTAssertTrue(try XCTUnwrap(view.quotePopover).popover.isShown, "window=\(String(describing: label.window)), frame=\(label.frame), visible=\(label.visibleRect), selected=\(String(describing: label.selectionRange)), lines=\(label.layoutLines.count), rects=\(label.textLayout.rects(for: label.selectionRange ?? NSRange()).count), buttons=\(NSEvent.pressedMouseButtons)")
+        let event = try XCTUnwrap(NSEvent.mouseEvent(with: .rightMouseDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0))
+        let menu = try XCTUnwrap(table.textSelectionGroup(table.selectionGroup, menu: NSMenu(), event: event))
+        XCTAssertEqual(menu.items.count, 1) // Copy as Markdown remains available.
+        let button = try XCTUnwrap(try XCTUnwrap(view.quotePopover).popover.contentViewController?.view.subviews.first as? NSButton)
+        button.performClick(nil)
+        XCTAssertEqual(quoted, "One")
+    }
+
     func testChatKeepsFencedPromptAsCode() {
         let source = "前言\n\n```\n# 任务\n\n## 边界\n\n**保留**原文。\n\n- 第一项\n```"
         let coordinator = LimareMarkdownRepresentable.Coordinator()
@@ -479,6 +581,58 @@ final class MarkdownViewIntegrationTests: XCTestCase {
         XCTAssertLessThan(typed, oneLine * 2 + 10, "The second line must not get paragraph spacing")
     }
 
+    func testTypedBubbleHugsShortAndMultiLineTextWithoutLineTruncation() throws {
+        let theme = LimareMarkdownRepresentable.makeTheme(
+            conversationPointSize: 15,
+            codePointSize: 13,
+            profile: .typed
+        )
+        let sources = [
+            "你好",
+            "第一行比较短\n第二行 `inline()` 也很短\n第三行结尾。",
+            "Mixed English and 中文 wrapping check with trailing spaces   \nand final line",
+        ]
+        for source in sources {
+            let coordinator = LimareMarkdownRepresentable.Coordinator()
+            let view = LimareStreamView()
+            coordinator.apply(source: source, profile: .typed, theme: theme, to: view, isInitial: true)
+            let fittingWidth: CGFloat = 632
+            let hugged = try XCTUnwrap(coordinator.sizeThatFits(ProposedViewSize(width: fittingWidth, height: nil), for: view, hugsText: true))
+            XCTAssertGreaterThan(hugged.width, 0)
+            XCTAssertLessThan(hugged.width, fittingWidth, "Short typed text must hug rather than stretch to \(fittingWidth)pt")
+
+            // Laying out the view at the exact hugged size must keep all lines intact without truncation.
+            view.frame = CGRect(origin: .zero, size: hugged)
+            view.layoutSubtreeIfNeeded()
+            let remeasured = view.boundingSize(for: hugged.width)
+            XCTAssertGreaterThanOrEqual(hugged.height, ceil(remeasured.height) - 0.5, "Hugged height must fit all wrapped lines")
+            XCTAssertFalse(view.textLabelView.layoutLines.isEmpty)
+        }
+    }
+
+    func testTypedBubbleHugsCodeBlockAndTableNaturalWidth() throws {
+        let theme = LimareMarkdownRepresentable.makeTheme(
+            conversationPointSize: 15,
+            codePointSize: 13,
+            profile: .typed
+        )
+        let codeSource = "```swift\nlet answer = 42\n```"
+        let codeCoord = LimareMarkdownRepresentable.Coordinator()
+        let codeView = LimareStreamView()
+        codeCoord.apply(source: codeSource, profile: .typed, theme: theme, to: codeView, isInitial: true)
+        let codeSize = try XCTUnwrap(codeCoord.sizeThatFits(ProposedViewSize(width: 632, height: nil), for: codeView, hugsText: true))
+        XCTAssertGreaterThan(codeSize.width, 80, "Code-only typed message must hug its CodeView width, not 0")
+        XCTAssertLessThan(codeSize.width, 632)
+
+        let tableSource = "| Name | Value |\n| --- | ---: |\n| A | 1 |"
+        let tableCoord = LimareMarkdownRepresentable.Coordinator()
+        let tableView = LimareStreamView()
+        tableCoord.apply(source: tableSource, profile: .typed, theme: theme, to: tableView, isInitial: true)
+        let tableSize = try XCTUnwrap(tableCoord.sizeThatFits(ProposedViewSize(width: 632, height: nil), for: tableView, hugsText: true))
+        XCTAssertGreaterThan(tableSize.width, 80, "Table-only typed message must hug its TableView width, not 0")
+        XCTAssertLessThan(tableSize.width, 632)
+    }
+
     // MARK: - 10. Streaming Convergence Equivalence
 
     func testStreamingConvergenceEquivalence() {
@@ -905,7 +1059,10 @@ final class MarkdownViewIntegrationTests: XCTestCase {
             let text = view.convert(view.textView.bounds, from: view.textView)
             XCTAssertEqual(text.minX, theme.sizes.codeBlockRuleWidth + 14, accuracy: 0.5)
             XCTAssertEqual(text.minY, 2, accuracy: 0.5)
-            XCTAssertEqual(view.bounds.height - text.maxY, 2, accuracy: 1, "\(lines) lines: no clipping and no blank below the code")
+            XCTAssertGreaterThanOrEqual(view.bounds.height - text.maxY, 1, "\(lines) lines: code is not clipped")
+            if lines > 1 {
+                XCTAssertEqual(view.bounds.height - text.maxY, 2, accuracy: 1)
+            }
             XCTAssertTrue(view.lineNumberView.isHidden)
             XCTAssertFalse(view.ruleView.isHidden)
             XCTAssertEqual(view.ruleView.frame.width, theme.sizes.codeBlockRuleWidth)
@@ -973,6 +1130,175 @@ final class MarkdownViewIntegrationTests: XCTestCase {
         view.language = "swift"
         XCTAssertFalse(view.languageLabel.isHidden)
         XCTAssertEqual(view.languageLabel.text, "swift")
+    }
+
+    func testSingleLineControlsFitAndDoNotCoverTheCode() {
+        for size in [10.0, 12.0, 16.0] as [CGFloat] {
+            let theme = LimareMarkdownRepresentable.makeTheme(conversationPointSize: 14, codePointSize: size)
+            let view = makeCodeView(lines: 1, theme: theme, language: "")
+            XCTAssertLessThanOrEqual(view.barView.frame.maxY, view.bounds.maxY + 0.5)
+            XCTAssertLessThanOrEqual(view.scrollView.frame.maxX, view.barView.frame.minX + 0.5)
+            XCTAssertLessThanOrEqual(view.copyButton.frame.maxY, view.barView.bounds.maxY + 0.5)
+            XCTAssertLessThanOrEqual(view.expandButton.frame.maxY, view.barView.bounds.maxY + 0.5)
+        }
+    }
+
+    func testStandalonePathsBecomeFileLinksWithoutChangingCopiedCode() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("limare paths \(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("文件 name.ipa")
+        try Data().write(to: file)
+        let content = "  \(file.path)\n\(root.path)/missing.ipa\nlet code = 1"
+        let view = makeCodeView(lines: 1, theme: LimareMarkdownRepresentable.makeThemeFromPreferences(), language: "")
+        view.recognizesStandaloneFilePaths = true
+        view.setContent(content, highlightMap: nil)
+        let rendered = view.textView.attributedText
+        let found = (content as NSString).range(of: file.path)
+        let missing = (content as NSString).range(of: "missing.ipa")
+        XCTAssertEqual(rendered.attribute(.link, at: found.location, effectiveRange: nil) as? URL, file)
+        XCTAssertEqual(rendered.attribute(.link, at: missing.location, effectiveRange: nil) as? URL,
+                       root.appendingPathComponent("missing.ipa"))
+        XCTAssertEqual(view.copyContent, content)
+        view.language = "swift"
+        XCTAssertNil(view.textView.attributedText.attribute(.link, at: found.location, effectiveRange: nil))
+
+        // Exercise the actual chat adapter, which must pass the feature into the
+        // reusable code view and wire that view's delegate for clicks.
+        let chat = LimareStreamView()
+        let adapter = LimareMarkdownRepresentable.Coordinator()
+        let profile = LimareMarkdownView.Profile.chat(isStreaming: false, messageId: "path-test")
+        adapter.apply(source: "```\n\(file.path)\n```", profile: profile,
+                      theme: LimareMarkdownRepresentable.makeThemeFromPreferences(), to: chat, isInitial: true)
+        let size = chat.boundingSize(for: 500)
+        chat.frame = CGRect(origin: .zero, size: CGSize(width: 500, height: size.height))
+        chat.layoutSubtreeIfNeeded()
+        let block = try XCTUnwrap(chat.contextViews.compactMap { $0 as? CodeView }.first)
+        XCTAssertTrue(block.recognizesStandaloneFilePaths)
+        XCTAssertTrue(block.textView.delegate === chat)
+        XCTAssertEqual(block.textView.attributedText.attribute(.link, at: 0, effectiveRange: nil) as? URL, file)
+        let pathPoint = block.convert(CGPoint(x: 5, y: block.textView.bounds.midY), from: block.textView)
+        XCTAssertTrue(block.interactionTarget(at: pathPoint) === block.textView, "The visible path must receive clicks")
+        let availableMenu = chat.filePathMenu(for: file)
+        XCTAssertTrue(availableMenu.items[0].isEnabled)
+        XCTAssertTrue(availableMenu.items[1].isEnabled)
+        let missingMenu = chat.filePathMenu(for: root.appendingPathComponent("missing.ipa"))
+        XCTAssertFalse(missingMenu.items[0].isEnabled)
+        XCTAssertFalse(missingMenu.items[1].isEnabled)
+        XCTAssertEqual(missingMenu.items.last?.title, String(localized: "File not found"))
+    }
+
+    func testChatInlinePathsRenderAsFileLinks() throws {
+        let file = URL(fileURLWithPath: "/tmp/文件 name (1).txt")
+        let source = "已生成：`\(file.path)`，以及 `let x = 1`。\n\n`https://example.com`"
+        let view = LimareStreamView()
+        let adapter = LimareMarkdownRepresentable.Coordinator()
+        let theme = LimareMarkdownRepresentable.makeThemeFromPreferences()
+        adapter.apply(source: source, profile: .chat(isStreaming: false, messageId: "inline-path"),
+                      theme: theme, to: view, isInitial: true)
+        let rendered = view.textLabelView.attributedText
+        let path = (rendered.string as NSString).range(of: file.path)
+        XCTAssertNotEqual(path.location, NSNotFound)
+        let destination = try XCTUnwrap(rendered.attribute(.link, at: path.location, effectiveRange: nil) as? String)
+        XCTAssertEqual(URL(string: destination), file)
+        XCTAssertEqual(rendered.attribute(.underlineStyle, at: path.location, effectiveRange: nil) as? Int,
+                       NSUnderlineStyle.single.rawValue)
+        let code = (rendered.string as NSString).range(of: "let x = 1")
+        XCTAssertNil(rendered.attribute(.link, at: code.location, effectiveRange: nil))
+        let web = (rendered.string as NSString).range(of: "https://example.com")
+        XCTAssertNil(rendered.attribute(.link, at: web.location, effectiveRange: nil))
+        XCTAssertEqual(view.filePathMenu(for: file).items[2].title, String(localized: "Copy Path"))
+
+        let document = LimareStreamView()
+        LimareMarkdownRepresentable.Coordinator().apply(source: source, profile: .document,
+                                                        theme: theme, to: document, isInitial: true)
+        let documentText = document.textLabelView.attributedText
+        let documentPath = (documentText.string as NSString).range(of: file.path)
+        XCTAssertNil(documentText.attribute(.link, at: documentPath.location, effectiveRange: nil))
+        XCTAssertEqual(ChatFilePaths.url("~/Documents/test"), URL(fileURLWithPath: NSHomeDirectory() + "/Documents/test"))
+        XCTAssertNil(ChatFilePaths.url("//example.com/file"))
+    }
+
+    func testUserMessageCollapseDispositionAndInteractionProbe() throws {
+        // 1. Verify UserMessageCollapse disposition rules & layout token.
+        XCTAssertEqual(AppLayout.userMessageMaximumWidth, 660)
+        XCTAssertEqual(
+            UserMessageCollapse.dispositionForClick(
+                isCollapsible: true, isExpanded: false, downInsideBubble: true, upInsideBubble: true,
+                inWindowContent: true, isInteractiveTarget: false, hadSelectionBefore: false, hasSelectionAfter: false, dragDistance: 1
+            ),
+            .expand
+        )
+        XCTAssertEqual(
+            UserMessageCollapse.dispositionForClick(
+                isCollapsible: true, isExpanded: true, downInsideBubble: true, upInsideBubble: true,
+                inWindowContent: true, isInteractiveTarget: false, hadSelectionBefore: false, hasSelectionAfter: false, dragDistance: 0
+            ),
+            .none,
+            "Clicking inside an expanded user message box must not collapse it"
+        )
+        XCTAssertEqual(
+            UserMessageCollapse.dispositionForClick(
+                isCollapsible: true, isExpanded: true, downInsideBubble: false, upInsideBubble: false,
+                inWindowContent: true, isInteractiveTarget: false, hadSelectionBefore: false, hasSelectionAfter: false, dragDistance: 1
+            ),
+            .collapse,
+            "Clicking blank area outside an expanded user message box collapses it"
+        )
+
+        // 2. Verify AppKit hit-testing distinguishes text glyphs, links, blank trailing space, and selection.
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 240),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        let contentView = try XCTUnwrap(window.contentView)
+        let streamView = LimareStreamView()
+        let theme = LimareMarkdownRepresentable.makeTheme(conversationPointSize: 15, codePointSize: 13, profile: .typed)
+        streamView.setContentImmediately(
+            MarkdownContent(parserResult: MarkdownParser().parse("Hello [link](https://example.com)"), theme: theme),
+            theme: theme
+        )
+        streamView.frame = CGRect(x: 40, y: 80, width: 420, height: 40)
+        contentView.addSubview(streamView)
+        contentView.layoutSubtreeIfNeeded()
+
+        let label = streamView.textLabelView
+        let firstLine = try XCTUnwrap(label.layoutLines.first)
+        let lineRect = label.viewRect(fromLayoutRect: firstLine.rect)
+
+        let plainTextPoint = label.convert(CGPoint(x: lineRect.minX + 6, y: lineRect.midY), to: nil)
+        let blankTrailingPoint = label.convert(CGPoint(x: label.bounds.width - 10, y: lineRect.midY), to: nil)
+        let outsideLabelPoint = contentView.convert(CGPoint(x: 10, y: 10), to: nil)
+        let linkPoint = label.convert(CGPoint(x: lineRect.maxX - 8, y: lineRect.midY), to: nil)
+
+        XCTAssertFalse(
+            LimareMarkdownInteractionProbe.isInteractiveOrContentHit(at: plainTextPoint, in: window, rejectTextContent: false),
+            "Plain text click inside collapsed bubble should allow expansion"
+        )
+        XCTAssertTrue(
+            LimareMarkdownInteractionProbe.isInteractiveOrContentHit(at: linkPoint, in: window, rejectTextContent: false),
+            "Link click inside bubble remains interactive"
+        )
+        XCTAssertTrue(
+            LimareMarkdownInteractionProbe.isInteractiveOrContentHit(at: plainTextPoint, in: window, rejectTextContent: true),
+            "Direct click on another message's text line is not treated as blank canvas"
+        )
+        XCTAssertFalse(
+            LimareMarkdownInteractionProbe.isInteractiveOrContentHit(at: blankTrailingPoint, in: window, rejectTextContent: true),
+            "Empty trailing space past line end counts as blank area"
+        )
+        XCTAssertFalse(
+            LimareMarkdownInteractionProbe.isInteractiveOrContentHit(at: outsideLabelPoint, in: window, rejectTextContent: true),
+            "Empty margin outside text labels counts as blank area"
+        )
+
+        XCTAssertFalse(LimareMarkdownInteractionProbe.hasSelection(withinWindowRect: streamView.convert(streamView.bounds, to: nil), in: window))
+        label.selectionRange = NSRange(location: 0, length: 5)
+        XCTAssertTrue(LimareMarkdownInteractionProbe.hasSelection(withinWindowRect: streamView.convert(streamView.bounds, to: nil), in: window))
+        XCTAssertTrue(LimareMarkdownInteractionProbe.hasSelection(at: plainTextPoint, in: window))
+        XCTAssertFalse(LimareMarkdownInteractionProbe.hasSelection(at: outsideLabelPoint, in: window))
     }
 }
 

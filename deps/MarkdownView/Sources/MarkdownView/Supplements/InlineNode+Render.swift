@@ -119,6 +119,14 @@ extension MarkdownInlineNode {
                 range: NSRange(location: 0, length: ans.length),
             )
             if let underline = theme.colors.linkUnderline {
+                // Local paths need an affordance even when their label is an inline-code pill.
+                if URL(string: destination)?.isFileURL == true {
+                    ans.addAttributes([
+                        .underlineStyle: NSUnderlineStyle.single.rawValue,
+                        .underlineColor: underline,
+                    ], range: NSRange(location: 0, length: ans.length))
+                    return ans
+                }
                 // Limare: not under inline code, whose pill already sets it apart; a line
                 // through the pill's foot reads as a strike, not a link.
                 ans.enumerateAttribute(

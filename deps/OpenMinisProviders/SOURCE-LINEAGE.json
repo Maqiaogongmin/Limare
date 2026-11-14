@@ -77,7 +77,8 @@
     "Native thinkingControlJSON is shared by UI distinct-control admission and request serialization; output caps deduplicate equal budgets.",
     "Kimi Code uses host-selected compatible effort profile; official four-model catalog remains in Limare.",
     "Use the exact snake_case encoder/decoder strategies from SwiftAnthropic DefaultAnthropicService/Endpoint; its StreamHandler collects signatures.",
-    "Preserve complete inline tool input and nested original JSON keys before conversion to canonical stream events."
+    "Preserve complete inline tool input and nested original JSON keys before conversion to canonical stream events.",
+    "Preserve optional raw Anthropic and Gemini usage fields, including cache, thinking and tool prompt counts, for host-side merging and normalization."
   ],
   "excludedSources": [
     "src/ios/Providers/Anthropic/OAuthHTTPClient.swift"

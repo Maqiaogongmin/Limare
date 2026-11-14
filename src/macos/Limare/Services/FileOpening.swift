@@ -26,6 +26,7 @@ enum FileOpening {
     }
 
     static func isPreviewable(_ url: URL) -> Bool {
+        if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true { return false }
         if case .unsupported = FilePreviewClassifier.classify(url: url) { return false }
         return true
     }

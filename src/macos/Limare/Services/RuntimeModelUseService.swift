@@ -132,7 +132,7 @@ final class RuntimeModelUseService {
         return RuntimeModelRequestPlan(
             messages: messages,
             tools: [],
-            options: ChatInferenceOptions(thinkingLevel: .off, maxOutputTokens: bound, model: entry.model),
+            options: ChatInferenceOptions(thinkingLevel: .off, maxOutputTokens: bound, model: entry.model, usageKind: .modelTool),
             artifactResolver: artifactResolver
         )
     }

@@ -400,6 +400,8 @@ public struct ProviderConfiguration: Identifiable, Codable, Hashable, Sendable {
     public var selectedModelID: String
     public var hasStoredSecret: Bool
     public var disabledNativeVision: Bool
+    /// nil is the legacy default: request usage in streaming chat responses.
+    public var requestStreamUsage: Bool? = nil
     public var lastDiscovery: ProviderDiscoveryObservation?
 
     public init(
@@ -439,7 +441,7 @@ public struct ProviderConfiguration: Identifiable, Codable, Hashable, Sendable {
 
     public enum CodingKeys: String, CodingKey {
         case id, name, kind, baseURL, modelsURL, appendV1Suffix, authenticationMode, apiFormat, customUserAgent, extraHeaders, models, selectedModelID, hasStoredSecret, disabledNativeVision, lastDiscovery
-        case providerIdentity, protocolAdapter, authenticationSelection
+        case providerIdentity, protocolAdapter, authenticationSelection, requestStreamUsage
     }
 
     public init(from decoder: Decoder) throws {
@@ -472,6 +474,7 @@ public struct ProviderConfiguration: Identifiable, Codable, Hashable, Sendable {
         selectedModelID = try container.decode(String.self, forKey: .selectedModelID)
         hasStoredSecret = try container.decodeIfPresent(Bool.self, forKey: .hasStoredSecret) ?? true
         disabledNativeVision = try container.decodeIfPresent(Bool.self, forKey: .disabledNativeVision) ?? false
+        requestStreamUsage = try container.decodeIfPresent(Bool.self, forKey: .requestStreamUsage)
         lastDiscovery = try container.decodeIfPresent(ProviderDiscoveryObservation.self, forKey: .lastDiscovery)
     }
 
@@ -492,6 +495,7 @@ public struct ProviderConfiguration: Identifiable, Codable, Hashable, Sendable {
         try c.encode(selectedModelID, forKey: .selectedModelID)
         try c.encode(hasStoredSecret, forKey: .hasStoredSecret)
         try c.encode(disabledNativeVision, forKey: .disabledNativeVision)
+        try c.encodeIfPresent(requestStreamUsage, forKey: .requestStreamUsage)
         try c.encodeIfPresent(lastDiscovery, forKey: .lastDiscovery)
     }
 

@@ -21,6 +21,8 @@ final class WindowSession: Identifiable {
     let scheduledPanel = ScheduledPanelState()
     /// Bumped by the Focus Composer command; the composer makes its editor first responder.
     var composerFocusRequest = 0
+    /// Quoting a reply focuses the composer at the end of the inserted text.
+    var composerFocusAtEndRequest = 0
     /// The Run Details sheet of the shown conversation's latest run is open.
     var showsRunDetails = false
     /// The worktree details sheet's conversation.
@@ -202,6 +204,10 @@ final class WindowSession: Identifiable {
     /// Previews a workspace file in its own tab.
     func previewWorkspaceFile(_ url: URL) {
         openPreviewTab { $0.selectFile(url: url) }
+    }
+
+    func previewExternalFile(_ url: URL) {
+        openPreviewTab { $0.selectExternalFile(url: url) }
     }
 
     /// Previews a chat attachment in its own tab.

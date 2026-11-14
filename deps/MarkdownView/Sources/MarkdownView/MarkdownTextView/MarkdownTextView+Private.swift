@@ -95,6 +95,7 @@ extension MarkdownTextView {
             if let codeView = view as? CodeView {
                 codeView.previewAction = codePreviewHandler
                 codeView.actionProvider = codeBlockActionProvider
+                codeView.recognizesStandaloneFilePaths = recognizesStandaloneFilePaths
             } else if let tableView = view as? TableView {
                 tableView.linkHandler = linkHandler
             }

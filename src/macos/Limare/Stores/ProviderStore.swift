@@ -48,6 +48,32 @@ final class ProviderStore {
     private var openAIHostIdentity: String?
     private var authenticationControllers: [UUID: ProviderAuthenticationService] = [:]
     private var refreshTasks: [String: Task<(token: String, archive: Data), Error>] = [:]
+    @ObservationIgnored var onQuotaInvalidated: ((UUID) -> Void)?
+    private static let managementKeySelection = ProviderAuthenticationSelection(
+        credentialKind: .apiKey, acquisitionMethod: .manualAPIKey, authenticationIdentityID: "openrouter-management-key")
+
+    func managementKey(providerID: UUID) throws -> String? {
+        guard let vault = secretStore as? ProviderSecretStore else { return nil }
+        return try vault.slot(providerID: providerID, selection: Self.managementKeySelection)?.apiKey
+    }
+
+    func saveManagementKey(_ key: String, providerID: UUID) throws {
+        guard providers.contains(where: { $0.id == providerID }), let vault = secretStore as? ProviderSecretStore else {
+            throw ProviderStoreError.providerNotFound
+        }
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw ProviderStoreError.apiKeyRequired }
+        try vault.saveKey(trimmed, providerID: providerID, selection: Self.managementKeySelection)
+        onQuotaInvalidated?(providerID)
+    }
+
+    func deleteManagementKey(providerID: UUID) throws {
+        guard let vault = secretStore as? ProviderSecretStore else { throw ProviderStoreError.providerNotFound }
+        try vault.logout(providerID: providerID, selection: Self.managementKeySelection)
+        onQuotaInvalidated?(providerID)
+    }
+
+    func streamUsageWasRejected(_ provider: ProviderConfiguration) -> Bool { client.streamUsageWasRejected(provider) }
 
     init(
         fileManager: FileManager = .default,
@@ -178,6 +204,7 @@ final class ProviderStore {
             catch { credentialStorageFailure = error }
             throw error
         }
+        onQuotaInvalidated?(draft.id)
         return updated
     }
 
@@ -203,6 +230,7 @@ final class ProviderStore {
             providers[i].hasStoredSecret = stillConnected
             persist()
         }
+        onQuotaInvalidated?(providerID)
     }
 
     func hasCredential(providerID: UUID, selection: ProviderAuthenticationSelection) -> Bool {
@@ -401,6 +429,14 @@ final class ProviderStore {
             throw error
         }
         providers = updatedProviders
+        if existing?.baseURL != validated.baseURL || existing?.protocolAdapter != validated.protocolAdapter
+            || existing?.requestStreamUsage != validated.requestStreamUsage {
+            client.invalidateStreamUsageCompatibility(validated.id)
+        }
+        if existing?.baseURL != validated.baseURL || existing?.authenticationSelection != validated.authenticationSelection
+            || (trimmedKey?.isEmpty == false) {
+            onQuotaInvalidated?(validated.id)
+        }
         isLoading = true
         selectedProviderID = validated.id
         isLoading = false
@@ -417,6 +453,8 @@ final class ProviderStore {
             selectedProviderID = providers.first?.id
         }
         persist()
+        client.invalidateStreamUsageCompatibility(providerID)
+        onQuotaInvalidated?(providerID)
         logs.info("Provider", "Deleted provider metadata and its private credential.")
     }
 

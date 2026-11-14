@@ -14,6 +14,7 @@ final class AppState {
     @ObservationIgnored var pendingWindowConversationID: UUID?
     /// The window each pending request's sheet opened in.
     @ObservationIgnored private var sheetHosts: [String: UUID] = [:]
+    @ObservationIgnored private var readStatusSubscription: ConversationRunSubscription?
 
     /// The window menu commands and app-level actions act on: the key window, else the last opened.
     var focusedWindow: WindowSession {
@@ -32,6 +33,10 @@ final class AppState {
     let logs: DebugLogStore
     let runtimeEvents: RuntimeEventStore
     let providers: ProviderStore
+    let providerQuota: ProviderQuotaService
+    let usageRecorder: UsageRecorder?
+    let usageRecordingStatus: UsageRecordingStatus
+    var usageProviderFilter: UUID?
     let workspace: WorkspaceStore
     let permissions: PermissionStore
     let userQuestions: UserQuestionStore
@@ -81,7 +86,20 @@ final class AppState {
         let logs = DebugLogStore(storageRootURL: storageRootURL)
         let runtimeEvents = RuntimeEventStore(storageRootURL: storageRootURL)
         let recoveryStore = RuntimeRecoveryStore(storageRootURL: storageRootURL, logs: logs)
-        let providers = ProviderStore(storageRootURL: storageRootURL, client: inputClient, logs: logs)
+        let usageStatus = UsageRecordingStatus()
+        let usageRecorder: UsageRecorder?
+        do {
+            let recorder = try UsageRecorder(storageRootURL: storageRootURL, status: usageStatus)
+            usageRecorder = recorder
+            usageStatus.startedAt = recorder.startedAt
+        } catch {
+            usageRecorder = nil
+            usageStatus.failure = error.localizedDescription
+            logs.error("Usage", "Usage recording unavailable: \(error.localizedDescription)")
+        }
+        let providers = ProviderStore(storageRootURL: storageRootURL, client: inputClient.recordingUsage(usageRecorder), logs: logs)
+        let providerQuota = ProviderQuotaService(providers: providers)
+        providers.onQuotaInvalidated = { [weak providerQuota] id in providerQuota?.invalidate(providerID: id) }
         let client = providers.networkClient
         let workspace = WorkspaceStore(storageRootURL: storageRootURL, logs: logs)
         let permissions = PermissionStore(logs: logs)
@@ -152,6 +170,7 @@ final class AppState {
         let runtimeModelUseService = RuntimeModelUseService(
             registry: runtimeModelRegistry,
             providers: providers,
+            client: client,
             logs: logs
         )
         let runtimeImageGenerationService = RuntimeImageGenerationService(
@@ -186,6 +205,9 @@ final class AppState {
         self.runtimeEvents = runtimeEvents
         self.recoveryStore = recoveryStore
         self.providers = providers
+        self.providerQuota = providerQuota
+        self.usageRecorder = usageRecorder
+        self.usageRecordingStatus = usageStatus
         self.workspace = workspace
         self.permissions = permissions
         self.userQuestions = userQuestions
@@ -272,6 +294,7 @@ final class AppState {
         let titleGenerator = ConversationTitleGenerator(
             resolver: subModelResolver,
             providers: providers,
+            client: client,
             logs: logs
         )
         let chat = ChatStore(
@@ -484,6 +507,11 @@ final class AppState {
 
         syncEffectiveWorkspace()
 
+        readStatusSubscription = conversationRuns.observe { [weak self] event in
+            guard case .runFinished(let id, _, .completed, _) = event else { return }
+            self?.markBackgroundReplyUnread(conversationID: id)
+        }
+
         if let initial = conversations.activeConversation {
             chat.loadConversation(initial)
             let effectiveRoot = conversations.effectiveWorkingDirectory(for: initial.id)
@@ -530,6 +558,7 @@ final class AppState {
         windows.append(session)
         if let record = conversationID.flatMap({ id in conversations.conversations.first(where: { $0.id == id }) }) {
             session.show(record)
+            conversations.setConversationUnread(id: record.id, isUnread: false)
         } else {
             windowContentChanged()
         }
@@ -540,6 +569,9 @@ final class AppState {
     func windowBecameKey(_ session: WindowSession) {
         guard windows.contains(where: { $0 === session }) else { return }
         focusedWindowID = session.id
+        if session.screen == .chat, let id = session.conversationID {
+            conversations.setConversationUnread(id: id, isUnread: false)
+        }
         if let id = session.conversationID, conversations.activeConversationID != id {
             conversations.activeConversationID = id
             skills.setWorkspaceURL(conversations.effectiveWorkingDirectory(for: id))
@@ -602,6 +634,18 @@ final class AppState {
     /// Opens a conversation in a window of its own (the caller opens the window).
     func prepareWindow(for conversationID: UUID) {
         pendingWindowConversationID = conversationID
+    }
+
+    /// A completed answer is unread unless its chat is in the active key window.
+    func markBackgroundReplyUnread(conversationID: UUID) {
+        guard let conversation = conversations.conversations.first(where: { $0.id == conversationID }),
+              !conversation.isNativeDelegationChild else { return }
+        let isBeingRead = NSApp.isActive && windows.contains {
+            $0.conversationID == conversationID && $0.screen == .chat && $0.hostWindow?.isKeyWindow == true
+        }
+        if !isBeingRead {
+            conversations.setConversationUnread(id: conversationID, isUnread: true)
+        }
     }
 
     /// Recomputes what depends on the conversations windows show.

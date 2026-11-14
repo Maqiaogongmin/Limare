@@ -283,7 +283,8 @@ final class DefaultSemanticCompactionTransport: ContextSemanticCompactionTranspo
             maxOutputTokens: request.maxOutputTokens,
             model: ProviderModel(id: request.modelID, displayName: request.modelID, baseContextWindow: nil, baseMaxOutputTokens: request.maxOutputTokens),
             providerID: UUID(uuidString: request.providerID),
-            apiFormat: request.apiFormat
+            apiFormat: request.apiFormat,
+            usageKind: .compaction
         )
 
         var activeProvider = self.provider ?? ProviderConfiguration(

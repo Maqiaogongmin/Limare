@@ -179,6 +179,9 @@ enum OpenAIChatRequestBuilder {
             "messages": messagesJSON,
             "stream": true,
         ]
+        if provider.apiFormat == .chatCompletions && (provider.requestStreamUsage ?? true) {
+            body["stream_options"] = ["include_usage": true]
+        }
 
         let field = resolveMaxTokenWireField(baseURL: provider.baseURL, modelID: modelID, model: options.model)
         switch field {

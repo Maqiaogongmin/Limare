@@ -287,7 +287,7 @@ final class AgentLoopEngine {
                     escalatedOutputLimit = raised
                     continue
                 }
-                if let usage = diagBox.diagnostics?.usage, usage.hasAuthoritativeInputTokens {
+                if let usage = diagBox.diagnostics?.usage?.withContextInput(for: provider.apiFormat), usage.hasAuthoritativeInputTokens {
                     observer?.onUsageTelemetryReceived(usage: usage, providerID: provider.id, modelID: modelID)
                 }
                 let outcome = AssistantTurnOutcome.classify(text: currentContent, reasoning: currentReasoning,
@@ -305,7 +305,7 @@ final class AgentLoopEngine {
                 currentFinishReason = diagBox.diagnostics?.finishReason
             }
 
-            if let usage = diagBox.diagnostics?.usage, usage.hasAuthoritativeInputTokens {
+            if let usage = diagBox.diagnostics?.usage?.withContextInput(for: provider.apiFormat), usage.hasAuthoritativeInputTokens {
                 observer?.onUsageTelemetryReceived(
                     usage: usage,
                     providerID: provider.id,

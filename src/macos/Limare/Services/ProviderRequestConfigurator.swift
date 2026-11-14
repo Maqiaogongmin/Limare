@@ -130,4 +130,11 @@ public enum ProviderRequestConfigurator {
         )
         request.setValue(effectiveUA, forHTTPHeaderField: "User-Agent")
     }
+
+    public static func configureBearerHeaders(request: inout URLRequest, provider: ProviderConfiguration, apiKey: String) {
+        configureHeaders(request: &request, provider: provider, apiKey: nil, isChat: false)
+        request.setValue(nil, forHTTPHeaderField: "anthropic-version")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(apiKey.trimmingCharacters(in: .whitespacesAndNewlines))", forHTTPHeaderField: "Authorization")
+    }
 }

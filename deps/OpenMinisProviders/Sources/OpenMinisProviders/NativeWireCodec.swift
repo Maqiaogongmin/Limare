@@ -17,11 +17,21 @@ public enum NativeWireError: LocalizedError {
     }
 }
 
+public struct NativeUsage: Sendable, Equatable {
+    public var input: Int?
+    public var output: Int?
+    public var total: Int?
+    public var cacheRead: Int?
+    public var cacheWrite: Int?
+    public var reasoning: Int?
+    public var toolUsePrompt: Int?
+}
+
 public enum NativeDecodedEvent: Sendable {
     case text(String), thinking(String)
     case tool(index: Int, id: String?, name: String?, arguments: String)
     case metadata(Data)
-    case usage(input: Int, output: Int)
+    case usage(NativeUsage)
     case completed(String)
 }
 
@@ -242,25 +252,39 @@ public final class NativeStreamDecoder {
     private var anthropicCallIDs: [String] = []
     private var terminalReason: String?
     public private(set) var isCompleted = false
+    public private(set) var latestUsage: NativeUsage?
 
     public init(protocol wire: NativeWireProtocol) { self.wire = wire }
 
     public func parseLine(_ line: String) throws -> [NativeDecodedEvent] {
+        latestUsage = nil
         guard line.hasPrefix("data:") else { return [] }
         let raw = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
         if raw == "[DONE]" { return [] }
         guard let data = raw.data(using: .utf8), let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw NativeWireError.invalidInput }
-        if let error = root["error"] as? [String: Any] {
-            let code = error["type"] as? String ?? error["status"] as? String ?? (error["code"] as? Int).map(String.init)
-            throw NativeWireError.streamError(code: code, message: error["message"] as? String ?? "")
-        }
         var events: [NativeDecodedEvent] = []
         if let usage = root["usageMetadata"] as? [String: Any] {
-            events.append(.usage(input: usage["promptTokenCount"] as? Int ?? 0, output: usage["candidatesTokenCount"] as? Int ?? 0))
+            let parsed = NativeUsage(input: usage["promptTokenCount"] as? Int,
+                output: usage["candidatesTokenCount"] as? Int, total: usage["totalTokenCount"] as? Int,
+                cacheRead: usage["cachedContentTokenCount"] as? Int, cacheWrite: nil,
+                reasoning: usage["thoughtsTokenCount"] as? Int, toolUsePrompt: usage["toolUsePromptTokenCount"] as? Int)
+            latestUsage = parsed
+            events.append(.usage(parsed))
         }
         let anthropicUsage = root["usage"] as? [String: Any] ?? (root["message"] as? [String: Any])?["usage"] as? [String: Any]
         if let usage = anthropicUsage {
-            events.append(.usage(input: usage["input_tokens"] as? Int ?? 0, output: usage["output_tokens"] as? Int ?? 0))
+            let outputDetails = usage["output_tokens_details"] as? [String: Any] ?? [:]
+            let parsed = NativeUsage(input: usage["input_tokens"] as? Int,
+                output: usage["output_tokens"] as? Int, total: usage["total_tokens"] as? Int,
+                cacheRead: usage["cache_read_input_tokens"] as? Int,
+                cacheWrite: usage["cache_creation_input_tokens"] as? Int,
+                reasoning: outputDetails["thinking_tokens"] as? Int, toolUsePrompt: nil)
+            latestUsage = parsed
+            events.append(.usage(parsed))
+        }
+        if let error = root["error"] as? [String: Any] {
+            let code = error["type"] as? String ?? error["status"] as? String ?? (error["code"] as? Int).map(String.init)
+            throw NativeWireError.streamError(code: code, message: error["message"] as? String ?? "")
         }
         switch wire {
         case .anthropicMessages:

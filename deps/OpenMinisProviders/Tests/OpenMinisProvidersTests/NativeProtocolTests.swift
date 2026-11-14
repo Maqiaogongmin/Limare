@@ -5,6 +5,27 @@ final class NativeProtocolTests: XCTestCase {
     private let messages = Data("[{\"role\":\"user\",\"content\":\"Read the project\"}]".utf8)
     private let tools = Data("[{\"type\":\"function\",\"function\":{\"name\":\"nested_tool\",\"description\":\"fixture\",\"parameters\":{\"type\":\"object\",\"properties\":{\"tasks\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"number\"}}}}},\"required\":[\"tasks\"],\"additionalProperties\":false}}}]".utf8)
 
+    func testNativeUsagePreservesMissingAndExplicitZero() throws {
+        let anthropic = NativeStreamDecoder(protocol: .anthropicMessages)
+        let first = try anthropic.parseLine("data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"test\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":0,\"output_tokens\":1,\"cache_read_input_tokens\":100}}}")
+        let firstUsage = first.compactMap { if case .usage(let usage) = $0 { return usage }; return nil }.first
+        XCTAssertEqual(firstUsage?.input, 0)
+        XCTAssertEqual(firstUsage?.cacheRead, 100)
+        XCTAssertNil(firstUsage?.cacheWrite)
+        let delta = try anthropic.parseLine("data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"output_tokens\":50,\"output_tokens_details\":{\"thinking_tokens\":7}}}")
+        let deltaUsage = delta.compactMap { if case .usage(let usage) = $0 { return usage }; return nil }.first
+        XCTAssertNil(deltaUsage?.input)
+        XCTAssertEqual(deltaUsage?.output, 50)
+        XCTAssertEqual(deltaUsage?.reasoning, 7)
+
+        let gemini = NativeStreamDecoder(protocol: .geminiNative)
+        let events = try gemini.parseLine("data: {\"usageMetadata\":{\"promptTokenCount\":100,\"toolUsePromptTokenCount\":10,\"thoughtsTokenCount\":0}}")
+        let usage = events.compactMap { if case .usage(let usage) = $0 { return usage }; return nil }.first
+        XCTAssertEqual(usage?.toolUsePrompt, 10)
+        XCTAssertEqual(usage?.reasoning, 0)
+        XCTAssertNil(usage?.output)
+    }
+
     func testAnthropicNestedSchemaAndExactXHigh() throws {
         let request = try NativeWireCodec.request(protocol: .anthropicMessages, baseURL: "https://api.anthropic.com/v1",
             appendV1: true, apiKey: "fixture", modelID: "claude-opus-4-8", messagesJSON: messages,
@@ -40,8 +61,9 @@ final class NativeProtocolTests: XCTestCase {
 
     func testGeminiSafetyFinishFails() {
         let decoder = NativeStreamDecoder(protocol: .geminiNative)
-        XCTAssertThrowsError(try decoder.parseLine("data: {\"candidates\":[{\"finishReason\":\"SAFETY\"}]}"))
+        XCTAssertThrowsError(try decoder.parseLine("data: {\"candidates\":[{\"finishReason\":\"SAFETY\"}],\"usageMetadata\":{\"promptTokenCount\":42}}"))
         XCTAssertFalse(decoder.isCompleted)
+        XCTAssertEqual(decoder.latestUsage?.input, 42)
     }
 
     func testGeminiSignatureSurvivesMetadataBoundary() throws {

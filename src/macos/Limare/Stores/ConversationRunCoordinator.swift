@@ -2101,11 +2101,13 @@ final class ConversationRunCoordinator {
             @MainActor [weak self] _, _ in try self?.subagents?.willSendModelRequest(runID: runID)
         }
         let loopResult: AgentLoopResult
+        var recordedOptions = options
+        recordedOptions.usageKind = subagentRuns[runID] != nil ? .subagent : (scheduledRunLookup?(runID) == true ? .scheduled : .chat)
         do { loopResult = try await loopEngine.run(
             provider: provider,
             apiKey: apiKey,
             modelID: modelID,
-            options: options,
+            options: recordedOptions,
             tools: tools,
             toolsProvider: { [weak self] in
                 if isTextOnly {
@@ -4003,7 +4005,7 @@ No tools, shell, browser, or file system access are available for this turn. Res
         modelID: String,
         usage: ProviderUsageTelemetry
     ) {
-        guard let providerID, let inputTokens = usage.inputTokens, inputTokens > 0 else { return }
+        guard let providerID, let inputTokens = usage.contextInputTokens ?? usage.inputTokens, inputTokens > 0 else { return }
         guard let baseline = lastCalibrationBaselines[runID], baseline.rawTotalInputTokens > 0 else { return }
         let factor = calibrationStore.recordUsage(
             conversationID: conversationID,

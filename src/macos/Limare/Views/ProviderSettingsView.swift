@@ -6,6 +6,7 @@ public struct ProviderSettingsView: View {
     @Environment(AppState.self) private var appState
     @State private var state = ProviderSettingsState()
     @State private var confirmRemoveUnlisted = false
+    @State private var compatibilityVersion = 0
 
     public init() {}
 
@@ -28,6 +29,9 @@ public struct ProviderSettingsView: View {
         }
         .onDisappear {
             state.cancelOperation()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .streamUsageCompatibilityChanged).receive(on: RunLoop.main)) { _ in
+            compatibilityVersion += 1
         }
         .confirmationDialog(
             "Delete this Provider and its stored API key?",
@@ -168,6 +172,11 @@ public struct ProviderSettingsView: View {
                         }
 
                         connectionSection
+
+                        if !state.isNew, let saved = appState.providers.providers.first(where: { $0.id == state.draft.id }) {
+                            ProviderQuotaSection(provider: saved)
+                                .id(saved.id)
+                        }
 
                         modelsSection
 
@@ -439,7 +448,9 @@ public struct ProviderSettingsView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 } icon: {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(AppColors.statusSuccess)
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(AppColors.textSecondary)
                 }
                 Spacer(minLength: 0)
                 if method == .authorizationCodePKCE {
@@ -497,6 +508,19 @@ public struct ProviderSettingsView: View {
             FormField("URL Handling") {
                 Toggle("Append /v1 suffix automatically", isOn: $state.draft.appendV1Suffix)
                     .toggleStyle(.charcoalCheckbox)
+            }
+
+            if state.draft.apiFormat == .chatCompletions {
+                let _ = compatibilityVersion
+                FormField("Streaming usage") {
+                    Toggle("Request streaming usage", isOn: Binding(
+                        get: { state.draft.requestStreamUsage ?? true },
+                        set: { state.draft.requestStreamUsage = $0 }
+                    )).toggleStyle(.charcoalCheckbox)
+                }
+                if appState.providers.streamUsageWasRejected(state.draft) {
+                    InlineStatus(kind: .warning, message: "The provider rejected streaming usage. It is temporarily disabled for this session.")
+                }
             }
 
             if state.draft.authenticationMode == .azureAPIKey && state.draft.appendV1Suffix {

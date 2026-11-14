@@ -60,15 +60,14 @@ public struct OpenAIResponsesStreamParser {
 
         let usageObj = (event["response"] as? [String: Any])?["usage"] as? [String: Any] ?? event["usage"] as? [String: Any]
         if let usageObj {
-            let inputTokens = usageObj["input_tokens"] as? Int
-            let outputTokens = usageObj["output_tokens"] as? Int
-            let totalTokens = usageObj["total_tokens"] as? Int
-            if inputTokens != nil || outputTokens != nil || totalTokens != nil {
-                diagnostics.usage = ProviderUsageTelemetry(
-                    inputTokens: inputTokens,
-                    outputTokens: outputTokens,
-                    totalTokens: totalTokens
-                )
+            let inputDetails = usageObj["input_tokens_details"] as? [String: Any] ?? [:]
+            let outputDetails = usageObj["output_tokens_details"] as? [String: Any] ?? [:]
+            let usage = ProviderUsageTelemetry(inputTokens: usageObj["input_tokens"] as? Int,
+                outputTokens: usageObj["output_tokens"] as? Int, totalTokens: usageObj["total_tokens"] as? Int,
+                cacheReadTokens: inputDetails["cached_tokens"] as? Int,
+                reasoningTokens: outputDetails["reasoning_tokens"] as? Int)
+            if usage.hasAnyValue {
+                diagnostics.usage = diagnostics.usage?.merged(with: usage) ?? usage
             }
         }
 

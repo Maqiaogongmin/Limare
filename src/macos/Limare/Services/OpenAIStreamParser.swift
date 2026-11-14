@@ -109,16 +109,62 @@ public struct ProviderUsageTelemetry: Sendable, Equatable, Codable {
     public let inputTokens: Int?
     public let outputTokens: Int?
     public let totalTokens: Int?
+    public let cacheReadTokens: Int?
+    public let cacheWriteTokens: Int?
+    public let reasoningTokens: Int?
+    public let toolUsePromptTokens: Int?
+    /// Protocol-aware input for context calibration; the raw inputTokens remains unchanged.
+    public let contextInputTokens: Int?
 
-    public init(inputTokens: Int? = nil, outputTokens: Int? = nil, totalTokens: Int? = nil) {
+    public init(inputTokens: Int? = nil, outputTokens: Int? = nil, totalTokens: Int? = nil,
+                cacheReadTokens: Int? = nil, cacheWriteTokens: Int? = nil, reasoningTokens: Int? = nil,
+                toolUsePromptTokens: Int? = nil, contextInputTokens: Int? = nil) {
         self.inputTokens = (inputTokens ?? -1) >= 0 ? inputTokens : nil
         self.outputTokens = (outputTokens ?? -1) >= 0 ? outputTokens : nil
         self.totalTokens = (totalTokens ?? -1) >= 0 ? totalTokens : nil
+        self.cacheReadTokens = (cacheReadTokens ?? -1) >= 0 ? cacheReadTokens : nil
+        self.cacheWriteTokens = (cacheWriteTokens ?? -1) >= 0 ? cacheWriteTokens : nil
+        self.reasoningTokens = (reasoningTokens ?? -1) >= 0 ? reasoningTokens : nil
+        self.toolUsePromptTokens = (toolUsePromptTokens ?? -1) >= 0 ? toolUsePromptTokens : nil
+        self.contextInputTokens = (contextInputTokens ?? -1) >= 0 ? contextInputTokens : nil
     }
 
     public var hasAuthoritativeInputTokens: Bool {
-        guard let inputTokens else { return false }
-        return inputTokens > 0
+        (contextInputTokens ?? inputTokens ?? 0) > 0
+    }
+
+    var hasAnyValue: Bool {
+        [inputTokens, outputTokens, totalTokens, cacheReadTokens, cacheWriteTokens,
+         reasoningTokens, toolUsePromptTokens].contains { $0 != nil }
+    }
+
+    public func merged(with other: Self) -> Self {
+        func greatest(_ a: Int?, _ b: Int?) -> Int? {
+            switch (a, b) { case let (a?, b?): max(a, b); case let (a?, nil): a; case let (nil, b?): b; default: nil }
+        }
+        return Self(inputTokens: greatest(inputTokens, other.inputTokens),
+                    outputTokens: greatest(outputTokens, other.outputTokens),
+                    totalTokens: greatest(totalTokens, other.totalTokens),
+                    cacheReadTokens: greatest(cacheReadTokens, other.cacheReadTokens),
+                    cacheWriteTokens: greatest(cacheWriteTokens, other.cacheWriteTokens),
+                    reasoningTokens: greatest(reasoningTokens, other.reasoningTokens),
+                    toolUsePromptTokens: greatest(toolUsePromptTokens, other.toolUsePromptTokens),
+                    contextInputTokens: greatest(contextInputTokens, other.contextInputTokens))
+    }
+
+    func withContextInput(for format: ProviderAPIFormat) -> Self {
+        let context: Int?
+        if let inputTokens {
+            switch format {
+            case .anthropicMessages: context = inputTokens + (cacheReadTokens ?? 0) + (cacheWriteTokens ?? 0)
+            case .geminiNative: context = inputTokens + (toolUsePromptTokens ?? 0)
+            default: context = inputTokens
+            }
+        } else { context = nil }
+        return Self(inputTokens: inputTokens, outputTokens: outputTokens, totalTokens: totalTokens,
+                    cacheReadTokens: cacheReadTokens, cacheWriteTokens: cacheWriteTokens,
+                    reasoningTokens: reasoningTokens, toolUsePromptTokens: toolUsePromptTokens,
+                    contextInputTokens: context)
     }
 }
 
@@ -221,26 +267,28 @@ public struct OpenAIStreamParser: Sendable {
             return []
         }
 
-        if let error = Self.providerStreamError(from: json) {
-            throw error
-        }
-
         var events: [AgentStreamEvent] = []
         var eventRecognized = false
 
         // 0. Usage telemetry parsing (opportunistic, tolerant of missing/null/partial)
         if let usageDict = json["usage"] as? [String: Any] {
-            let promptTokens = usageDict["prompt_tokens"] as? Int
-            let completionTokens = usageDict["completion_tokens"] as? Int
-            let totalTokens = usageDict["total_tokens"] as? Int
-            if promptTokens != nil || completionTokens != nil || totalTokens != nil {
-                diagnostics.usage = ProviderUsageTelemetry(
-                    inputTokens: promptTokens,
-                    outputTokens: completionTokens,
-                    totalTokens: totalTokens
-                )
+            let prompt = usageDict["prompt_tokens_details"] as? [String: Any] ?? [:]
+            let completion = usageDict["completion_tokens_details"] as? [String: Any] ?? [:]
+            let cacheRead = [prompt["cached_tokens"] as? Int, usageDict["prompt_cache_hit_tokens"] as? Int,
+                             usageDict["cached_tokens"] as? Int].compactMap { $0 }.max()
+            let usage = ProviderUsageTelemetry(inputTokens: usageDict["prompt_tokens"] as? Int,
+                outputTokens: usageDict["completion_tokens"] as? Int, totalTokens: usageDict["total_tokens"] as? Int,
+                cacheReadTokens: cacheRead,
+                cacheWriteTokens: [prompt["cache_write_tokens"] as? Int, prompt["cache_creation_input_tokens"] as? Int].compactMap { $0 }.max(),
+                reasoningTokens: completion["reasoning_tokens"] as? Int)
+            if usage.hasAnyValue {
+                diagnostics.usage = diagnostics.usage?.merged(with: usage) ?? usage
                 eventRecognized = true
             }
+        }
+
+        if let error = Self.providerStreamError(from: json) {
+            throw error
         }
 
         // 1. Structured / interleaved reasoning fields

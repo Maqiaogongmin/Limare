@@ -17,6 +17,12 @@ open class MarkdownTextView: PlatformView {
         didSet { syncContextViewHandlers() }
     }
 
+    /// Highlights absolute or home-relative paths on their own line in an
+    /// unlabeled code block. The normal link handler receives their file URLs.
+    open var recognizesStandaloneFilePaths = false {
+        didSet { if oldValue != recognizesStandaloneFilePaths { syncContextViewHandlers() } }
+    }
+
     /// Adds the host's own buttons to code blocks; see `CodeBlockActionProvider`.
     open weak var codeBlockActionProvider: CodeBlockActionProvider? {
         didSet { syncContextViewHandlers() }
@@ -144,7 +150,16 @@ open class MarkdownTextView: PlatformView {
 
     open func boundingSize(for width: CGFloat) -> CGSize {
         textLabelView.preferredMaxLayoutWidth = width
-        return textLabelView.intrinsicContentSize
+        var size = textLabelView.intrinsicContentSize
+        if !contextViews.isEmpty, textLabelView.attributedText.length > 0 {
+            let text = textLabelView.attributedText
+            text.enumerateAttribute(.litextAttachment, in: NSRange(location: 0, length: text.length), options: []) { value, range, _ in
+                guard let attachment = value as? ContextViewAttachment else { return }
+                let headIndent = (text.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle)?.headIndent ?? 0
+                size.width = max(size.width, min(width, headIndent + attachment.appearance.size.width))
+            }
+        }
+        return size
     }
 
     /// Decorates one run of rendered body text on its way into the document

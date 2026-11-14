@@ -663,7 +663,8 @@ final class ProviderQuickTestService: ObservableObject {
         let options = ChatInferenceOptions(
             thinkingLevel: .off,
             maxOutputTokens: 128,
-            model: model
+            model: model,
+            usageKind: .quickTest
         )
 
         let sleeper = self.sleeper

@@ -38,9 +38,17 @@ struct ConversationRow: View {
 
             Text(conversation.displayTitle)
                 .font(AppTypography.interfaceSubheadline)
+                .fontWeight(conversation.isUnread ? .semibold : .regular)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .foregroundStyle(isSelected ? Color.primary : Color.primary.opacity(0.88))
+
+            if conversation.isUnread {
+                Circle()
+                    .fill(Color.accentColor)
+                    .frame(width: 7, height: 7)
+                    .accessibilityLabel("Unread")
+            }
 
             if appState.conversationsAwaitingApproval.contains(conversation.id) {
                 Image(systemName: "hand.raised.fill")
@@ -140,6 +148,16 @@ struct ConversationRow: View {
         }
 
         Divider()
+
+        Button {
+            appState.conversations.setConversationUnread(id: conversation.id, isUnread: !conversation.isUnread)
+        } label: {
+            if conversation.isUnread {
+                Label("Mark as Read", systemImage: "envelope.open")
+            } else {
+                Label("Mark as Unread", systemImage: "envelope.badge")
+            }
+        }
 
         Button {
             renameText = conversation.displayTitle

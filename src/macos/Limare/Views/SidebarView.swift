@@ -253,6 +253,7 @@ struct SettingsSidebarView: View {
             Section("Models") {
                 row("Providers", systemImage: "server.rack", screen: .settingsProviders)
                 row("Model Groups", systemImage: "square.stack.3d.up", screen: .settingsModelGroups)
+                row("Usage", systemImage: "chart.bar", screen: .settingsUsage)
             }
 
             Section("Extensions") {

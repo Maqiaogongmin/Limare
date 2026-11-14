@@ -79,8 +79,9 @@ enum AppLayout {
     static let sidebarIdealWidth: CGFloat = 224
     static let sidebarMaximumWidth: CGFloat = 280
     static let transcriptMaximumWidth: CGFloat = 760
-    /// A user's message wraps past this width; a shorter one hugs its text.
-    static let userMessageMaximumWidth: CGFloat = 460
+    /// A user's message wraps past this width (transcript width minus the leading gutter); a
+    /// shorter one hugs its text.
+    static let userMessageMaximumWidth: CGFloat = 660
     static let settingsListMinimumWidth: CGFloat = 210
     static let settingsListIdealWidth: CGFloat = 230
     static let settingsListMaximumWidth: CGFloat = 280

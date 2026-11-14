@@ -10,6 +10,8 @@ struct SettingsDetailView: View {
                 ProviderSettingsView()
             case .settingsModelGroups:
                 ModelGroupsView()
+            case .settingsUsage:
+                UsageSettingsView()
             case .settingsSkills:
                 SkillsSettingsView()
             case .settingsSoul:

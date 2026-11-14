@@ -7,6 +7,8 @@ import ImageIO
 /// Source origin of a previewed file or attachment.
 public enum FilePreviewSource: Equatable, Sendable {
     case workspace(URL)
+    /// A local file explicitly opened by the user from a message.
+    case external(URL)
     case attachment(id: UUID, filename: String, url: URL)
     /// A file a tool registered or produced for the conversation (see `ArtifactStore`).
     case artifact(id: UUID, filename: String, url: URL)
@@ -14,7 +16,7 @@ public enum FilePreviewSource: Equatable, Sendable {
     /// What the preview shows, for finding a tab that already shows it.
     var identity: String {
         switch self {
-        case .workspace(let url): return url.path
+        case .workspace(let url), .external(let url): return url.path
         case .attachment(let id, _, _), .artifact(let id, _, _): return id.uuidString
         }
     }
@@ -22,7 +24,7 @@ public enum FilePreviewSource: Equatable, Sendable {
     /// The name the preview goes by.
     var displayName: String {
         switch self {
-        case .workspace(let url): return url.lastPathComponent
+        case .workspace(let url), .external(let url): return url.lastPathComponent
         case .attachment(_, let filename, _), .artifact(_, let filename, _): return filename
         }
     }
@@ -154,6 +156,16 @@ public final class FilesSurfaceStore {
         if let task = activeLoadTask {
             _ = await task.value
         }
+    }
+
+    /// Preview only the exact file the user chose; the workspace tree remains scoped to its root.
+    func selectExternalFile(url: URL) {
+        let file = url.standardizedFileURL.resolvingSymlinksInPath()
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: file.path, isDirectory: &isDirectory), !isDirectory.boolValue else { return }
+        selectedFileURL = nil
+        previewSource = .external(file)
+        loadPreview(for: file)
     }
 
     /// Selects and previews a chat attachment, validating that it resides inside the AttachmentStore storage boundary.
@@ -407,6 +419,8 @@ public final class FilesSurfaceStore {
             loadPreview(for: url, displayName: filename)
         } else if case .artifact(_, let filename, let url) = previewSource {
             loadPreview(for: url, displayName: filename)
+        } else if case .external(let url) = previewSource {
+            loadPreview(for: url)
         }
     }
 

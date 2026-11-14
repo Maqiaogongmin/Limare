@@ -464,10 +464,26 @@ final class ConversationStore {
     }
 
     func selectConversation(id: UUID) {
+        guard conversations.contains(where: { $0.id == id }) else { return }
+        setConversationUnread(id: id, isUnread: false)
         guard let conversation = conversations.first(where: { $0.id == id }) else { return }
         activeConversationID = id
         onSelectConversation?(conversation)
         discardUnshownPlaceholders(keeping: id)
+    }
+
+    /// Read markers do not change `updatedAt`: toggling one must not reorder the sidebar.
+    func setConversationUnread(id: UUID, isUnread: Bool) {
+        guard let index = conversations.firstIndex(where: { $0.id == id }),
+              conversations[index].isUnread != isUnread else { return }
+        var updated = conversations[index]
+        updated.isUnread = isUnread
+        do {
+            try persistence.saveConversation(updated)
+            conversations[index] = updated
+        } catch {
+            logs.error("Conversation", "Failed to save read status for conversation '\(id)': \(error.localizedDescription)")
+        }
     }
 
     /// An untouched "New Conversation" lives only while a window shows it: leaving it, for an

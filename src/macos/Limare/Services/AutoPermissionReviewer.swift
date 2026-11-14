@@ -117,7 +117,8 @@ final class AutoPermissionReviewer: PermissionReviewing {
                         apiKey: apiKey,
                         modelID: modelID,
                         messages: messages,
-                        tools: []
+                        tools: [],
+                        options: ChatInferenceOptions(usageKind: .permissionReview)
                     )
                     for try await event in stream {
                         if case .textDelta(let delta) = event {

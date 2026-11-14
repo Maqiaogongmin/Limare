@@ -101,7 +101,8 @@ enum CodeViewConfiguration {
         let codeHeight = lineHeight * CGFloat(lineCount)
             + insets.codeTop + insets.codeBottom
             + codeLineSpacing * CGFloat(max(lineCount - 1, 0))
-        return ceil(insets.bar + codeHeight)
+        let height = ceil(insets.bar + codeHeight)
+        return drawsRule(theme) ? max(height, hoverBarTop + hoverBarHeight) : height
     }
 }
 
@@ -220,10 +221,13 @@ extension CodeView {
         let textContentSize = textView.intrinsicContentSize
         let leading = insets.gutterLeading + lineNumberWidth
 
+        // Keep the code out from under the floating buttons, including when a long
+        // single line is horizontally scrolled.
+        let controlsWidth = CodeViewConfiguration.drawsRule(theme) ? min(barView.frame.width, max(0, bounds.width - leading)) : 0
         scrollView.frame = CGRect(
             x: leading,
             y: insets.bar,
-            width: bounds.width - leading,
+            width: max(0, bounds.width - leading - controlsWidth),
             height: bounds.height - insets.bar,
         )
 

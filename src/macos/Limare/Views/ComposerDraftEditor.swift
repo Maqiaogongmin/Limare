@@ -17,6 +17,7 @@ public struct ComposerDraftEditor: View {
     var onMenuKey: ((ComposerMenuKey) -> Bool)? = nil
     /// A change makes the editor first responder (the Focus Composer command).
     var focusToken: Int = 0
+    var focusAtEnd: Bool = false
 
     public init(
         text: Binding<String>,
@@ -26,11 +27,13 @@ public struct ComposerDraftEditor: View {
         onContentHeightChange: ((CGFloat) -> Void)? = nil,
         onFilesDropped: (([URL]) -> Void)? = nil,
         onMenuKey: ((ComposerMenuKey) -> Bool)? = nil,
-        focusToken: Int = 0
+        focusToken: Int = 0,
+        focusAtEnd: Bool = false
     ) {
         self._text = text
         self.onMenuKey = onMenuKey
         self.focusToken = focusToken
+        self.focusAtEnd = focusAtEnd
         self.placeholder = placeholder
         self.onFilesDropped = onFilesDropped
         self.onSend = onSend
@@ -50,7 +53,8 @@ public struct ComposerDraftEditor: View {
             },
             onContentHeightChange: onContentHeightChange,
             onMenuKey: onMenuKey,
-            focusToken: focusToken
+            focusToken: focusToken,
+            focusAtEnd: focusAtEnd
         )
     }
 }
@@ -68,6 +72,7 @@ struct NativeDraftTextViewRepresentable: NSViewRepresentable {
     let onContentHeightChange: ((CGFloat) -> Void)?
     let onMenuKey: ((ComposerMenuKey) -> Bool)?
     let focusToken: Int
+    var focusAtEnd: Bool = false
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -144,7 +149,16 @@ struct NativeDraftTextViewRepresentable: NSViewRepresentable {
         if context.coordinator.lastFocusToken != focusToken {
             context.coordinator.lastFocusToken = focusToken
             // A composer that just appeared is not in its window until this update ends.
-            DispatchQueue.main.async { textView.window?.makeFirstResponder(textView) }
+            let moveToEnd = focusAtEnd
+            DispatchQueue.main.async {
+                context.coordinator.synchronizeText()
+                textView.window?.makeFirstResponder(textView)
+                if moveToEnd {
+                    let end = (textView.string as NSString).length
+                    textView.setSelectedRange(NSRange(location: end, length: 0))
+                    textView.scrollRangeToVisible(textView.selectedRange())
+                }
+            }
         }
 
         // The height is reported through a callback that sets SwiftUI state, which must not
@@ -212,7 +226,7 @@ struct NativeDraftTextViewRepresentable: NSViewRepresentable {
             }
         }
 
-        private func synchronizeText() {
+        func synchronizeText() {
             guard let textView, !textView.hasMarkedText() else { return }
             // Read the latest binding, rather than the value from the update that queued this
             // work: the user may have typed or switched conversations again in the meantime.

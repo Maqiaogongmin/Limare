@@ -79,9 +79,11 @@ extension AppState {
         case let .web(webURL):
             openLinkInBrowserTab(webURL)
         case let .file(fileURL):
-            // The Files surface previews only the workspace; other files go to the system.
             let inWorkspace = workspaceURL.map { WorkspacePathResolver.isInsideWorkspace(fileURL, workspaceURL: $0) } ?? false
-            FileOpening.open(fileURL, canPreview: inWorkspace) { previewWorkspaceFile(fileURL) }
+            FileOpening.open(fileURL) {
+                if inWorkspace { previewWorkspaceFile(fileURL) }
+                else { focusedWindow.previewExternalFile(fileURL) }
+            }
         case let .system(systemURL):
             NSWorkspace.shared.open(systemURL)
         case nil:

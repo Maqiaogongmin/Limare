@@ -82,9 +82,42 @@ enum ProviderHTTPRetrySignal {
     }
 }
 
+final class StreamUsageCompatibility: @unchecked Sendable {
+    private let lock = NSLock()
+    private var rejected: [UUID: String] = [:]
+    private var generations: [UUID: Int] = [:]
+    private func signature(_ provider: ProviderConfiguration) -> String {
+        "\(provider.baseURL)|\(provider.apiFormat.rawValue)|\(provider.requestStreamUsage ?? true)"
+    }
+    func isRejected(_ provider: ProviderConfiguration) -> Bool { lock.withLock { rejected[provider.id] == signature(provider) } }
+    func generation(_ id: UUID) -> Int { lock.withLock { generations[id, default: 0] } }
+    func markRejected(_ provider: ProviderConfiguration, generation: Int) {
+        let changed = lock.withLock {
+            guard generations[provider.id, default: 0] == generation else { return false }
+            rejected[provider.id] = signature(provider)
+            return true
+        }
+        if changed { NotificationCenter.default.post(name: .streamUsageCompatibilityChanged, object: nil) }
+    }
+    func invalidate(_ id: UUID) {
+        let changed = lock.withLock {
+            let removed = rejected.removeValue(forKey: id) != nil
+            generations[id, default: 0] += 1
+            return removed
+        }
+        if changed { NotificationCenter.default.post(name: .streamUsageCompatibilityChanged, object: nil) }
+    }
+}
+
+extension Notification.Name {
+    static let streamUsageCompatibilityChanged = Notification.Name("LimareStreamUsageCompatibilityChanged")
+}
+
 struct OpenAICompatibleClient: ProviderClient {
     private let session: URLSession
     private var credentialResolver: (@Sendable (ProviderConfiguration) async throws -> String)?
+    private var usageRecorder: UsageRecorder?
+    private let streamUsageCompatibility: StreamUsageCompatibility
 
     private static let productionSession: URLSession = {
         let configuration = URLSessionConfiguration.default
@@ -97,7 +130,18 @@ struct OpenAICompatibleClient: ProviderClient {
     init(session: URLSession = OpenAICompatibleClient.productionSession) {
         self.session = session
         self.credentialResolver = nil
+        self.usageRecorder = nil
+        self.streamUsageCompatibility = StreamUsageCompatibility()
     }
+
+    func recordingUsage(_ recorder: UsageRecorder?) -> Self {
+        var copy = self
+        copy.usageRecorder = recorder
+        return copy
+    }
+
+    func streamUsageWasRejected(_ provider: ProviderConfiguration) -> Bool { streamUsageCompatibility.isRejected(provider) }
+    func invalidateStreamUsageCompatibility(_ id: UUID) { streamUsageCompatibility.invalidate(id) }
 
     func resolvingCredentials(_ resolver: @escaping @Sendable (ProviderConfiguration) async throws -> String) -> Self {
         var copy = self
@@ -228,10 +272,36 @@ struct OpenAICompatibleClient: ProviderClient {
             let task = Task {
                 var options = options
                 options.model = options.model ?? provider.models.first(where: { $0.id == modelID })
+                let modelName = provider.models.first(where: { $0.id == modelID })?.displayName
+                    ?? (options.model?.id == modelID ? options.model?.displayName : nil) ?? modelID
+                var record = UsageRequestRecord(providerID: provider.id, providerName: provider.name,
+                    modelID: modelID, modelName: modelName, format: provider.apiFormat, kind: options.usageKind)
+                var omitUsageOption = streamUsageCompatibility.isRejected(provider)
+                let compatibilityGeneration = streamUsageCompatibility.generation(provider.id)
+                var fallbackPending = false
+                var fallbackAttempted = false
+                func finishRecord(_ outcome: UsageOutcome) async {
+                    guard record.attemptCount > 0, let usageRecorder else { return }
+                    record.endedAt = Date(); record.outcome = outcome
+                    await usageRecorder.append(record)
+                }
                 for attempt in 1...Self.maximumRequestAttempts {
                     let metrics = TransportMetricsRecorder(restrictOAuthResource: provider.authenticationSelection.credentialKind == .oauthAccessToken)
                     var semanticOutput = false
                     var retryResponse: HTTPURLResponse?
+                    var usageOptionRejected = false
+                    var dispatched = false
+                    let capture = UsageAttemptCapture()
+                    let callback: @Sendable (ProviderStreamDiagnostics) -> Void = { diagnostics in
+                        capture.update(diagnostics)
+                        onDiagnostics?(diagnostics)
+                    }
+                    func finishAttempt(finished: Bool, excluded: Bool = false) {
+                        guard dispatched else { return }
+                        let diagnostics = capture.diagnostics
+                        record.addAttempt(diagnostics?.usage, finished: finished && diagnostics?.completedReceived == true, excluded: excluded)
+                        dispatched = false
+                    }
                     do {
                         try Task.checkCancellation()
                         try ProviderProductPolicy.validate(provider)
@@ -278,12 +348,13 @@ struct OpenAICompatibleClient: ProviderClient {
                                 continuationJSON: continuationData, kimiCodeProfile: provider.providerIdentity == .kimiCode)
                             ProviderRequestConfigurator.configureHeaders(request: &request, provider: provider, apiKey: apiKey, isChat: true)
                             await onRequestToolNames?(tools.map(\.function.name))
-                            let reportDiagnostics = Self.diagnosticsReporter(onDiagnostics, provider: provider, modelID: modelID, options: options, request: request)
+                            let reportDiagnostics = Self.diagnosticsReporter(callback, provider: provider, modelID: modelID, options: options, request: request)
                             reportDiagnostics?(ProviderStreamDiagnostics())
                             let scope = provider.id.uuidString + ":" + (request.url?.host ?? "")
                             try await ProviderRequestCooldown.shared.wait(scope: scope)
                             try Task.checkCancellation()
                             await onAttemptStarted?(attempt)
+                            dispatched = true; record.attemptCount += 1
                             let (bytes, response) = try await session.bytes(for: request, delegate: metrics)
                             guard let http = response as? HTTPURLResponse else { throw ProviderClientError.invalidResponse }
                             retryResponse = http
@@ -297,8 +368,20 @@ struct OpenAICompatibleClient: ProviderClient {
                                 try Task.checkCancellation()
                                 let decoded: [NativeDecodedEvent]
                                 do { decoded = try decoder.parseLine(line) }
-                                catch NativeWireError.streamError(let code, let message) {
-                                    throw ProviderClientError.streamError(code: code, message: message)
+                                catch {
+                                    if let raw = decoder.latestUsage {
+                                        let usage = ProviderUsageTelemetry(inputTokens: raw.input, outputTokens: raw.output,
+                                            totalTokens: raw.total, cacheReadTokens: raw.cacheRead, cacheWriteTokens: raw.cacheWrite,
+                                            reasoningTokens: raw.reasoning, toolUsePromptTokens: raw.toolUsePrompt)
+                                        if usage.hasAnyValue {
+                                            nativeDiagnostics.usage = nativeDiagnostics.usage?.merged(with: usage) ?? usage
+                                            reportDiagnostics?(nativeDiagnostics)
+                                        }
+                                    }
+                                    if case NativeWireError.streamError(let code, let message) = error {
+                                        throw ProviderClientError.streamError(code: code, message: message)
+                                    }
+                                    throw error
                                 }
                                 for event in decoded {
                                     let projectedEvent: AgentStreamEvent?
@@ -320,8 +403,11 @@ struct OpenAICompatibleClient: ProviderClient {
                                         nativeDiagnostics.completedReceived = true
                                         nativeDiagnostics.finishReason = reason
                                         projectedEvent = .completed(finishReason: reason)
-                                    case .usage(let input, let output):
-                                        nativeDiagnostics.usage = ProviderUsageTelemetry(inputTokens: input > 0 ? input : nativeDiagnostics.usage?.inputTokens, outputTokens: output)
+                                    case .usage(let raw):
+                                        let usage = ProviderUsageTelemetry(inputTokens: raw.input, outputTokens: raw.output,
+                                            totalTokens: raw.total, cacheReadTokens: raw.cacheRead, cacheWriteTokens: raw.cacheWrite,
+                                            reasoningTokens: raw.reasoning, toolUsePromptTokens: raw.toolUsePrompt)
+                                        if usage.hasAnyValue { nativeDiagnostics.usage = nativeDiagnostics.usage?.merged(with: usage) ?? usage }
                                         projectedEvent = nil
                                     }
                                     reportDiagnostics?(nativeDiagnostics)
@@ -332,14 +418,18 @@ struct OpenAICompatibleClient: ProviderClient {
                                 }
                             }
                             try decoder.finish()
+                            finishAttempt(finished: true)
+                            await finishRecord(.completed)
                             continuation.finish()
                             return
                             #else
                             throw ProviderConnectionError.unsupportedProtocol
                             #endif
                         case .chatCompletions:
+                            var wireProvider = provider
+                            if omitUsageOption { wireProvider.requestStreamUsage = false }
                             let request = try OpenAIChatRequestBuilder.buildURLRequest(
-                                provider: provider,
+                                provider: wireProvider,
                                 apiKey: apiKey,
                                 modelID: modelID,
                                 messages: messages,
@@ -358,12 +448,13 @@ struct OpenAICompatibleClient: ProviderClient {
                                 }
                                 await onRequestToolNames?(names)
                             }
-                            let reportDiagnostics = Self.diagnosticsReporter(onDiagnostics, provider: provider, modelID: modelID, options: options, request: request)
+                            let reportDiagnostics = Self.diagnosticsReporter(callback, provider: provider, modelID: modelID, options: options, request: request)
                             reportDiagnostics?(ProviderStreamDiagnostics())
                             let scope = provider.id.uuidString + ":" + (request.url?.host ?? "")
                             try await ProviderRequestCooldown.shared.wait(scope: scope)
                             try Task.checkCancellation()
                             await onAttemptStarted?(attempt)
+                            dispatched = true; record.attemptCount += 1
                             let (bytes, response) = try await session.bytes(for: request, delegate: metrics)
                             guard let http = response as? HTTPURLResponse else {
                                 throw ProviderClientError.invalidResponse
@@ -371,10 +462,20 @@ struct OpenAICompatibleClient: ProviderClient {
                             retryResponse = http
                             guard (200..<300).contains(http.statusCode) else {
                                 let body = try await readLimitedBody(bytes: bytes)
+                                var message = Self.httpErrorMessage(from: body, status: http.statusCode)
+                                usageOptionRejected = Self.rejectsStreamUsage(status: http.statusCode, message: String(decoding: body, as: UTF8.self))
+                                if [400, 422].contains(http.statusCode), !omitUsageOption, (provider.requestStreamUsage ?? true),
+                                   !usageOptionRejected {
+                                    message += " " + String(localized: "You can try turning off Request streaming usage in advanced provider settings.")
+                                }
                                 throw ProviderClientError.http(
                                     status: http.statusCode,
-                                    message: Self.httpErrorMessage(from: body, status: http.statusCode)
+                                    message: message
                                 )
+                            }
+                            if fallbackPending {
+                                streamUsageCompatibility.markRejected(provider, generation: compatibilityGeneration)
+                                fallbackPending = false
                             }
 
                             var parser = OpenAIStreamParser(model: options.model)
@@ -401,6 +502,8 @@ struct OpenAICompatibleClient: ProviderClient {
                             }
 
                             guard parser.hasEmittedAnyOutput || parser.diagnostics.streamOpened || parser.diagnostics.completedReceived else { throw ProviderClientError.emptyStream }
+                            finishAttempt(finished: true)
+                            await finishRecord(.completed)
                             continuation.finish()
                             return
 
@@ -425,12 +528,13 @@ struct OpenAICompatibleClient: ProviderClient {
                                 }
                                 await onRequestToolNames?(names)
                             }
-                            let reportDiagnostics = Self.diagnosticsReporter(onDiagnostics, provider: provider, modelID: modelID, options: options, request: request)
+                            let reportDiagnostics = Self.diagnosticsReporter(callback, provider: provider, modelID: modelID, options: options, request: request)
                             reportDiagnostics?(ProviderStreamDiagnostics())
                             let scope = provider.id.uuidString + ":" + (request.url?.host ?? "")
                             try await ProviderRequestCooldown.shared.wait(scope: scope)
                             try Task.checkCancellation()
                             await onAttemptStarted?(attempt)
+                            dispatched = true; record.attemptCount += 1
                             let (bytes, response) = try await session.bytes(for: request, delegate: metrics)
                             guard let http = response as? HTTPURLResponse else {
                                 throw ProviderClientError.invalidResponse
@@ -468,10 +572,23 @@ struct OpenAICompatibleClient: ProviderClient {
                             }
 
                             guard parser.hasEmittedAnyOutput || parser.diagnostics.streamOpened || parser.diagnostics.completedReceived else { throw ProviderClientError.emptyStream }
+                            finishAttempt(finished: true)
+                            await finishRecord(.completed)
                             continuation.finish()
                             return
                         }
                     } catch {
+                        let rejectedUsage: Bool
+                        if provider.apiFormat == .chatCompletions, !omitUsageOption, (provider.requestStreamUsage ?? true),
+                           case .http(let status, let message) = error as? ProviderClientError {
+                            rejectedUsage = usageOptionRejected || Self.rejectsStreamUsage(status: status, message: message)
+                        } else { rejectedUsage = false }
+                        finishAttempt(finished: false, excluded: rejectedUsage)
+                        if rejectedUsage, !fallbackAttempted, !Task.isCancelled, attempt < Self.maximumRequestAttempts {
+                            fallbackAttempted = true; fallbackPending = true; omitUsageOption = true
+                            await onRetry?(attempt + 1, "stream_usage_unsupported")
+                            continue
+                        }
                         if let urlError = error as? URLError, urlError.code != .cancelled {
                             await onTransportFailure?(TransportMetricsRecorder.summary(urlError, metrics.value))
                         }
@@ -479,12 +596,15 @@ struct OpenAICompatibleClient: ProviderClient {
                               attempt < Self.maximumRequestAttempts, !semanticOutput,
                               RateLimitFallback.current?.available != true,
                               Self.isTransient(error, response: retryResponse) else {
+                            let cancelled = Task.isCancelled || error is CancellationError || (error as? URLError)?.code == .cancelled
+                            await finishRecord(cancelled ? .cancelled : .failed)
                             continuation.finish(throwing: error)
                             return
                         }
                         let delay: Double
                         if let http = retryResponse, http.value(forHTTPHeaderField: "Retry-After") != nil || http.statusCode == 429 {
                             guard let value = Self.rateLimitDelay(http: http, attempt: attempt - 1) else {
+                                await finishRecord(.failed)
                                 continuation.finish(throwing: error)
                                 return
                             }
@@ -505,6 +625,7 @@ struct OpenAICompatibleClient: ProviderClient {
                                 try await Task.sleep(for: .seconds(delay))
                             }
                         } catch {
+                            await finishRecord(.cancelled)
                             continuation.finish(throwing: error)
                             return
                         }
@@ -568,6 +689,37 @@ struct OpenAICompatibleClient: ProviderClient {
     /// of four retries, backing off 0.5 s, 1 s, 2 s, 4 s.
     static let maximumRequestAttempts = 5
 
+    static func rejectsStreamUsage(status: Int, message: String) -> Bool {
+        guard status == 400 || status == 422 else { return false }
+        func mentionsParameter(_ value: String) -> Bool {
+            let lower = value.lowercased()
+            return lower.contains("stream_options") || lower.contains("include_usage")
+        }
+        func mentionsRejection(_ value: String) -> Bool {
+            let lower = value.lowercased()
+            return ["unsupported", "not supported", "does not support", "unknown", "unrecognized", "unrecognised",
+                    "not allowed", "not permitted", "invalid", "unexpected", "extra inputs", "禁止", "不支持", "未知"].contains { lower.contains($0) }
+        }
+        if let data = message.data(using: .utf8),
+           let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let error = root["error"] as? [String: Any] {
+                let detail = error["message"] as? String ?? ""
+                let param = error["param"] as? String ?? ""
+                if (mentionsParameter(detail) || mentionsParameter(param)) && mentionsRejection(detail) { return true }
+            }
+            if let details = root["detail"] as? [[String: Any]] {
+                for detail in details {
+                    let location = (detail["loc"] as? [String] ?? []).joined(separator: ".")
+                    let explanation = detail["msg"] as? String ?? ""
+                    if (mentionsParameter(location) || mentionsParameter(explanation)) && mentionsRejection(explanation) { return true }
+                }
+            }
+            let topLevel = root["message"] as? String ?? ""
+            return mentionsParameter(topLevel) && mentionsRejection(topLevel)
+        }
+        return mentionsParameter(message) && mentionsRejection(message)
+    }
+
     private static let permanentURLErrors: Set<URLError.Code> = [
         .cancelled, .badURL, .unsupportedURL, .userCancelledAuthentication, .userAuthenticationRequired,
         .serverCertificateUntrusted, .serverCertificateHasBadDate, .serverCertificateHasUnknownRoot,
@@ -630,6 +782,7 @@ struct OpenAICompatibleClient: ProviderClient {
         return { diagnostics in
             var diagnostics = diagnostics
             diagnostics.thinkingMetadata = immutableMetadata
+            diagnostics.usage = diagnostics.usage?.withContextInput(for: provider.apiFormat)
             callback(diagnostics)
         }
     }
@@ -749,16 +902,29 @@ final class TransportMetricsRecorder: NSObject, URLSessionTaskDelegate, @uncheck
     private let lock = NSLock()
     private var metrics: URLSessionTaskMetrics?
     private let restrictOAuthResource: Bool
+    private let restrictToOriginalOrigin: Bool
 
-    init(restrictOAuthResource: Bool = false) {
+    init(restrictOAuthResource: Bool = false, restrictToOriginalOrigin: Bool = false) {
         self.restrictOAuthResource = restrictOAuthResource
+        self.restrictToOriginalOrigin = restrictToOriginalOrigin
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
         if restrictOAuthResource && request.url.map(ProviderProductPolicy.allowsOAuthResource) != true {
             completionHandler(nil)
+        } else if restrictToOriginalOrigin && !Self.sameOrigin(task.originalRequest?.url, request.url) {
+            completionHandler(nil)
         } else { completionHandler(request) }
+    }
+
+    static func sameOrigin(_ first: URL?, _ second: URL?) -> Bool {
+        guard let first, let second, let a = URLComponents(url: first, resolvingAgainstBaseURL: false),
+              let b = URLComponents(url: second, resolvingAgainstBaseURL: false),
+              let scheme = a.scheme?.lowercased(), let host = a.host?.lowercased(),
+              scheme == b.scheme?.lowercased(), host == b.host?.lowercased() else { return false }
+        func port(_ c: URLComponents) -> Int? { c.port ?? (c.scheme?.lowercased() == "https" ? 443 : c.scheme?.lowercased() == "http" ? 80 : nil) }
+        return port(a) == port(b)
     }
 
     var value: URLSessionTaskMetrics? { lock.withLock { metrics } }
