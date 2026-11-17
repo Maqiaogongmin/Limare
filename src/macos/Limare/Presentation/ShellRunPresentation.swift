@@ -5,6 +5,12 @@ enum ShellRunPresentation {
         call.name == "shell_execute" && MCPToolNamespace.parse(exposedName: call.name) == nil
     }
 
+    static func finishedNonzeroExitCode(_ call: ToolCallRecord) -> Int32? {
+        guard isShell(call), call.state == .failed, let terminal = call.mechanicalTerminalFact?.shellTerminal,
+              !terminal.timedOut, !terminal.cancelled, let code = terminal.exitCode, code != 0 else { return nil }
+        return code
+    }
+
     static func duration(_ seconds: Int) -> String {
         let value = max(0, seconds)
         if value < 60 { return "\(value)s" }

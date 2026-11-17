@@ -355,7 +355,7 @@ extension ToolCallRecord {
                 state = .completed
             }
             approvalState = outcome.approvalState
-            if output.isEmpty {
+            if output.isEmpty && outcome.mechanicalTerminalFact?.shellTerminal == nil {
                 output = outcome.content
             }
             if outcome.isError {
@@ -381,7 +381,7 @@ extension ToolCallRecord {
             }
 
             // Populate empty output if it wasn't populated by an earlier update
-            if output.isEmpty {
+            if output.isEmpty && outcome.mechanicalTerminalFact?.shellTerminal == nil {
                 output = outcome.content
             }
 

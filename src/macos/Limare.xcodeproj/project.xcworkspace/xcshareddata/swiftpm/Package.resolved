@@ -1,5 +1,5 @@
 {
-  "originHash" : "65d5ba7a3478caa430c56ad6b98b7da674f85c21da372a234b39814c15f1f022",
+  "originHash" : "347173bd9a38e778778ca20579e3d2503ae3a8513c17b2477db3d479fad22543",
   "pins" : [
     {
       "identity" : "appauth-ios",
@@ -53,6 +53,15 @@
       "state" : {
         "revision" : "86b5096ac59ab46e66bd1f6377c604bc1dab0bc2",
         "version" : "1.5.1"
+      }
+    },
+    {
+      "identity" : "json-render",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/vercel-labs/json-render",
+      "state" : {
+        "revision" : "5e99a387536a1528d8113eb929ab4b7e611701ae",
+        "version" : "0.23.1"
       }
     },
     {

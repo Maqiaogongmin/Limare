@@ -1,14 +1,23 @@
-import { h, clear } from '../dom.js';
+import { h, clear, icon } from '../dom.js';
+import { openConversationActions } from './conversation-actions.js';
 import { renderMessage } from './message.js';
 import { groupTranscript, currentFold, renderEntry, entryIDs, finishedCompactionLine, currentCompactionLine } from './transcript.js';
 import { loadMarkdown, isMarkdownReady } from '../markdown.js';
 import { runBadge } from './list.js';
-import { Composer } from './composer.js';
 import { t } from '../i18n.js';
 
 function isActive(runState) {
   const status = runState && runState.run && runState.run.status;
   return status === 'running' || status === 'paused' || status === 'queued';
+}
+
+// Match ComposerQuote on the Mac, preserving the existing draft and internal blank lines.
+export function appendQuote(draft, selection) {
+  const text = selection.replace(/^[\r\n]+|[\r\n]+$/g, '');
+  if (!text.trim()) return draft;
+  const quote = text.replace(/\r\n?/g, '\n').split('\n').map((line) => line ? `> ${line}` : '>').join('\n');
+  const separator = !draft || draft.endsWith('\n\n') ? '' : draft.endsWith('\n') ? '\n' : '\n\n';
+  return `${draft}${separator}${quote}\n\n`;
 }
 
 /// One conversation: messages, the run's controls and the composer (new conversations start
@@ -17,7 +26,7 @@ function isActive(runState) {
 /// pages are asked for when the reader scrolls near the top. Messages are drawn in the Mac's
 /// entries (`groupTranscript`): a finished turn folds its work away and shows its answer.
 export class ConversationView {
-  constructor({ store, connection, conversationID }) {
+  constructor({ store, connection, conversationID, composer }) {
     this.store = store;
     this.connection = connection;
     this.conversationID = conversationID;
@@ -34,20 +43,59 @@ export class ConversationView {
     this.runbar = h('div', { class: 'runbar', hidden: true });
     this.queuebar = h('div', { class: 'runbar queue', hidden: true });
     this.questionSlot = h('div', { class: 'question-slot' }); // filled by renderQuestion
-    this.composer = new Composer({ store, connection, conversationID, isActive: () => isActive(this.store.open && this.store.open.runState) });
+    this.composer = composer;
+    this.quoteButton = h('button', { type: 'button', class: 'quote-selection', hidden: true,
+      onpointerdown: (event) => event.preventDefault(), onclick: () => this.quote() }, t('Quote'));
+    this.selectionListener = () => this.updateSelection();
+    document.addEventListener('selectionchange', this.selectionListener);
+    this.composer.render();
     this.earlier = h('button', { class: 'earlier', type: 'button', hidden: true, onclick: () => this.loadEarlier() }, t('Load Earlier Messages'));
     this.messages.addEventListener('scroll', () => { this.loadEarlierIfNearTop(); this.updateFreeze(); }, { passive: true });
 
     this.element = h('section', { class: 'conversation' },
       h('header', { class: 'topbar' },
         h('button', { class: 'back', 'aria-label': t('Back'), onclick: () => { location.hash = '#/'; } }, '‹'),
-        h('div', { class: 'topbar-titles' }, this.title, this.project), this.badge),
-      this.messages, this.runbar, this.queuebar, this.questionSlot, this.composer.element);
+        h('div', { class: 'topbar-titles' }, this.title, this.project), this.badge,
+        h('button', { class: 'conversation-actions-button', 'aria-label': t('Conversation Actions'), onclick: () => openConversationActions(this.store, this.connection, this.conversationID, (error) => this.composer.showError(error)) }, icon('more', 20))),
+      this.messages, this.runbar, this.queuebar, this.questionSlot, this.composer.element, this.quoteButton);
     this.updateSummary();
     this.updateRun();
     if (!isMarkdownReady()) {
       loadMarkdown().then(() => { if (this.store.open && this.element.isConnected) this.redrawAll(); });
     }
+  }
+
+  dispose() { document.removeEventListener('selectionchange', this.selectionListener); }
+
+  updateSelection() {
+    const selection = window.getSelection();
+    if (!this.element?.isConnected || !selection || selection.isCollapsed || selection.rangeCount !== 1) {
+      this.quoteButton.hidden = true; return;
+    }
+    const range = selection.getRangeAt(0);
+    const elementFor = (node) => node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    const start = elementFor(range.startContainer)?.closest('.msg-assistant .markdown');
+    const end = elementFor(range.endContainer)?.closest('.msg-assistant .markdown');
+    const text = selection.toString();
+    if (!start || start !== end || !this.messages.contains(start) || !text.trim() ||
+        [...start.querySelectorAll('.gen-ui, button')].some((node) => range.intersectsNode(node))) {
+      this.quoteButton.hidden = true; return;
+    }
+    const rect = range.getBoundingClientRect();
+    this.selectedQuote = text;
+    this.quoteButton.hidden = false;
+    this.quoteButton.style.left = `${Math.max(8, Math.min(window.innerWidth - 88, rect.left + rect.width / 2 - 36))}px`;
+    this.quoteButton.style.top = `${Math.max(8, Math.min(window.innerHeight - 48, rect.top - 48))}px`;
+  }
+
+  quote() {
+    this.composer.input.value = appendQuote(this.composer.input.value, this.selectedQuote || '');
+    this.composer.input.dispatchEvent(new Event('input', { bubbles: true }));
+    this.quoteButton.hidden = true;
+    window.getSelection()?.removeAllRanges();
+    this.composer.input.focus();
+    const end = this.composer.input.value.length;
+    this.composer.input.setSelectionRange(end, end);
   }
 
   /// The transcript in the Mac's entries, folding the turn the run works on.
@@ -229,7 +277,7 @@ export class ConversationView {
     const summary = this.store.summary(this.conversationID);
     if (!summary) return;
     this.title.textContent = summary.title || t('Untitled');
-    // The project is fixed for an existing conversation; it is shown, not chosen (addendum D1).
+    // Project changes from either client are reflected in the heading.
     const project = summary.projectID ? this.store.project(summary.projectID) : null;
     this.project.hidden = !project;
     this.project.textContent = project ? project.name : '';

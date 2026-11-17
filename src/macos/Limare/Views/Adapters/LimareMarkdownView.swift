@@ -69,6 +69,40 @@ final class LimareStreamView: MarkdownStreamView {
     private(set) var quotePopover: SelectionQuotePopover?
     var openFileLink: ((URL) -> Void)?
     private var pendingFileOpen: DispatchWorkItem?
+    private var selectionScrollTimer: Timer?
+    private weak var selectionScrollLabel: TextLabelView?
+
+    override func textLabelView(_ label: TextLabelView, didDragSelectionAt location: CGPoint) {
+        // The markdown is embedded in SwiftUI's transcript scroll view; its inner
+        // code-block scroll views are horizontal and must not be used here.
+        trackedScrollView = enclosingScrollView
+        super.textLabelView(label, didDragSelectionAt: location)
+        guard selectionScrollTimer == nil, window != nil, trackedScrollView != nil else { return }
+        selectionScrollLabel = label
+        let timer = Timer(timeInterval: 1.0 / 30.0, target: self,
+                          selector: #selector(continueSelectionDrag), userInfo: nil, repeats: true)
+        selectionScrollTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    @objc private func continueSelectionDrag() {
+        guard let label = selectionScrollLabel, let window, NSEvent.pressedMouseButtons & 1 != 0 else {
+            selectionScrollTimer?.invalidate()
+            selectionScrollTimer = nil
+            selectionScrollLabel = nil
+            return
+        }
+        guard let clip = trackedScrollView?.contentView else { return }
+        let point = clip.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        guard point.y < clip.bounds.minY + 16 || point.y > clip.bounds.maxY - 16 else { return }
+        // Keep extending the selection even when the pointer rests at the edge.
+        if let event = NSEvent.mouseEvent(with: .leftMouseDragged,
+            location: window.mouseLocationOutsideOfEventStream, modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+            context: nil, eventNumber: 0, clickCount: 1, pressure: 1) {
+            label.mouseDragged(with: event)
+        }
+    }
 
     override func textLabelView(_ label: TextLabelView, didChangeSelection selection: NSRange?) {
         super.textLabelView(label, didChangeSelection: selection)
@@ -91,7 +125,11 @@ final class LimareStreamView: MarkdownStreamView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil { quotePopover?.dismiss() }
+        if window == nil {
+            quotePopover?.dismiss()
+            selectionScrollTimer?.invalidate()
+            selectionScrollTimer = nil
+        }
     }
 
     override func textLabelView(_ label: TextLabelView, didTapHighlightRegion region: TextLabel.HighlightRegion, at location: CGPoint) {

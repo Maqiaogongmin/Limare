@@ -663,9 +663,10 @@ private struct MessageRow: View, Equatable {
             RuntimeNoticeLabel(notice: notice, text: ChatMessage.RuntimeNotice.displayText(for: message.content.isEmpty ? ChatMessage.RuntimeNotice.interruptedText : message.content))
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            LimareMarkdownView(
+            GenerativeMessageView(
                 source: message.content,
-                profile: .chat(isStreaming: message.state == .streaming, messageId: message.id.uuidString),
+                messageId: message.id.uuidString,
+                streaming: message.state == .streaming,
                 onSelectionBecameActive: onSelectionBecameActive,
                 onQuote: { text in
                     window.chat.draft = ComposerQuote.appending(text, to: window.chat.draft)
@@ -1471,7 +1472,7 @@ enum TranscriptTurnGrouping {
                 ),
                 history: history.map { TranscriptRow(message: $0, in: messages, deliveredArtifactIDs: []) },
                 startsAssistantTurn: true,
-                unsuccessfulCount: calls.filter { isUnsuccessful($0.state) }.count,
+                unsuccessfulCount: calls.filter { isUnsuccessful($0.state) && ShellRunPresentation.finishedNonzeroExitCode($0) == nil }.count,
                 pinnedToolCalls: calls.filter { mayHaveLeftChanges($0.state) },
                 answeredQuestionCalls: calls.filter { $0.questionResolution != nil },
                 planItems: ToolCallDetail.latestPlan(in: turnCalls)

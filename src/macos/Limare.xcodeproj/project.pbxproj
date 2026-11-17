@@ -14,6 +14,9 @@
         B200000000000000000000B3 /* AppAuth in Frameworks */ = {isa = PBXBuildFile; productRef = B200000000000000000000B2 /* AppAuth */; };
         C200000000000000000000B3 /* MCP in Frameworks */ = {isa = PBXBuildFile; productRef = C200000000000000000000B2 /* MCP */; };
 		D30000000000000000000003 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = D30000000000000000000002 /* Sparkle */; };
+		E40000000000000000000001 /* JSONRenderCore in Frameworks */ = {isa = PBXBuildFile; productRef = E40000000000000000000011 /* JSONRenderCore */; };
+		E40000000000000000000002 /* JSONRenderSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = E40000000000000000000012 /* JSONRenderSwiftUI */; };
+		E40000000000000000000003 /* JSONRenderCatalog in Frameworks */ = {isa = PBXBuildFile; productRef = E40000000000000000000013 /* JSONRenderCatalog */; };
 /* End PBXBuildFile section */
 
 
@@ -63,6 +66,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E40000000000000000000001 /* JSONRenderCore in Frameworks */,
+				E40000000000000000000002 /* JSONRenderSwiftUI in Frameworks */,
+				E40000000000000000000003 /* JSONRenderCatalog in Frameworks */,
 				A100000000000000000000A3 /* MarkdownView in Frameworks */,
 				A100000000000000000000B3 /* Vapor in Frameworks */,
 				A100000000000000000000C3 /* JWTKit in Frameworks */,
@@ -133,6 +139,9 @@
 			name = Limare;
 			packageProductDependencies = (
                 D30000000000000000000002 /* Sparkle */,
+				E40000000000000000000011 /* JSONRenderCore */,
+				E40000000000000000000012 /* JSONRenderSwiftUI */,
+				E40000000000000000000013 /* JSONRenderCatalog */,
 				A100000000000000000000A2 /* MarkdownView */,
 				A100000000000000000000B2 /* Vapor */,
 				A100000000000000000000C2 /* JWTKit */,
@@ -227,6 +236,7 @@
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A10000000000000000000032 /* Products */;
 			packageReferences = (
+				E40000000000000000000020 /* json-render */,
                 D30000000000000000000001 /* Sparkle */,
 				A100000000000000000000A1 /* XCLocalSwiftPackageReference "../../deps/MarkdownView" */,
 				A100000000000000000000B1 /* XCRemoteSwiftPackageReference "vapor" */,
@@ -396,7 +406,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = MNV6M9LX23;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -412,7 +422,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 0.1.9;
+				MARKETING_VERSION = 0.1.10;
 				PRODUCT_BUNDLE_IDENTIFIER = app.limare.Limare;
 				PRODUCT_NAME = Limare;
 				SUPPORTED_PLATFORMS = macosx;
@@ -433,7 +443,7 @@
 				CODE_SIGN_STYLE = Manual;
 				PROVISIONING_PROFILE_SPECIFIER = Limare;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = MNV6M9LX23;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -449,7 +459,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 0.1.9;
+				MARKETING_VERSION = 0.1.10;
 				PRODUCT_BUNDLE_IDENTIFIER = app.limare.Limare;
 				PRODUCT_NAME = Limare;
 				SUPPORTED_PLATFORMS = macosx;
@@ -571,6 +581,7 @@
             repositoryURL = "https://github.com/sparkle-project/Sparkle";
             requirement = { kind = exactVersion; version = 2.10.0; };
         };
+		E40000000000000000000020 /* json-render */ = {isa = XCRemoteSwiftPackageReference; repositoryURL = "https://github.com/vercel-labs/json-render"; requirement = { kind = exactVersion; version = 0.23.1; }; };
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -620,6 +631,9 @@
             package = D30000000000000000000001;
             productName = Sparkle;
         };
+		E40000000000000000000011 /* JSONRenderCore */ = {isa = XCSwiftPackageProductDependency; package = E40000000000000000000020; productName = JSONRenderCore; };
+		E40000000000000000000012 /* JSONRenderSwiftUI */ = {isa = XCSwiftPackageProductDependency; package = E40000000000000000000020; productName = JSONRenderSwiftUI; };
+		E40000000000000000000013 /* JSONRenderCatalog */ = {isa = XCSwiftPackageProductDependency; package = E40000000000000000000020; productName = JSONRenderCatalog; };
 /* End XCSwiftPackageProductDependency section */
 
 /* Begin XCConfigurationList section */

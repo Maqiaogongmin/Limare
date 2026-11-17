@@ -12,9 +12,11 @@ import UniformTypeIdentifiers
 // target) are `RemoteFile`s, read at `GET /files/<conversation>/<source>/<id>`.
 // v7: question cards (`ask_user_question`): `hello` and `questions.changed` carry the waiting
 // cards, `question.answer` answers or skips one, and a conversation summary says it waits.
+// v8: rename, pin and archive visible conversations through their canonical store.
+// v9: read markers, moving conversations and an on-demand archive with restore.
 
 enum RemoteWire {
-    static let protocolVersion = 7
+    static let protocolVersion = 12
     /// The longest input text a client may submit.
     static let maxInputCharacters = 64 * 1024
     static let maxRequestIDLength = 64
@@ -43,9 +45,18 @@ struct RemoteConversationSummary: Codable, Equatable, Sendable {
     let projectID: UUID?
     let projectName: String?
     let isPinned: Bool
+    let isUnread: Bool
     let run: RunBadge?
     let hasPendingApproval: Bool
     let hasPendingQuestion: Bool
+}
+
+struct RemoteArchivedConversation: Codable, Equatable, Sendable {
+    let id: UUID
+    let title: String
+    let projectID: UUID?
+    let projectName: String?
+    let archivedAt: Date
 }
 
 struct RemoteProjectSummary: Codable, Equatable, Sendable {
@@ -242,6 +253,7 @@ struct RemoteToolCall: Codable, Equatable, Sendable {
     let outputTruncated: Bool
     let errorMessage: String?
     let durationMs: Int?
+    let shellExitCode: Int32?
     /// What the Mac's row shows beside the tool's name (`ToolCallPresentationResolver`).
     let summary: String?
     /// The workspace file a file tool reads or writes, shown as a card under the call.
@@ -342,6 +354,13 @@ enum RemoteCommand: Equatable, Sendable {
     case openConversation(UUID)
     /// The page of messages just before `before`, the oldest message the client has.
     case loadEarlier(conversationID: UUID, before: UUID)
+    case renameConversation(conversationID: UUID, title: String)
+    case setConversationPinned(conversationID: UUID, isPinned: Bool)
+    case setConversationUnread(conversationID: UUID, isUnread: Bool)
+    case moveConversation(conversationID: UUID, projectID: UUID?)
+    case archiveConversation(UUID)
+    case listArchived
+    case restoreConversation(UUID)
     /// `model` and `thinking` only for a new conversation (no `conversationID`).
     case submit(conversationID: UUID?, projectID: UUID?, text: String, mode: SubmitMode,
                 attachmentIDs: [UUID] = [], model: RemoteModelRef? = nil, thinking: String? = nil)
@@ -362,6 +381,13 @@ enum RemoteCommand: Equatable, Sendable {
         switch self {
         case .openConversation: "conversation.open"
         case .loadEarlier: "conversation.loadEarlier"
+        case .renameConversation: "conversation.rename"
+        case .setConversationPinned: "conversation.setPinned"
+        case .setConversationUnread: "conversation.setUnread"
+        case .moveConversation: "conversation.move"
+        case .archiveConversation: "conversation.archive"
+        case .listArchived: "archive.list"
+        case .restoreConversation: "archive.restore"
         case .submit: "input.submit"
         case .setModel: "conversation.setModel"
         case .setThinking: "conversation.setThinking"
@@ -390,7 +416,7 @@ struct RemoteCommandFrame: Decodable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case type, requestID, conversationID, beforeMessageID, projectID, text, mode, kind, approvalID, approved
-        case attachmentIDs, model, thinking, level, attachmentID, questionID, skip, answers
+        case attachmentIDs, model, thinking, level, attachmentID, questionID, skip, answers, title, isPinned, isUnread
     }
 
     init(from decoder: Decoder) throws {
@@ -406,6 +432,27 @@ struct RemoteCommandFrame: Decodable, Equatable, Sendable {
             command = .openConversation(try conversation())
         case "conversation.loadEarlier":
             command = .loadEarlier(conversationID: try conversation(), before: try container.decode(UUID.self, forKey: .beforeMessageID))
+        case "conversation.rename":
+            let title = try container.decode(String.self, forKey: .title).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !title.isEmpty, title.count <= 200 else {
+                throw DecodingError.dataCorruptedError(forKey: .title, in: container, debugDescription: "title must be 1–200 characters")
+            }
+            command = .renameConversation(conversationID: try conversation(), title: title)
+        case "conversation.setPinned":
+            command = .setConversationPinned(conversationID: try conversation(), isPinned: try container.decode(Bool.self, forKey: .isPinned))
+        case "conversation.setUnread":
+            command = .setConversationUnread(conversationID: try conversation(), isUnread: try container.decode(Bool.self, forKey: .isUnread))
+        case "conversation.move":
+            guard container.contains(.projectID) else {
+                throw DecodingError.keyNotFound(CodingKeys.projectID, .init(codingPath: container.codingPath, debugDescription: "projectID is required (null for no project)"))
+            }
+            command = .moveConversation(conversationID: try conversation(), projectID: try container.decodeIfPresent(UUID.self, forKey: .projectID))
+        case "conversation.archive":
+            command = .archiveConversation(try conversation())
+        case "archive.list":
+            command = .listArchived
+        case "archive.restore":
+            command = .restoreConversation(try conversation())
         case "input.submit":
             let text = try container.decode(String.self, forKey: .text)
             guard text.count <= RemoteWire.maxInputCharacters else {
@@ -483,6 +530,7 @@ enum RemoteServerEvent: Encodable, Equatable, Sendable {
     /// The answer to `conversation.loadEarlier`: the messages just before the client's oldest one.
     case conversationEarlier(conversationID: UUID, messages: [RemoteMessage], hasEarlier: Bool)
     case conversationsChanged(upserts: [RemoteConversationSummary], removed: [UUID])
+    case archivedConversations([RemoteArchivedConversation])
     case messageUpsert(conversationID: UUID, message: RemoteMessage)
     case runChanged(conversationID: UUID, runState: RemoteRunState)
     case approvalsChanged(approvals: [RemoteApproval])
@@ -493,7 +541,7 @@ enum RemoteServerEvent: Encodable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case type, protocolVersion, connectionID, conversations, projects, models, approvals, questions, commands, conversation, messages, hasEarlier, runState, settings
         case compactions
-        case upserts, removed, conversationID, message, requestID, ok, error, admission
+        case upserts, removed, conversationID, message, requestID, ok, error, admission, archived
     }
 
     func encode(to encoder: Encoder) throws {
@@ -540,6 +588,9 @@ enum RemoteServerEvent: Encodable, Equatable, Sendable {
             try container.encode("conversations.changed", forKey: .type)
             try container.encode(upserts, forKey: .upserts)
             try container.encode(removed, forKey: .removed)
+        case .archivedConversations(let archived):
+            try container.encode("archive.changed", forKey: .type)
+            try container.encode(archived, forKey: .archived)
         case .messageUpsert(let conversationID, let message):
             try container.encode("message.upsert", forKey: .type)
             try container.encode(conversationID, forKey: .conversationID)

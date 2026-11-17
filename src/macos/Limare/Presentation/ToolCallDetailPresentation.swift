@@ -4,7 +4,7 @@ import Foundation
 /// terminal, the file, the diff, the list), every other call as its raw input and output.
 ///
 /// Read from the call's input (decoded with the tool's own argument type), its typed fields and,
-/// for `file_list` and `file_search` only, the JSON output the executor writes with fixed keys.
+/// for `file_list`, `file_search`, and older silent shell results, the executor's fixed JSON keys.
 /// Nothing is looked up in free text: anything that does not decode is `.raw`.
 enum ToolCallDetail: Equatable, Sendable {
     struct DiffLine: Equatable, Sendable {
@@ -47,7 +47,7 @@ enum ToolCallDetail: Equatable, Sendable {
         if tool == .shell {
             guard let arguments: ShellArguments = decode(record.input) else { return .raw }
             let cwd = arguments.cwd?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return .shell(command: arguments.command, cwd: cwd?.isEmpty == false ? cwd : nil, output: record.output,
+            return .shell(command: arguments.command, cwd: cwd?.isEmpty == false ? cwd : nil, output: shellOutput(record.output),
                           exitCode: record.mechanicalTerminalFact?.shellTerminal?.exitCode)
         }
         guard record.state == .completed else { return .raw }
@@ -177,6 +177,21 @@ enum ToolCallDetail: Equatable, Sendable {
     }
 
     // MARK: - Decoding
+
+    /// Older silent shell calls may contain the executor's result envelope instead of terminal text.
+    private static func shellOutput(_ output: String) -> String {
+        guard let result: SilentShellResult = decode(output), result.stdout.isEmpty, result.stderr.isEmpty,
+              result.stdout_original_bytes == 0, result.stderr_original_bytes == 0 else { return output }
+        return ""
+    }
+
+    private struct SilentShellResult: Decodable {
+        let stdout: String
+        let stderr: String
+        let stdout_original_bytes: Int
+        let stderr_original_bytes: Int
+        let timed_out: Bool
+    }
 
     /// The built-in tools with their own details, by the name test the row's resolver uses. An MCP
     /// tool is never one of them, whatever its name ends with.

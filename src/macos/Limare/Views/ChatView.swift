@@ -84,7 +84,7 @@ struct ChatView: View {
             UndoMessageSheet(messageID: request.messageID)
                 .environment(appState)
         }
-        // Opened from the status line or Conversation → Run Details…, for the shown conversation's
+        // Opened from Conversation → Run Details…, for the shown conversation's
         // latest run. On the whole view, so it opens while the Work Surface covers the chat too.
         .sheet(isPresented: Binding(
             get: { window.showsRunDetails && latestRun != nil },
@@ -154,7 +154,6 @@ struct ChatView: View {
             let isCompact = proxy.size.width < AppLayout.emptyStateCompactWidth
             VStack(spacing: 0) {
                 if let conversationID = window.conversationID {
-                    ChatRunStatusView(conversationID: conversationID)
                     NativeDelegationTaskView(conversationID: conversationID)
                 }
 

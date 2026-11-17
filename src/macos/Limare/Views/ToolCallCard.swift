@@ -271,7 +271,7 @@ private struct ToolCallDetails: View {
                 if let approval = ToolCallPresentationResolver.approvalLabel(for: toolCall.approvalState) {
                     Label(approval, systemImage: "hand.raised")
                 }
-                if ShellRunPresentation.timeoutMessage(toolCall) == nil, let error = toolCall.errorMessage, !error.isEmpty {
+                if toolCall.mechanicalTerminalFact?.shellTerminal == nil, ShellRunPresentation.timeoutMessage(toolCall) == nil, let error = toolCall.errorMessage, !error.isEmpty {
                     Text(error)
                         .foregroundStyle(AppColors.statusError)
                         .lineLimit(2)

@@ -13,6 +13,8 @@ const ERRORS = {
   modelNotAvailable: t('This model is no longer available.'),
   levelNotAvailable: t("This model doesn't support that thinking level."),
   runActive: t("The model and thinking level can't change while a run is active."),
+  worktreeBusy: t('A worktree operation is in progress. Try again when it finishes.'),
+  projectNotFound: t('This project is no longer available.'),
 };
 
 /// The commands the draft is typing, as the Mac composer finds them (`ComposerCommand.matches`):
@@ -370,9 +372,15 @@ export class Composer {
     this.render();
   }
 
+  /// When the conversation disappears, release its unsent uploads, including ones still in flight.
+  dispose() {
+    for (const attachment of [...this.attachments]) this.removeAttachment(attachment);
+  }
+
   // Sending --------------------------------------------------------------------
 
   async submit(mode) {
+    const draft = this.input.value;
     const text = this.input.value.trim();
     const attachmentIDs = this.readyAttachmentIDs();
     if ((!text && !attachmentIDs.length) || this.sending || this.uploading) return;
@@ -390,8 +398,9 @@ export class Composer {
     const result = await this.connection.request('input.submit', fields);
     this.sending = false;
     if (result.ok) {
-      this.input.value = '';
-      this.attachments = this.attachments.filter((a) => a.status !== 'ready');
+      // The reader can continue typing or attach another file while the request is in flight.
+      if (this.input.value === draft) this.input.value = '';
+      this.attachments = this.attachments.filter((a) => !attachmentIDs.includes(a.id));
       this.autosize();
       if (!this.conversationID && result.conversationID) {
         this.model = null;

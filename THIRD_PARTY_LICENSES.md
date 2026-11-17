@@ -18,6 +18,7 @@ notice its packaging script embeds, unless the row says otherwise.
 |---|---|---|
 | [MarkdownView](https://github.com/Lakr233/MarkdownView) (Lakr233) | 4.8.2, `deps/MarkdownView` (Limare changes listed in its README) | **MIT** (`deps/MarkdownView/LICENSE`) |
 | [markdown-it](https://github.com/markdown-it/markdown-it) | 15.0.2, `src/macos/RemoteWeb/vendor/` (Remote Access web UI) | **MIT** (`markdown-it.LICENSE` alongside) |
+| [json-render core](https://github.com/vercel-labs/json-render) and [Zod](https://github.com/colinhacks/zod) | 0.23.1 and 4.3.6, bundled in `src/macos/RemoteWeb/vendor/` | **Apache-2.0** and **MIT** (licenses alongside) |
 
 ## Adapted text
 
@@ -50,6 +51,7 @@ Locked by `src/macos/Limare.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/P
 
 | Package | Version | Pulled in by | License |
 |---|---|---|---|
+| [json-render](https://github.com/vercel-labs/json-render) | 0.23.1 | Limare (native generative UI) | **Apache-2.0** |
 | [Vapor](https://github.com/vapor/vapor) | 4.122.2 | Limare (Remote Access) | **MIT** |
 | [jwt-kit](https://github.com/vapor/jwt-kit) | 5.7.1 | Limare (Remote Access) | **MIT** |
 | [Sparkle](https://github.com/sparkle-project/Sparkle) | 2.10.0 | Limare (manual updates) | **MIT and bundled component notices**, included in the pinned checkout and app Credits |
@@ -82,7 +84,7 @@ component above: the vendored packages in `deps/` (`deps/OpenMinisProviders/LICE
 OpenMinis GPL-3.0 file), every Swift package pinned in `Package.resolved` (read from its
 checkout), the adapted texts in `LICENSES/`, the bundled helpers and the Remote Access web
 vendor files. A component without a license file fails the build. The helpers' licenses and
-`RemoteWeb/vendor/markdown-it.LICENSE` also stay next to the files they cover.
+`RemoteWeb/vendor/markdown-it.LICENSE`, `json-render.LICENSE`, and `zod.LICENSE` also stay next to the files they cover.
 
 ## Removed / historical
 

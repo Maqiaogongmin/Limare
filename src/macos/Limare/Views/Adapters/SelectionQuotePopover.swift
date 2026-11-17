@@ -1,3 +1,4 @@
+#if canImport(Litext)
 import AppKit
 import Litext
 
@@ -137,3 +138,5 @@ final class SelectionQuotePopover: NSObject, NSPopoverDelegate {
         if let scrollObserver { NotificationCenter.default.removeObserver(scrollObserver); self.scrollObserver = nil }
     }
 }
+
+#endif

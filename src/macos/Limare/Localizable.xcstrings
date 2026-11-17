@@ -1,6 +1,138 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Some content could not be displayed." : {
+      "comment" : "Remote Access page (RemoteWeb)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部分内容无法显示。"
+          }
+        }
+      }
+    },
+    "Showing the first %lld of %lld rows" : {
+      "comment" : "Remote Access page (RemoteWeb)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示前 %lld 行，共 %lld 行"
+          }
+        }
+      }
+    },
+    "Chart" : {
+      "comment" : "Remote Access page (RemoteWeb)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "图表"
+          }
+        }
+      }
+    },
+    "No chart data" : {
+      "comment" : "Remote Access page (RemoteWeb)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有图表数据"
+          }
+        }
+      }
+    },
+    "Progress" : {
+      "comment" : "Remote Access page (RemoteWeb)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "进度"
+          }
+        }
+      }
+    },
+    "Archiving stops any active run. You can restore this conversation later." : {
+      "comment" : "Remote Access page (RemoteWeb)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "归档会停止正在进行的任务，以后可以恢复此对话。"
+          }
+        }
+      }
+    },
+    "Could not load archived conversations." : {
+      "comment" : "Remote Access page (RemoteWeb)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法加载已归档的对话。"
+          }
+        }
+      }
+    },
+    "Moving may change the conversation’s working folder." : {
+      "comment" : "Remote Access page (RemoteWeb)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移动后，对话的工作文件夹可能发生改变。"
+          }
+        }
+      }
+    },
+    "This project is no longer available." : {
+      "comment" : "Remote Access page (RemoteWeb)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该项目已不可用。"
+          }
+        }
+      }
+    },
+    "A worktree operation is in progress. Try again when it finishes." : {
+      "comment" : "Remote Access page (RemoteWeb)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作树操作正在进行，请完成后重试。"
+          }
+        }
+      }
+    },
+    "Archiving stops any active run. You can restore this conversation on the Mac." : {
+      "comment" : "Remote Access page (RemoteWeb)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "归档会停止正在进行的任务。你可以在 Mac 上恢复此对话。"
+          }
+        }
+      }
+    },
     "%@ %@" : {
       "localizations" : {
         "en" : {
@@ -6449,12 +6581,32 @@
         }
       }
     },
+    "Copied" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已复制"
+          }
+        }
+      }
+    },
     "Copy Config" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "复制配置"
+          }
+        }
+      }
+    },
+    "Copy code" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制代码"
           }
         }
       }
@@ -6477,6 +6629,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "复制合并命令"
+          }
+        }
+      }
+    },
+    "Copy failed" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制失败"
           }
         }
       }
@@ -14273,6 +14435,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已过期"
+          }
+        }
+      }
+    },
+    "Output incomplete" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输出未完成"
           }
         }
       }

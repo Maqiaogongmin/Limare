@@ -187,6 +187,7 @@ final class CodeView: PlatformView {
         /// The panel under a `.rule` block's controls: they float over the code.
         lazy var barMaterialView: NSVisualEffectView = .init()
         private var hoverTrackingArea: NSTrackingArea?
+        private var pendingHoverExit: DispatchWorkItem?
     #endif
 
     lazy var languageLabel: BarTextLabel = .init()
@@ -253,12 +254,23 @@ final class CodeView: PlatformView {
 
         override func mouseEntered(with event: NSEvent) {
             super.mouseEntered(with: event)
+            pendingHoverExit?.cancel()
             setPointerInside(true)
         }
 
         override func mouseExited(with event: NSEvent) {
             super.mouseExited(with: event)
-            setPointerInside(false)
+            // Moving into a child control can produce an exit for the parent. Give the
+            // pointer time to cross the control and check its actual position again.
+            pendingHoverExit?.cancel()
+            let work = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                guard let window = self.window else { self.setPointerInside(false); return }
+                let point = self.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+                self.setPointerInside(self.bounds.contains(point))
+            }
+            pendingHoverExit = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
         }
 
         private func setPointerInside(_ inside: Bool) {

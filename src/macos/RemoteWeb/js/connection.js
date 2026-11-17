@@ -15,7 +15,12 @@ export class Connection extends EventTarget {
     this.pending = new Map();
     this.retryTimer = null;
     window.addEventListener('online', () => this.reconnectNow());
-    window.addEventListener('offline', () => this.setStatus('offline'));
+    window.addEventListener('offline', () => {
+      this.setStatus('offline');
+      // A socket may appear open after the network disappears and never deliver another frame.
+      // Closing it guarantees that the next online event establishes a fresh session and hello.
+      this.socket?.close();
+    });
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible' && this.status !== 'live' && this.status !== 'signin') this.reconnectNow();
     });

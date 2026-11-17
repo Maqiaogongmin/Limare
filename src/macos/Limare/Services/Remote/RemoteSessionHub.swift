@@ -35,6 +35,8 @@ final class RemoteSessionHub: RemoteSessionEndpoint {
         var sentModels: RemoteModelCatalog?
         var sentSettings: RemoteConversationSettings?
         var sentCompactions: RemoteCompactions?
+        /// Nil until the phone asks to see the archive; it then receives updates until disconnect.
+        var sentArchived: [RemoteArchivedConversation]?
         /// Uploaded, not yet sent, in upload order.
         var pendingAttachments: [ChatAttachment] = []
         /// Uploads being taken in; they count against the limit until they finish.
@@ -184,6 +186,36 @@ final class RemoteSessionHub: RemoteSessionEndpoint {
             }
             sendEarlier(of: record, before: before, to: client)
             reply = (nil, nil, id)
+        case .renameConversation(let id, let title):
+            reply = withRecord(id) { conversations.renameConversation(id: id, title: title) }
+        case .setConversationPinned(let id, let isPinned):
+            reply = withRecord(id) { conversations.setConversationPinned(id: id, isPinned: isPinned) }
+        case .setConversationUnread(let id, let isUnread):
+            reply = withRecord(id) { conversations.setConversationUnread(id: id, isUnread: isUnread) }
+        case .moveConversation(let id, let projectID):
+            guard visibleRecord(id) != nil else { reply = ("conversationNotFound", nil, id); break }
+            guard projectID == nil || conversations.projects.contains(where: { $0.id == projectID }) else {
+                reply = ("projectNotFound", nil, id); break
+            }
+            conversations.moveConversation(id: id, toProjectID: projectID)
+            reply = (nil, nil, id)
+        case .archiveConversation(let id):
+            guard visibleRecord(id) != nil else { reply = ("conversationNotFound", nil, id); break }
+            guard conversations.worktreeOperationInProgress?(id) != true else { reply = ("worktreeBusy", nil, id); break }
+            conversations.archiveConversation(id: id)
+            reply = (nil, nil, id)
+        case .listArchived:
+            let archived = currentArchived()
+            client.sentArchived = archived
+            send(.archivedConversations(archived), to: client)
+            reply = (nil, nil, nil)
+        case .restoreConversation(let id):
+            guard conversations.conversations.contains(where: { $0.id == id && $0.isArchived && !$0.isNativeDelegationChild }) else {
+                reply = ("conversationNotFound", nil, id); break
+            }
+            // A phone should not change which conversation is selected on the Mac.
+            conversations.restoreConversation(id: id, select: false)
+            reply = (nil, nil, id)
         case .submit(let conversationID, let projectID, let text, let mode, let attachmentIDs, let model, let thinking):
             reply = submit(conversationID: conversationID, projectID: projectID, text: text, mode: mode,
                            attachmentIDs: attachmentIDs, model: model, thinking: thinking, from: client)
@@ -281,6 +313,7 @@ final class RemoteSessionHub: RemoteSessionEndpoint {
         let questions = currentQuestions()
         let projects = currentProjects()
         let models = currentModels()
+        let archived = clients.values.contains { $0.sentArchived != nil } ? currentArchived() : nil
         for client in clients.values {
             if projects != client.sentProjects {
                 client.sentProjects = projects
@@ -295,6 +328,10 @@ final class RemoteSessionHub: RemoteSessionEndpoint {
             if !upserts.isEmpty || !removed.isEmpty {
                 client.sentSummaries = summariesByID
                 send(.conversationsChanged(upserts: upserts, removed: Array(removed)), to: client)
+            }
+            if let previous = client.sentArchived, let archived, previous != archived {
+                client.sentArchived = archived
+                send(.archivedConversations(archived), to: client)
             }
             if approvals != client.sentApprovals {
                 client.sentApprovals = approvals
@@ -645,6 +682,15 @@ final class RemoteSessionHub: RemoteSessionEndpoint {
             .filter { !$0.isNativeDelegationChild && !$0.isArchived }
             .map(summary)
             .sorted { ($0.isPinned ? 1 : 0, $0.updatedAt) > ($1.isPinned ? 1 : 0, $1.updatedAt) }
+    }
+
+    private func currentArchived() -> [RemoteArchivedConversation] {
+        conversations.archivedConversations.filter { !$0.isNativeDelegationChild }.compactMap { record in
+            guard let date = record.archivedAt else { return nil }
+            let projectName = record.projectID.flatMap { id in conversations.projects.first { $0.id == id }?.name }
+            return RemoteArchivedConversation(id: record.id, title: record.displayTitle, projectID: record.projectID,
+                                              projectName: projectName, archivedAt: date)
+        }
     }
 
     private func summary(_ record: ConversationRecord) -> RemoteConversationSummary {

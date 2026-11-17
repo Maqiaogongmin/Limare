@@ -18,16 +18,20 @@ struct ComposerWorktreeControl: View {
     @Environment(WindowSession.self) private var window
     @State private var branches: (current: String?, branches: [String]) = (nil, [])
     @State private var currentBranch: String?
+    @State private var isHovering = false
 
     var body: some View {
         if let conversation = window.conversation, !conversation.isNativeDelegationChild {
             if let worktree = conversation.worktree {
                 Button { window.worktreeDetails = conversation.id } label: {
-                    label(currentBranch ?? worktree.branch, active: true)
+                    label(String(localized: "Worktree"))
                 }
-                .buttonStyle(GhostIconButtonStyle())
+                .buttonStyle(.plain)
+                .onHover { isHovering = $0 }
+                .layoutPriority(1)
+                .accessibilityIdentifier("chat.composer.workLocation")
                 .accessibilityLabel("Worktree details")
-                .help("Show worktree details")
+                .help(currentBranch ?? worktree.branch)
                 .task(id: worktree.workspace.path) { currentBranch = await app.worktrees.currentBranch(conversationID: conversation.id) }
                 .onChange(of: app.conversationRuns.activeRuns[conversation.id]?.status) { _, status in
                     if status?.isTerminal == true {
@@ -43,6 +47,7 @@ struct ComposerWorktreeControl: View {
     private func chooser(_ id: UUID) -> some View {
         let pending = app.worktrees.pending[id]
         let creating = app.worktrees.operations[id] == .creating
+        let title = pending == nil ? String(localized: "Local folder") : String(localized: "Worktree")
         return Menu {
             Picker("Work in", selection: Binding(
                 get: { pending != nil },
@@ -60,29 +65,44 @@ struct ComposerWorktreeControl: View {
                 }
             }
         } label: {
-            if creating {
-                HStack(spacing: 4) { ProgressView().controlSize(.mini); Text("Creating worktree…").font(.caption) }
-            } else {
-                label(pending == nil ? String(localized: "Local folder") : pending?.baseBranch.map { String(localized: "Worktree from \($0)") } ?? String(localized: "Worktree"),
-                      active: pending != nil)
-            }
+            chooserLabel(title, creating: creating)
         }
-        .menuStyle(.borderlessButton)
+        // Match the composer's other menus: this style respects the label's own color and size.
+        .menuStyle(.button)
+        .buttonStyle(.plain)
         .menuIndicator(.hidden)
-        .fixedSize()
+        .fixedSize(horizontal: true, vertical: false)
+        .layoutPriority(1)
+        .onHover { isHovering = $0 }
         .disabled(creating)
+        .accessibilityIdentifier("chat.composer.workLocation")
         .accessibilityLabel("Where this conversation works")
-        .help("Work in the project folder, or in a new Git worktree created when you send the first message")
+        .help(pending?.baseBranch.map { String(localized: "Worktree from \($0)") }
+              ?? String(localized: "Work in the project folder, or in a new Git worktree created when you send the first message"))
         .task(id: id) { branches = await app.worktrees.localBranches(for: id) }
     }
 
-    private func label(_ text: String, active: Bool) -> some View {
+    @ViewBuilder
+    private func chooserLabel(_ title: String, creating: Bool) -> some View {
+        if creating {
+            HStack(spacing: 4) { ProgressView().controlSize(.mini); Text("Creating worktree…").font(.caption) }
+        } else {
+            label(title)
+        }
+    }
+
+    private func label(_ text: String) -> some View {
         Label(text, systemImage: "arrow.triangle.branch")
             .labelStyle(.titleAndIcon)
-            .font(.caption)
+            .font(.system(size: 14))
             .lineLimit(1)
-            .foregroundStyle(active ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary))
+            .foregroundStyle(isHovering ? AppColors.textPrimary : AppColors.ghostIdle)
             .padding(.horizontal, 6)
             .frame(height: AppControlHeight.composerButton)
+            .background(
+                RoundedRectangle(cornerRadius: AppRadius.control, style: .continuous)
+                    .fill(isHovering ? AppColors.ghostHover : .clear)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: AppRadius.control, style: .continuous))
     }
 }

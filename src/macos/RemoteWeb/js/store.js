@@ -13,6 +13,8 @@ export class Store extends EventTarget {
     this.connectionID = null; // names this connection to POST /attachments
     this.protocolVersion = null;
     this.listLoaded = false; // until the first hello, the list is unknown, not empty
+    this.archived = [];
+    this.archivedLoaded = false;
   }
 
   emit(kind, detail) {
@@ -29,6 +31,7 @@ export class Store extends EventTarget {
       case 'hello':
         this.protocolVersion = event.protocolVersion;
         this.listLoaded = true;
+        this.archivedLoaded = false; // subscriptions belong to the old connection
         this.connectionID = event.connectionID;
         this.conversations = new Map(event.conversations.map((c) => [c.id, c]));
         this.projects = event.projects;
@@ -41,6 +44,11 @@ export class Store extends EventTarget {
         this.emit('approvals');
         this.emit('questions');
         this.emit('hello');
+        break;
+      case 'archive.changed':
+        this.archived = event.archived;
+        this.archivedLoaded = true;
+        this.emit('archive');
         break;
       case 'conversations.changed':
         for (const summary of event.upserts) this.conversations.set(summary.id, summary);

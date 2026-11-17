@@ -309,26 +309,28 @@ enum AppColors {
 struct GhostIconButtonStyle: ButtonStyle {
     var size: CGFloat = AppControlHeight.composerButton
     var iconSize: CGFloat = 14
+    var isSelected = false
 
     func makeBody(configuration: Configuration) -> some View {
-        GhostIconBody(configuration: configuration, size: size, iconSize: iconSize)
+        GhostIconBody(configuration: configuration, size: size, iconSize: iconSize, isSelected: isSelected)
     }
 
     private struct GhostIconBody: View {
         let configuration: ButtonStyleConfiguration
         let size: CGFloat
         let iconSize: CGFloat
+        let isSelected: Bool
         @Environment(\.isEnabled) private var isEnabled
         @State private var isHovering = false
 
         var body: some View {
             configuration.label
                 .font(.system(size: iconSize))
-                .foregroundStyle(isHovering && isEnabled ? AppColors.textPrimary : AppColors.ghostIdle)
+                .foregroundStyle((isSelected || isHovering) && isEnabled ? AppColors.textPrimary : AppColors.ghostIdle)
                 .frame(width: size, height: size)
                 .background(
                     RoundedRectangle(cornerRadius: AppRadius.control, style: .continuous)
-                        .fill(isHovering && isEnabled || configuration.isPressed ? AppColors.ghostHover : .clear)
+                        .fill((isSelected || isHovering) && isEnabled || configuration.isPressed ? AppColors.ghostHover : .clear)
                 )
                 .contentShape(RoundedRectangle(cornerRadius: AppRadius.control, style: .continuous))
                 .opacity(isEnabled ? 1 : 0.45)

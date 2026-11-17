@@ -39,7 +39,7 @@ export function groupTranscript(messages, { runActive = false, frozen = null } =
       folded,
       rowIndex,
       hidesReasoning,
-      unsuccessful: history.flatMap((m) => m.toolCalls).filter((t) => UNSUCCESSFUL.has(t.state)).length,
+      unsuccessful: history.flatMap((m) => m.toolCalls).filter((t) => UNSUCCESSFUL.has(t.state) && t.shellExitCode == null).length,
     });
     turn = [];
   };

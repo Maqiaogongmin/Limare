@@ -3,3 +3,12 @@ markdown-it 15.0.2 (MIT)
   integrity: sha512-q4IGxMv56jCqT4OCRCADBoDP3LO4MhmTXjFbphHPXs4g3j9Xg5RDnxqN8IF/3vIWEU+VCnUq+7JUg/cfy2E6Qw== (npm, verified)
   file:      package/dist/browser/markdown-it.esm.min.mjs -> markdown-it.esm.min.js
   sha256:    528b68ea3be3ed86be7bc9ed2b99e21a4f51d9afcfb01330d0393abe04070f32 (sourceMappingURL comment removed)
+
+json-render core 0.23.1 (Apache-2.0), bundled with zod 4.3.6 (MIT)
+  source:    https://github.com/vercel-labs/json-render, commit 5e99a387536a1528d8113eb929ab4b7e611701ae
+  zod:       https://registry.npmjs.org/zod/-/zod-4.3.6.tgz
+  zod sha256: 29ee4d2418c0fb6ddc545c28c03ec80b701e345a3f779e50ae23cda0700b1682
+  patch:     Zod's JIT is disabled to comply with the app's no-eval CSP.
+  builder:   script/vendor_remote_json_render.sh (esbuild 0.27.3)
+  file:      json-render-core.esm.js
+  sha256:    9b5651643727c79921810ea99f29f62d41c69e82af36f1aee66b3d4ae404c015

@@ -2806,7 +2806,7 @@ final class ToolExecutor {
 
         let resolvedURL = try WorkspacePathResolver.resolve(trimmedPath, relativeTo: workspaceURL, mustExist: true)
         guard WorkspacePathResolver.isInsideWorkspace(resolvedURL, workspaceURL: workspaceURL) else {
-            throw ToolExecutorError.invalidArguments("Path '\(trimmedPath)' escapes the workspace boundaries.")
+            throw ToolExecutorError.invalidArguments("Path '\(trimmedPath)' escapes the workspace boundaries. Use artifact_acquire for files outside the workspace.")
         }
         let fileURL = resolvedURL
         try MCPInfrastructureBoundary.requireAgentFileAccess(to: fileURL)

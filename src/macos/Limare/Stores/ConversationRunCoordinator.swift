@@ -3466,6 +3466,9 @@ No tools, shell, browser, or file system access are available for this turn. Res
 
         let (workingURL, hasExplicitProjectFolder) = promptWorkingDirectory(conversationID: conversationID, workspaceURL: workspaceURL)
         var prompt = CodingAgentPrompt.base
+        if runID.flatMap({ subagentRuns[$0] }) == nil {
+            prompt += "\n\n" + GenerativeUIPrompt.text
+        }
         if let soulFragment = soul?.promptFragment(), !soulFragment.isEmpty {
             prompt += "\n\n" + soulFragment
         }

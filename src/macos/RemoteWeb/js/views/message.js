@@ -2,6 +2,7 @@ import { h } from '../dom.js';
 import { fillMarkdown } from '../markdown.js';
 import { fileCard, fileList } from './files.js';
 import { t } from '../i18n.js';
+import { copyButton } from '../clipboard.js';
 
 const TOOL_STATE = {
   queued: t('Queued'), awaitingApproval: t('Waiting for approval'), running: t('Running'), completed: t('Completed'),
@@ -42,7 +43,7 @@ function duration(ms) {
 /// A tool call, and under it, as on the Mac, the workspace file a file tool reads or writes. A
 /// call that completed shows no state, as on the Mac; its summary is the Mac's.
 function toolCall(tool, openTools) {
-  const state = [tool.state === 'completed' ? null : TOOL_STATE[tool.state] || tool.state, duration(tool.durationMs)].filter(Boolean).join(' · ');
+  const state = [tool.shellExitCode != null ? `exit ${tool.shellExitCode}` : null, tool.state === 'completed' ? null : TOOL_STATE[tool.state] || tool.state, duration(tool.durationMs)].filter(Boolean).join(' · ');
   const details = disclosure({ class: 'tool', dataset: { toolId: tool.id } },
     h('summary', {},
       h('span', { class: 'tool-name' }, tool.name),
@@ -65,6 +66,8 @@ export function renderMessage(message, ui, { hidesReasoning = false, files = mes
     return h('article', { class: `msg msg-user${message.isSystemNotice ? ' msg-notice' : ''} state-${message.state}`, dataset: { id: message.id } },
       h('div', { class: 'bubble' }, message.content),
       fileList(message.attachments, { thumbnails: true }),
+      !message.isSystemNotice && message.state !== 'streaming' && message.content.trim()
+        ? h('div', { class: 'message-actions' }, copyButton(message.content, t('Copy Message'), 'copy-message')) : null,
       MESSAGE_STATE[message.state] ? h('div', { class: 'msg-meta' }, MESSAGE_STATE[message.state]) : null);
   }
 
@@ -78,9 +81,13 @@ export function renderMessage(message, ui, { hidesReasoning = false, files = mes
   }
   if (message.content) {
     const body = h('div', { class: 'markdown' });
-    fillMarkdown(body, message.content);
+    ui.generative ||= new Map();
+    fillMarkdown(body, message.content, { id: message.id, streaming, cache: ui.generative });
     article.append(body);
   }
+  const actions = [];
+  if (message.content) actions.push(copyButton(message.content, t('Copy Message'), 'copy-message'));
+  if (actions.length) article.append(h('div', { class: 'message-actions' }, actions));
   if (message.toolCalls.length) {
     article.append(h('div', { class: 'tools' }, message.toolCalls.flatMap((t) => toolCall(t, ui.openTools))));
   }

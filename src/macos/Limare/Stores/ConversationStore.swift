@@ -578,13 +578,13 @@ final class ConversationStore {
         }
     }
 
-    func restoreConversation(id: UUID) {
+    func restoreConversation(id: UUID, select: Bool = true) {
         guard let index = conversations.firstIndex(where: { $0.id == id }) else { return }
         conversations[index].archivedAt = nil
         conversations[index].updatedAt = Date()
         try? persistence.saveConversation(conversations[index])
         logs.info("Conversation", "Restored conversation '\(id)'.")
-        selectConversation(id: id)
+        if select { selectConversation(id: id) }
     }
 
     func deleteConversation(id: UUID) {

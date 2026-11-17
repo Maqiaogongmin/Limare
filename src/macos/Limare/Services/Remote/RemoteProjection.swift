@@ -38,7 +38,13 @@ enum RemoteProjection {
 
     static func toolCall(_ record: ToolCallRecord, files: FileLookup) -> RemoteToolCall {
         let input = truncated(record.input, limit: toolInputLimit)
-        let output = truncated(record.output, limit: toolOutputLimit)
+        let displayOutput: String
+        if case .shell(_, _, let output, _) = ToolCallDetail.resolve(record) {
+            displayOutput = output
+        } else {
+            displayOutput = record.output
+        }
+        let output = truncated(displayOutput, limit: toolOutputLimit)
         return RemoteToolCall(
             id: record.id,
             name: record.name,
@@ -48,8 +54,9 @@ enum RemoteProjection {
             inputTruncated: input.truncated,
             output: output.text,
             outputTruncated: output.truncated,
-            errorMessage: record.errorMessage,
+            errorMessage: record.mechanicalTerminalFact?.shellTerminal == nil ? record.errorMessage : nil,
             durationMs: record.durationMilliseconds,
+            shellExitCode: ShellRunPresentation.finishedNonzeroExitCode(record),
             summary: ToolCallPresentationResolver.resolveSummary(name: record.name, input: record.input),
             file: files.toolCallTarget(record).map {
                 let size = (try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize)
@@ -111,6 +118,7 @@ enum RemoteProjection {
             projectID: record.projectID,
             projectName: projectName,
             isPinned: record.isPinned,
+            isUnread: record.isUnread,
             run: run,
             hasPendingApproval: hasPendingApproval,
             hasPendingQuestion: hasPendingQuestion

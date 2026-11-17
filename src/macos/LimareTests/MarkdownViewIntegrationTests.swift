@@ -8,6 +8,20 @@ import Litext
 
 @MainActor
 final class MarkdownViewIntegrationTests: XCTestCase {
+    func testSelectionDragUsesEnclosingTranscriptScrollView() {
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 400, height: 150))
+        let view = LimareStreamView()
+        view.frame = NSRect(x: 0, y: 0, width: 400, height: 1000)
+        scroll.documentView = view
+        view.layoutSubtreeIfNeeded()
+        let label = view.textLabelView
+        let edge = label.convert(NSPoint(x: 100, y: scroll.documentVisibleRect.maxY + 30), from: view)
+        let before = scroll.documentVisibleRect.origin.y
+        view.textLabelView(label, didDragSelectionAt: edge)
+        XCTAssertTrue(view.trackedScrollView === scroll)
+        XCTAssertGreaterThan(scroll.documentVisibleRect.origin.y, before)
+    }
+
     func testQuotePopoverAndOriginalTextMenu() throws {
         let view = LimareStreamView()
         let theme = LimareMarkdownRepresentable.makeThemeFromPreferences()
@@ -1096,7 +1110,7 @@ final class MarkdownViewIntegrationTests: XCTestCase {
         let view = makeCodeView(lines: 3, theme: theme, language: "")
         let event = NSEvent.enterExitEvent(with: .mouseEntered, location: .zero, modifierFlags: [], timestamp: 0,
                                            windowNumber: 0, context: nil, eventNumber: 0, trackingNumber: 0, userData: nil)!
-        func settle() { RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.3)) }
+        func settle() { RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.55)) }
 
         XCTAssertTrue(view.languageLabel.isHidden, "No language: no label, and no </>")
         XCTAssertTrue(view.barView.isHidden)
@@ -1112,6 +1126,8 @@ final class MarkdownViewIntegrationTests: XCTestCase {
         XCTAssertEqual(view.barView.frame.maxX, view.bounds.width, accuracy: 0.5, "The controls sit at the top right")
 
         view.mouseExited(with: event)
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.1))
+        XCTAssertFalse(view.barView.isHidden, "Controls remain available while the pointer crosses them")
         settle()
         XCTAssertTrue(view.barView.isHidden)
         XCTAssertEqual(view.barView.alphaValue, 0, accuracy: 0.01)
