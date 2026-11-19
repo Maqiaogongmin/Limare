@@ -44,6 +44,9 @@ final class SkillStore {
         self.disabledKey = disabledKey
         self.scanner = scanner
         self.currentWorkspaceURL = workspaceURL
+        if scanner.usesDefaultGlobalRoots {
+            BuiltInExtensionBuilderSkill.syncIfNeeded()
+        }
         rescan(workspaceURL: workspaceURL)
     }
 
@@ -99,14 +102,38 @@ final class SkillStore {
 
     private func selectSkills(from enabled: [Skill], maximumCount: Int) -> [Skill] {
         guard maximumCount > 0 else { return [] }
-        let workspaceSkills = enabled.filter { $0.location.isWorkspace }
-        let globalSkills = enabled.filter { !$0.location.isWorkspace }
+        let hiddenSkills = enabled.filter(\.isHidden)
+        let workspaceSkills = enabled.filter { !$0.isHidden && $0.location.isWorkspace }
+        let globalSkills = enabled.filter { !$0.isHidden && !$0.location.isWorkspace }
         var selected: [Skill] = []
-        selected.append(contentsOf: workspaceSkills.prefix(maximumCount))
+        selected.append(contentsOf: hiddenSkills.prefix(maximumCount))
+        if selected.count < maximumCount {
+            selected.append(contentsOf: workspaceSkills.prefix(maximumCount - selected.count))
+        }
         if selected.count < maximumCount {
             selected.append(contentsOf: globalSkills.prefix(maximumCount - selected.count))
         }
         return selected
+    }
+
+    /// Returns true if `url` resides inside any active workspace or global skill scan root.
+    func isSkillFile(_ url: URL, workspaceURL: URL? = nil) -> Bool {
+        let candidateCanonical = url.resolvingSymlinksInPath().standardizedFileURL.path
+        let candidateStd = url.standardizedFileURL.path
+        var roots = scanner.allScanRoots(workspaceURL: workspaceURL ?? currentWorkspaceURL)
+        if let workspaceURL, let currentWorkspaceURL, workspaceURL != currentWorkspaceURL {
+            roots.append(contentsOf: SkillScanner.workspaceRoots(for: currentWorkspaceURL))
+        }
+        for root in roots {
+            let rootCanonical = root.resolvingSymlinksInPath().standardizedFileURL.path
+            let rootStd = root.standardizedFileURL.path
+            let prefixCanonical = rootCanonical.hasSuffix("/") ? rootCanonical : rootCanonical + "/"
+            let prefixStd = rootStd.hasSuffix("/") ? rootStd : rootStd + "/"
+            if candidateCanonical.hasPrefix(prefixCanonical) || candidateStd.hasPrefix(prefixStd) {
+                return true
+            }
+        }
+        return false
     }
 
     func runSnapshot(runID: UUID? = nil) -> RunSnapshot {

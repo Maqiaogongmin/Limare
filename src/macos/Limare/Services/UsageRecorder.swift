@@ -15,12 +15,14 @@ struct UsageTotals: Sendable {
     var input: Int?
     var output: Int?
     var cacheRead: Int?
+    var cacheMeasuredInput = 0
+    var cacheMeasuredRead = 0
     var cacheWrite: Int?
     var reasoning: Int?
     var toolUsePrompt: Int?
     var incomplete = false
 
-    mutating func add(_ usage: NormalizedUsage) {
+    mutating func add(_ usage: NormalizedUsage, cacheMeasurementComplete: Bool = true) {
         requests += 1
         func sum(_ a: Int?, _ b: Int?) -> Int? {
             guard let b else { return a }
@@ -28,6 +30,11 @@ struct UsageTotals: Sendable {
         }
         input = sum(input, usage.input); output = sum(output, usage.output)
         cacheRead = sum(cacheRead, usage.cacheRead); cacheWrite = sum(cacheWrite, usage.cacheWrite)
+        if cacheMeasurementComplete, let input = usage.input, let read = usage.cacheRead,
+           input >= 0, read >= 0, read <= input {
+            cacheMeasuredInput += input
+            cacheMeasuredRead += read
+        }
         reasoning = sum(reasoning, usage.reasoning); toolUsePrompt = sum(toolUsePrompt, usage.toolUsePrompt)
         incomplete = incomplete || usage.status != .complete
     }
@@ -167,7 +174,8 @@ actor UsageRecorder {
         var statement: OpaquePointer?
         let sql = """
             SELECT provider_id, provider_name_snapshot, model_id, model_name_snapshot, started_at,
-                   input_total, output_total, cache_read, cache_write, reasoning, tool_use_prompt, provider_total, usage_status
+                   input_total, output_total, cache_read, cache_write, reasoning, tool_use_prompt, provider_total, usage_status,
+                   attempt_count
             FROM usage_request WHERE (?1 IS NULL OR started_at >= ?1)
               AND (?2 IS NULL OR usage_kind = ?2) AND (?3 IS NULL OR provider_id = ?3)
             ORDER BY started_at
@@ -192,12 +200,13 @@ actor UsageRecorder {
             let usage = NormalizedUsage(input: number(5), output: number(6), cacheRead: number(7), cacheWrite: number(8),
                 reasoning: number(9), toolUsePrompt: number(10), providerTotal: number(11),
                 status: UsageStatus(rawValue: string(12)) ?? .unknown)
-            report.totals.add(usage)
+            let cacheMeasurementComplete = usage.status == .complete && sqlite3_column_int(statement, 13) == 1
+            report.totals.add(usage, cacheMeasurementComplete: cacheMeasurementComplete)
             let key = [string(0), string(1), string(2), string(3)].joined(separator: "\u{1f}")
             var group = groups[key] ?? UsageGroup(id: key, provider: string(1), model: string(3), totals: UsageTotals())
-            group.totals.add(usage); groups[key] = group
+            group.totals.add(usage, cacheMeasurementComplete: cacheMeasurementComplete); groups[key] = group
             let day = calendar.startOfDay(for: Date(timeIntervalSince1970: sqlite3_column_double(statement, 4)))
-            var dayTotals = days[day] ?? UsageTotals(); dayTotals.add(usage); days[day] = dayTotals
+            var dayTotals = days[day] ?? UsageTotals(); dayTotals.add(usage, cacheMeasurementComplete: cacheMeasurementComplete); days[day] = dayTotals
         }
         report.groups = groups.values.sorted { $0.totals.requests > $1.totals.requests }
         report.days = days.map { UsageDay(date: $0.key, totals: $0.value) }.sorted { $0.date < $1.date }

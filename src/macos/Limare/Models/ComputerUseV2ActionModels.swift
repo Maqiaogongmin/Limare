@@ -71,6 +71,10 @@ public struct ComputerUseV2ActionInput: Sendable, Equatable {
     public let toElement: String?
     public let durationMs: Int?
     public let deliveryMode: String?
+    public let includeScreenshot: Bool
+    public let query: String?
+    public let x: Double?
+    public let y: Double?
 
     public init(
         action: ComputerUseV2ActionKind,
@@ -87,7 +91,11 @@ public struct ComputerUseV2ActionInput: Sendable, Equatable {
         fromElement: String? = nil,
         toElement: String? = nil,
         durationMs: Int? = nil,
-        deliveryMode: String? = nil
+        deliveryMode: String? = nil,
+        includeScreenshot: Bool = false,
+        query: String? = nil,
+        x: Double? = nil,
+        y: Double? = nil
     ) {
         self.action = action
         self.targetApp = targetApp
@@ -104,6 +112,10 @@ public struct ComputerUseV2ActionInput: Sendable, Equatable {
         self.toElement = toElement
         self.durationMs = durationMs
         self.deliveryMode = deliveryMode
+        self.includeScreenshot = includeScreenshot
+        self.query = query
+        self.x = x
+        self.y = y
     }
 
     /// Parses and strictly validates input arguments from a JSON string.
@@ -141,6 +153,9 @@ public struct ComputerUseV2ActionInput: Sendable, Equatable {
         let toElement = dict["to_element"] as? String
         let durationMs = dict["duration_ms"] as? Int ?? (dict["duration_ms"] as? NSNumber)?.intValue
         let deliveryMode = dict["delivery_mode"] as? String ?? dict["mode"] as? String
+        guard deliveryMode == nil || deliveryMode == "background" else {
+            throw ComputerUseV2ActionValidationError.invalidParameterValue("Computer Use works in the background. Please perform any foreground step yourself.")
+        }
 
         return ComputerUseV2ActionInput(
             action: kind,
@@ -157,7 +172,11 @@ public struct ComputerUseV2ActionInput: Sendable, Equatable {
             fromElement: fromElement,
             toElement: toElement,
             durationMs: durationMs,
-            deliveryMode: deliveryMode
+            deliveryMode: deliveryMode,
+            includeScreenshot: dict["include_screenshot"] as? Bool ?? false,
+            query: dict["query"] as? String,
+            x: (dict["x"] as? NSNumber)?.doubleValue,
+            y: (dict["y"] as? NSNumber)?.doubleValue
         )
     }
 }
@@ -186,6 +205,7 @@ public struct ComputerUseV2ActionResult: Sendable {
     public let osEventStarted: Bool
     public let transientInputReleased: Bool
     public let releaseFailure: String?
+    public let screenshot: ComputerUseScreenshot?
 
     public init(
         status: ComputerUseV2ActionResultStatus,
@@ -196,7 +216,8 @@ public struct ComputerUseV2ActionResult: Sendable {
         receipt: ComputerUseDriverActionResult? = nil,
         osEventStarted: Bool = false,
         transientInputReleased: Bool = true,
-        releaseFailure: String? = nil
+        releaseFailure: String? = nil,
+        screenshot: ComputerUseScreenshot? = nil
     ) {
         self.status = status
         self.actionKind = actionKind
@@ -207,6 +228,7 @@ public struct ComputerUseV2ActionResult: Sendable {
         self.osEventStarted = osEventStarted
         self.transientInputReleased = transientInputReleased
         self.releaseFailure = releaseFailure
+        self.screenshot = screenshot
     }
 
     public var isSuccess: Bool {
@@ -240,7 +262,7 @@ public struct ComputerUseV2ToolDefinition: Sendable, Equatable {
 
     public static let shared = ComputerUseV2ToolDefinition(
         name: "computer_use",
-        description: "Operate macOS apps through their accessibility tree, in the background by default. launch_app opens an app and returns its window; capture observes a window. Every result includes the window's current elements with references (e1, e2, ...); use the references from the most recent result in the next action. Each app asks the user for permission once per conversation. Password managers, Keychain, System Settings and password fields are off limits: ask the user to do those steps. list_windows needs a pid or target_app. If an app is launched but has no window yet (launchedAwaitingWindow), use capture(target_app) instead of launching again.",
+        description: "Operate macOS apps in the background using accessibility elements or a window screenshot. launch_app opens an app; capture observes its window. Use references (e1, e2, ...) from the most recent result. Request include_screenshot on capture to see the window, then use x and y from that image only when an element is unavailable. A screenshot is valid for one click. Each app asks the user for permission once per conversation. Password managers, Keychain, System Settings and password fields are off limits: ask the user to do those steps. list_windows needs a pid or target_app. If an app launches without a window, use capture(target_app) instead of launching again.",
         properties: [
             "action": .init(type: "string", description: "The action kind: launch_app, list_apps, list_windows, capture, click, double_click, right_click, type, key, set_value, scroll, drag, wait."),
             "target_app": .init(type: "string", description: "Target application bundle identifier (e.g. 'com.apple.calculator') or application name."),
@@ -256,7 +278,10 @@ public struct ComputerUseV2ToolDefinition: Sendable, Equatable {
             "from_element": .init(type: "string", description: "Source element reference for drag (or use element)."),
             "to_element": .init(type: "string", description: "Destination element reference for drag."),
             "duration_ms": .init(type: "number", description: "Duration in milliseconds for wait (default 1000)."),
-            "delivery_mode": .init(type: "string", description: "'background' (default) acts without stealing focus; 'foreground' brings the window to the front first."),
+            "include_screenshot": .init(type: "boolean", description: "For capture: include an image of the target window for visual inspection."),
+            "query": .init(type: "string", description: "For capture: find accessibility elements containing this text."),
+            "x": .init(type: "number", description: "For click: horizontal pixel in the latest screenshot returned to you, from the left."),
+            "y": .init(type: "number", description: "For click: vertical pixel in the latest screenshot returned to you, from the top."),
         ],
         required: ["action"]
     )

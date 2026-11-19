@@ -278,7 +278,8 @@ final class HookSessionCoordinator {
         conversationID: UUID,
         runID: UUID,
         call: ProviderToolCall,
-        model: String? = nil
+        model: String? = nil,
+        enqueueContext: Bool = true
     ) async -> HookAggregatedResult {
         guard let state = runStates[conversationID], state.runID == runID else { return .init() }
         let payload = toolPayload(event: .preToolUse, conversationID: conversationID, state: state, call: call, model: model)
@@ -292,7 +293,7 @@ final class HookSessionCoordinator {
         )
         hookStore.recordExecutions(result.executions)
         guard var current = runStates[conversationID], current.runID == runID else { return .init() }
-        appendPendingContext(result.additionalContext, executions: result.executions, to: &current)
+        if enqueueContext { appendPendingContext(result.additionalContext, executions: result.executions, to: &current) }
         runStates[conversationID] = current
         return result
     }
@@ -304,7 +305,8 @@ final class HookSessionCoordinator {
         runID: UUID,
         call: ProviderToolCall,
         outcome: ToolExecutionOutcome,
-        model: String? = nil
+        model: String? = nil,
+        enqueueContext: Bool = true
     ) async -> HookAggregatedResult {
         guard let state = runStates[conversationID], state.runID == runID else { return .init() }
         let event: HookEventName = outcome.isError ? .postToolUseFailure : .postToolUse
@@ -319,7 +321,7 @@ final class HookSessionCoordinator {
         )
         hookStore.recordExecutions(result.executions)
         guard var current = runStates[conversationID], current.runID == runID else { return .init() }
-        appendPendingContext(result.additionalContext, executions: result.executions, to: &current)
+        if enqueueContext { appendPendingContext(result.additionalContext, executions: result.executions, to: &current) }
         runStates[conversationID] = current
         return result
     }

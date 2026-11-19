@@ -164,13 +164,15 @@ struct ChatView: View {
                 if isEmpty {
                     Spacer(minLength: AppSpacing.large)
                     EmptyConversationView(isCompact: isCompact)
+                    if let errorMessage = window.chat.errorMessage {
+                        ConversationErrorLine(message: errorMessage) { window.chat.errorMessage = nil }
+                            .frame(maxWidth: AppLayout.transcriptMaximumWidth)
+                            .padding(.horizontal, AppSpacing.chatHorizontal)
+                    }
                 } else {
                     conversationContent
                 }
 
-                if let errorMessage = window.chat.errorMessage {
-                    ChatErrorBanner(message: errorMessage)
-                }
 
                 if let id = window.conversationID, let notice = appState.worktrees.notices[id] {
                     HStack(alignment: .top) {
@@ -235,6 +237,8 @@ struct ChatView: View {
         let conversationID = window.conversationID
         return MessageListView(
             messages: window.chat.messages,
+            errorMessage: window.chat.errorMessage,
+            onDismissError: { window.chat.errorMessage = nil },
             retractableMessageID: window.chat.retractableUserMessageID,
             onRetract: { pendingUndo = UndoRequest(messageID: $0) },
             compactionMarkers: window.conversation?.compactionMarkers ?? [],
@@ -379,47 +383,6 @@ private struct EmptyConversationView: View {
         .padding(.bottom, AppSpacing.emptyStateGreetingGap - AppSpacing.small)
         .frame(maxWidth: .infinity)
         .transition(.opacity)
-    }
-}
-
-private struct ChatErrorBanner: View {
-    @Environment(AppState.self) private var appState
-    @Environment(WindowSession.self) private var window
-    let message: String
-
-    var body: some View {
-        HStack(alignment: .center, spacing: AppSpacing.small) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(AppColors.statusError)
-
-            Text(message)
-                .font(.subheadline)
-                .foregroundStyle(Color.primary)
-                .lineLimit(3)
-
-            Spacer()
-
-            Button {
-                window.chat.errorMessage = nil
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(AppSpacing.xxSmall)
-            }
-            .buttonStyle(.plain)
-            .help("Dismiss error")
-        }
-        .padding(.horizontal, AppSpacing.chatHorizontal)
-        .padding(.vertical, AppSpacing.xSmall)
-        .background(AppColors.statusError.opacity(0.08))
-        .overlay(
-            Rectangle()
-                .frame(height: 1)
-                .foregroundStyle(AppColors.statusError.opacity(0.2)),
-            alignment: .bottom
-        )
     }
 }
 

@@ -27,6 +27,7 @@ struct ChatInferenceOptions: Sendable, Equatable {
     var groupContextLimitTokens: Int?
     var providerID: UUID?
     var apiFormat: ProviderAPIFormat?
+    var preserveReasoningHistory: Bool
     var adapterDisabledNativeVision: Bool
     var usageKind: UsageKind
 
@@ -46,6 +47,7 @@ struct ChatInferenceOptions: Sendable, Equatable {
         self.groupContextLimitTokens = groupContextLimitTokens
         self.providerID = providerID
         self.apiFormat = apiFormat
+        self.preserveReasoningHistory = false
         self.adapterDisabledNativeVision = adapterDisabledNativeVision
         self.usageKind = usageKind
     }
@@ -65,6 +67,9 @@ struct ChatInferenceOptions: Sendable, Equatable {
         self.groupContextLimitTokens = groupContextLimitTokens
         self.providerID = provider?.id
         self.apiFormat = provider?.apiFormat
+        self.preserveReasoningHistory = provider?.isDeepSeekOfficial == true
+            && provider?.apiFormat == .chatCompletions
+            && ["deepseek-flash", "deepseek-v4-pro"].contains(model?.id.lowercased() ?? "")
         self.adapterDisabledNativeVision = adapterDisabledNativeVision
         self.usageKind = usageKind
     }

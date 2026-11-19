@@ -1,6 +1,231 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Select" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择" } } }
+    },
+    "Select All" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "全选" } } }
+    },
+    "Enable" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "开启" } } }
+    },
+    "Disable" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "关闭" } } }
+    },
+    "Remove Hook?" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除 Hook？" } } }
+    },
+    "Remove Hook" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除 Hook" } } }
+    },
+    "Remove “%@” from Limare? Its files will remain on disk." : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "从 Limare 中移除“%@”？它的文件仍会保留在磁盘上。" } } }
+    },
+    "%lld selected" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已选择 %lld 项" } } }
+    },
+    "Batch" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "批量操作" } } }
+    },
+    "Cache hit rate" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "缓存命中率" } } }
+    },
+    "Clear Selection" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清除选择" } } }
+    },
+    "Delete MCP Connection?" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "删除 MCP 连接？" } } }
+    },
+    "Delete…" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "删除…" } } }
+    },
+    "Disable All Shown" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "关闭所有显示项" } } }
+    },
+    "Disable Selected" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "关闭所选项" } } }
+    },
+    "Done Selecting" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "完成选择" } } }
+    },
+    "Enable All Shown" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "开启所有显示项" } } }
+    },
+    "Enable Selected" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "开启所选项" } } }
+    },
+    "Provider / Model" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "提供商 / 模型" } } }
+    },
+    "Review these hooks before enabling: %@" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请先审核这些 Hook，再开启：%@" } } }
+    },
+    "Select All Shown" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择所有显示项" } } }
+    },
+    "Select Extensions" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择扩展" } } }
+    },
+    "Sort by" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "排序方式" } } }
+    },
+    "The connection and its saved credentials will be removed." : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接及其保存的凭据将被删除。" } } }
+    },
+    "Total tokens" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Token 总数" } } }
+    },
+    "%@ tok/s" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ tok/s" } } }
+    },
+    "Cache hit: %@" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "缓存命中：%@" } } }
+    },
+    "Current Project" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前项目" } } }
+    },
+    "Search extensions…" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "搜索扩展…" } } }
+    },
+    "Rescan skills, reload hooks, and reconnect enabled MCP servers" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重新扫描技能、重载钩子并重新连接已启用的 MCP 服务" } } }
+    },
+    "Ask Limare to Configure New Extension…" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "让 Limare 在对话中配置新扩展…" } } }
+    },
+    "Add MCP Connection Manually…" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "手动添加 MCP 连接…" } } }
+    },
+    "Open Global Extensions Folder in Finder" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在访达中打开全局扩展目录" } } }
+    },
+    "No Matching Extensions" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无匹配的扩展" } } }
+    },
+    "No extensions match the selected filter." : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有符合所选筛选条件的扩展。" } } }
+    },
+    "No extensions match “%@”." : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有匹配“%@”的扩展。" } } }
+    },
+    "Connect any tool by asking Limare" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通过与 Limare 对话接入任意工具" } } }
+    },
+    "Need web scraping, GitHub, email, or another CLI/API? Describe what you want in chat and Limare will set it up as an Extension Card." : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要网页抓取、GitHub、邮箱或其他命令行/API 工具？在聊天中描述你的需求，Limare 会自动为你配置并生成扩展卡片。" } } }
+    },
+    "Configure in Chat" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "去对话配置" } } }
+    },
+    "I want to connect an external tool: " : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "我想接入一个外部工具：" } } }
+    },
+    "Needs Screen Recording permission" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要屏幕录制权限" } } }
+    },
+    "Needs Accessibility permission" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要辅助功能权限" } } }
+    },
+    "Runtime unavailable" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "运行环境不可用" } } }
+    },
+    "Observe the screen and control Mac apps directly when enabled." : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "开启后可直接观察屏幕并操控 Mac 应用。" } } }
+    },
+    "Built-in" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "内置" } } }
+    },
+    "Open System Settings and check my battery health" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开系统设置并查看我的电池健康状态" } } }
+    },
+    "Inspect the currently active app window and summarize what is on screen" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "查看当前活动应用窗口并总结屏幕上的内容" } } }
+    },
+    "Remote HTTP MCP server" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "远程 HTTP MCP 服务" } } }
+    },
+    "Local stdio MCP server" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本地 stdio MCP 服务" } } }
+    },
+    "Needs trust review" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要信任审核" } } }
+    },
+    "Automation hook (%lld handlers)" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动化钩子（%lld 个处理器）" } } }
+    },
+    "Needs security review" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要安全审查" } } }
+    },
+    "Credentials required" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要配置凭据" } } }
+    },
+    "Uninstall “%@”?" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "卸载“%@”？" } } }
+    },
+    "Move to Trash" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移到废纸篓" } } }
+    },
+    "This moves the extension folder to the Trash. Any connected MCP servers can be managed separately if needed." : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这会将该扩展文件夹移到废纸篓。如有已连接的 MCP 服务，可按需单独管理。" } } }
+    },
+    "Extension no longer available." : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "该扩展已不可用。" } } }
+    },
+    "Open System Settings…" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开系统设置…" } } }
+    },
+    "Configure Credentials…" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "配置凭据…" } } }
+    },
+    "Review Trust…" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "审核信任…" } } }
+    },
+    "Try asking" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "试着这样问" } } }
+    },
+    "macOS Permissions" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "macOS 权限" } } }
+    },
+    "Screen Recording" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "屏幕录制" } } }
+    },
+    "Accessibility" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "辅助功能" } } }
+    },
+    "Granted" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已授权" } } }
+    },
+    "Connected Services (%lld)" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接的服务 (%lld)" } } }
+    },
+    "Included Skills (1)" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "包含的技能 (1)" } } }
+    },
+    "Inspect SKILL.md instructions and files" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "查看 SKILL.md 工作流指令与源文件" } } }
+    },
+    "Automation Hooks (%lld)" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动化钩子 (%lld)" } } }
+    },
+    "%lld handlers" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%lld 个处理器" } } }
+    },
+    "Uninstall…" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "卸载…" } } }
+    },
+    "Remove Hook…" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除钩子…" } } }
+    },
+    "Requests count model calls, including tool loops and retries that start a new call. Cache figures use requests with complete cache data." : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请求数按模型调用统计，工具循环和新发起的重试可能产生多次调用。缓存数据按记录完整的请求计算。" } } }
+    },
+    "Cache hit: %@ (%@)" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "缓存命中：%@（%@）" } } }
+    },
+    "Cache miss: %@" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未命中：%@" } } }
+    },
     "Some content could not be displayed." : {
       "comment" : "Remote Access page (RemoteWeb)",
       "extractionState" : "manual",

@@ -134,6 +134,7 @@ struct ThinkingResolveContext: Sendable {
     var usesUnifiedReasoningEffort: Bool
     var isMistral: Bool
     var isDashScope: Bool
+    var isDeepSeekOfficial: Bool
     var offEffort: String?
     var userRules: [ThinkingRule]
 
@@ -150,6 +151,7 @@ struct ThinkingResolveContext: Sendable {
         usesUnifiedReasoningEffort: Bool = false,
         isMistral: Bool = false,
         isDashScope: Bool = false,
+        isDeepSeekOfficial: Bool = false,
         offEffort: String? = nil,
         userRules: [ThinkingRule] = []
     ) {
@@ -165,6 +167,7 @@ struct ThinkingResolveContext: Sendable {
         self.usesUnifiedReasoningEffort = usesUnifiedReasoningEffort
         self.isMistral = isMistral
         self.isDashScope = isDashScope
+        self.isDeepSeekOfficial = isDeepSeekOfficial
         self.offEffort = offEffort
         self.userRules = userRules
     }

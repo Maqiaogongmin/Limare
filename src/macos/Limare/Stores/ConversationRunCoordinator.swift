@@ -78,6 +78,8 @@ final class ConversationRunCoordinator {
     private(set) var compactions: [UUID: ManualCompaction] = [:]
     /// The context budget of each conversation's latest request, for display only.
     private(set) var contextUsage: [UUID: ContextUsageSnapshot] = [:]
+    /// Provider-reported statistics collected in each conversation while the app is open.
+    private(set) var conversationPerformance: [UUID: ConversationPerformance] = [:]
     private(set) var recoveryStore: RuntimeRecoveryStore?
 
     @ObservationIgnored
@@ -2046,6 +2048,8 @@ final class ConversationRunCoordinator {
         onToolExecutionStarted: @escaping @MainActor () -> Void = {},
         onToolOutcomeCommitted: (@MainActor (Int) -> Void)? = nil
     ) async throws -> AgentLoopResult {
+        // Never persist original browser inputs or shell environment values.
+        var wireToolArguments: [String: String] = [:]
         let initialChatRequests = Self.buildChatRequestHistory(
             messages: conversationMessages(for: conversationID),
             systemPrompt: "",
@@ -2093,6 +2097,7 @@ final class ConversationRunCoordinator {
             resolvedProviderID: provider.id,
             resolvedProviderDisplayName: provider.name,
             resolvedModelID: modelID,
+            providerFormat: provider.apiFormat,
             onToolExecutionStartedHandler: onToolExecutionStarted
         )
 
@@ -2269,7 +2274,8 @@ final class ConversationRunCoordinator {
                         let baseHistory = Self.buildChatRequestHistory(
                             messages: working.messages,
                             systemPrompt: systemPrompt,
-                            fallback: fallbackConversation
+                            fallback: fallbackConversation,
+                            wireToolArguments: wireToolArguments
                         )
                         return AgentLoopEngine.WorkingContext(messages: baseHistory,
                                                               outputRoom: EffectiveContextLimits.outputRoom(for: working.budget))
@@ -2313,6 +2319,7 @@ final class ConversationRunCoordinator {
                     return
                 }
                 for call in callsToCancel {
+                    wireToolArguments[call.id] = call.function.arguments
                     let recordID = observer.recordID(for: call.id)
                     if let recordIndex = msgs[msgIndex].toolCalls.firstIndex(where: { ($0.id == recordID) || ($0.providerCallID == call.id) }) {
                         msgs[msgIndex].toolCalls[recordIndex].state = .cancelled
@@ -2382,6 +2389,7 @@ final class ConversationRunCoordinator {
                 guard self.hasMutationAuthority(conversationID: conversationID, runID: runID) else {
                     return ToolExecutionOutcome(content: "Execution cancelled", isError: true, approvalState: .notRequired, durationMilliseconds: 0)
                 }
+                wireToolArguments[call.id] = call.function.arguments
                 // Subagent policy: new delegated work is admitted only when the provider turn that
                 // issued this call advertised delegate_task. A call issued under an advertising turn
                 // is honoured even if the user turned Subagent off afterwards.
@@ -2429,6 +2437,7 @@ final class ConversationRunCoordinator {
                 }
                 let outcome: ToolExecutionOutcome
                 var attachedInstructions = false
+                var hookContextSuffix: String?
                 if delegationNotOffered {
                     self.runtimeEvents.record(conversationID: conversationID, runID: runID, domain: .tool,
                         kind: "delegation.admissionNotOffered", severity: .warning,
@@ -2451,6 +2460,9 @@ final class ConversationRunCoordinator {
                                                            workspaceURL: scopedWorkspace.url)
                         : executed
                     attachedInstructions = outcome.content != executed.content
+                    if let start = executed.content.range(of: "\n\n<system-reminder>\n", options: .backwards) {
+                        hookContextSuffix = String(executed.content[start.lowerBound...])
+                    }
                 }
                 // Post-await revalidation: ensure run still owns mutation authority before committing outcome
                 guard self.hasMutationAuthority(conversationID: conversationID, runID: runID) else {
@@ -2475,6 +2487,10 @@ final class ConversationRunCoordinator {
                     if attachedInstructions {
                         // The streamed update already filled the record; it shows what the model read.
                         postToolMsgs[msgIndex].toolCalls[recordIndex].output = outcome.content
+                        postToolMsgs[msgIndex].toolCalls[recordIndex].resultParts = outcome.resultParts
+                    } else if let hookContextSuffix {
+                        // Preserve the tool's terminal output; append only the hook's model context.
+                        postToolMsgs[msgIndex].toolCalls[recordIndex].output += hookContextSuffix
                         postToolMsgs[msgIndex].toolCalls[recordIndex].resultParts = outcome.resultParts
                     }
                     postToolMsgs[msgIndex].toolCalls[recordIndex].owningRunID = runID
@@ -2507,7 +2523,19 @@ final class ConversationRunCoordinator {
             throw error
         }
 
-        publish(.providerHistoryUpdated(conversationID: conversationID, history: loopResult.conversation))
+        let displayHistory = loopResult.conversation.map { message in
+            guard message.role == "assistant", let calls = message.toolCalls else { return message }
+            return ChatRequestMessage.assistant(
+                content: message.content?.textValue ?? "",
+                reasoningContent: message.reasoningContent,
+                toolCalls: calls.map { call in
+                    ProviderToolCall(id: call.id, function: .init(name: call.function.name, arguments: ChatStore.sanitizedToolInput(call)))
+                },
+                responsesReasoningEcho: message.responsesReasoningEcho,
+                nativeProtocolMetadata: message.nativeProtocolMetadata
+            )
+        }
+        publish(.providerHistoryUpdated(conversationID: conversationID, history: displayHistory))
         return loopResult
     }
 
@@ -3324,6 +3352,21 @@ final class ConversationRunCoordinator {
     /// More MCP tools than this are deferred behind tool_search.
     static let mcpDeferralThreshold = 15
 
+    /// Recover loaded tools from successful search results still present in the conversation.
+    static func loadedDeferredToolNames(in messages: [ChatMessage]) -> Set<String> {
+        var names: Set<String> = []
+        for call in messages.flatMap(\.toolCalls) where call.name == "tool_search" && call.state == .completed {
+            for line in call.output.split(separator: "\n").dropFirst() {
+                if let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                   let function = object["function"] as? [String: Any],
+                   let name = function["name"] as? String {
+                    names.insert(name)
+                }
+            }
+        }
+        return names
+    }
+
     /// tool_search: "select:a,b" loads those tools; other queries load the best keyword matches.
     func runToolSearch(_ call: ProviderToolCall, runID: UUID) -> ToolExecutionOutcome {
         struct Arguments: Decodable { let query: String; let max_results: Int? }
@@ -3350,8 +3393,10 @@ final class ConversationRunCoordinator {
                                         isError: true, approvalState: .notRequired, durationMilliseconds: 0)
         }
         runLoadedDeferredTools[runID, default: []].formUnion(matches.map(\.function.name))
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
         let schemas = matches.compactMap { definition -> String? in
-            guard let data = try? JSONEncoder().encode(definition) else { return nil }
+            guard let data = try? encoder.encode(definition) else { return nil }
             return String(decoding: data, as: UTF8.self)
         }
         return ToolExecutionOutcome(content: "Loaded \(matches.count) tool(s); they can be called from your next step:\n" + schemas.joined(separator: "\n"),
@@ -3548,12 +3593,18 @@ No tools, shell, browser, or file system access are available for this turn. Res
         if mcpToolDefs.count > Self.mcpDeferralThreshold {
             // Claude Code's tool search: past a handful of MCP tools, only their names are listed
             // and tool_search loads the ones the task needs into the following requests.
-            let loaded = runID.flatMap { runLoadedDeferredTools[$0] } ?? []
+            let retained = contextLifecycle.retainedMessages(
+                conversationID: conversationID,
+                messages: conversationMessages(for: conversationID),
+                protectionHints: runID.flatMap { runProtectionHints[$0] } ?? ContextProtectionHints()
+            )
+            let loaded = Self.loadedDeferredToolNames(in: retained)
+                .union(runID.flatMap { runLoadedDeferredTools[$0] } ?? [])
             toolDefinitions.append(contentsOf: mcpToolDefs.filter { loaded.contains($0.function.name) })
             toolDefinitions.append(HarnessToolDefinitions.toolSearchDefinition)
-            let waiting = mcpToolDefs.map(\.function.name).filter { !loaded.contains($0) }
-            if !waiting.isEmpty {
-                prompt += "\n\n# DEFERRED TOOLS\nThese MCP tools are available but not loaded. Load one with tool_search (query \"select:<name>\" or keywords) before calling it: \(waiting.joined(separator: ", "))."
+            let searchable = mcpToolDefs.map(\.function.name)
+            if !searchable.isEmpty {
+                prompt += "\n\n# DEFERRED TOOLS\nThese MCP tools can be loaded with tool_search (query \"select:<name>\" or keywords) before calling them: \(searchable.joined(separator: ", "))."
             }
         } else {
             toolDefinitions.append(contentsOf: mcpToolDefs)
@@ -3611,7 +3662,7 @@ No tools, shell, browser, or file system access are available for this turn. Res
             prompt += "\n\n" + Self.delegationPolicy
         }
         if toolDefinitions.contains(where: { $0.function.name == "computer_use" }) {
-            prompt += "\n\n# COMPUTER USE POLICY\nUse computer_use to operate macOS apps. launch_app (or capture with target_app) binds an app window; every result shows the window's current elements with references to use in your next action. Prefer background delivery; use delivery_mode foreground only when an action needs focus. Look at the result before reporting what happened. Before anything consequential the user did not clearly ask for (sending, purchasing, deleting), ask the user first. Never handle passwords, Keychain, password managers or security dialogs; ask the user to do those steps."
+            prompt += "\n\n# COMPUTER USE POLICY\nUse an existing connector, app API or CLI when appropriate; use browser_use for web tasks when its session fits. Honor a user's request to use a particular app or window. computer_use operates macOS windows in the background. Use element references first; capture with include_screenshot when visual inspection is needed, and click screenshot coordinates only when the element is unavailable. If a background action cannot complete, explain and ask the user to perform that step. Do not switch the user's foreground app. Avoid browser shortcuts such as Cmd-L and tab switching, which can visibly activate or change the user's browser; navigate through browser_use when its session fits. Look at the result before reporting what happened. Before anything consequential the user did not clearly ask for (sending, purchasing, deleting), ask the user first. Never handle passwords, Keychain, password managers or security dialogs; ask the user to do those steps."
         }
         if let runID, let binding = subagentRuns[runID], let task = subagents?.store.tasks[binding.taskID] {
             toolDefinitions = toolDefinitions.filter {
@@ -3796,7 +3847,8 @@ No tools, shell, browser, or file system access are available for this turn. Res
     static func buildChatRequestHistory(
         messages msgs: [ChatMessage],
         systemPrompt: String,
-        fallback: [ChatRequestMessage]? = nil
+        fallback: [ChatRequestMessage]? = nil,
+        wireToolArguments: [String: String] = [:]
     ) -> [ChatRequestMessage] {
         let systemMsg = ChatRequestMessage(role: "system", content: systemPrompt)
         guard !msgs.isEmpty else {
@@ -3836,7 +3888,7 @@ No tools, shell, browser, or file system access are available for this turn. Res
                 let providerCalls = validToolCalls.map { tc in
                     ProviderToolCall(
                         id: tc.providerCallID,
-                        function: .init(name: tc.name, arguments: tc.input)
+                        function: .init(name: tc.name, arguments: wireToolArguments[tc.providerCallID] ?? tc.input)
                     )
                 }
                 // A partially accumulated tool record can be filtered above.
@@ -3999,6 +4051,14 @@ No tools, shell, browser, or file system access are available for this turn. Res
 
     func forgetContextUsage(conversationID: UUID) {
         contextUsage.removeValue(forKey: conversationID)
+        conversationPerformance.removeValue(forKey: conversationID)
+    }
+
+    fileprivate func recordConversationPerformance(conversationID: UUID, runID: UUID, usage: NormalizedUsage, decodeDuration: TimeInterval?) {
+        guard activeRuns[conversationID]?.id == runID else { return }
+        var performance = conversationPerformance[conversationID] ?? ConversationPerformance()
+        performance.add(usage, decodeDuration: decodeDuration)
+        conversationPerformance[conversationID] = performance
     }
 
     func handleUsageTelemetry(
@@ -4043,6 +4103,7 @@ private final class CoordinatorLoopObserver: AgentLoopObserver {
     let resolvedProviderID: UUID?
     let resolvedProviderDisplayName: String?
     let resolvedModelID: String?
+    let providerFormat: ProviderAPIFormat
     let onToolExecutionStartedHandler: @MainActor () -> Void
     var currentAssistantID: UUID?
     private var recordIDsByCallID: [String: UUID] = [:]
@@ -4062,6 +4123,7 @@ private final class CoordinatorLoopObserver: AgentLoopObserver {
         resolvedProviderID: UUID? = nil,
         resolvedProviderDisplayName: String? = nil,
         resolvedModelID: String? = nil,
+        providerFormat: ProviderAPIFormat,
         onToolExecutionStartedHandler: @escaping @MainActor () -> Void
     ) {
         self.coordinator = coordinator
@@ -4070,6 +4132,7 @@ private final class CoordinatorLoopObserver: AgentLoopObserver {
         self.resolvedProviderID = resolvedProviderID
         self.resolvedProviderDisplayName = resolvedProviderDisplayName
         self.resolvedModelID = resolvedModelID
+        self.providerFormat = providerFormat
         self.onToolExecutionStartedHandler = onToolExecutionStartedHandler
     }
 
@@ -4083,6 +4146,11 @@ private final class CoordinatorLoopObserver: AgentLoopObserver {
         if outcome != "retrying" { endWait() }
         guard let started = requestStartedAt else { return }
         requestStartedAt = nil
+        if let lastUsage {
+            let duration = firstOutputAt.map { Date().timeIntervalSince($0) }
+            coordinator?.recordConversationPerformance(conversationID: conversationID, runID: runID,
+                usage: .from(lastUsage, format: providerFormat, finished: outcome == "completed"), decodeDuration: duration)
+        }
         var metadata = extra
         metadata["outcome"] = outcome
         metadata["durationMilliseconds"] = "\(Int(Date().timeIntervalSince(started) * 1000))"
@@ -4258,6 +4326,28 @@ private final class CoordinatorLoopObserver: AgentLoopObserver {
             usage: usage
         )
     }
+}
+
+/// Session averages use only requests with the corresponding provider-reported values.
+struct ConversationPerformance: Equatable {
+    private(set) var outputTokens = 0
+    private(set) var decodeDuration: TimeInterval = 0
+    private(set) var measuredInputTokens = 0
+    private(set) var cacheReadTokens = 0
+
+    mutating func add(_ usage: NormalizedUsage, decodeDuration: TimeInterval?) {
+        if let output = usage.output, let duration = decodeDuration, duration > 0 {
+            outputTokens += output
+            self.decodeDuration += duration
+        }
+        if let input = usage.input, let read = usage.cacheRead, input > 0, read <= input {
+            measuredInputTokens += input
+            cacheReadTokens += read
+        }
+    }
+
+    var tokensPerSecond: Double? { decodeDuration > 0 ? Double(outputTokens) / decodeDuration : nil }
+    var cacheHitRate: Double? { measuredInputTokens > 0 ? Double(cacheReadTokens) / Double(measuredInputTokens) : nil }
 }
 
 /// A provider request still waiting for its first output: which model, since when (across

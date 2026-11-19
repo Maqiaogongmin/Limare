@@ -45,7 +45,7 @@ enum OpenAIResponsesRequestBuilder {
             attachmentResolver: attachmentResolver,
             artifactResolver: artifactResolver
         )
-        request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
 
         return request
     }

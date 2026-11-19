@@ -12,6 +12,8 @@ struct SettingsDetailView: View {
                 ModelGroupsView()
             case .settingsUsage:
                 UsageSettingsView()
+            case .settingsExtensions:
+                ExtensionsSettingsView()
             case .settingsSkills:
                 SkillsSettingsView()
             case .settingsSoul:

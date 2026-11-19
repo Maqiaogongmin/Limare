@@ -252,7 +252,7 @@ final class MCPStore {
     /// What should happen next for a server, for the model and the user. Derived from typed state only.
     func nextAction(for serverID: String) -> String {
         guard let server = servers.first(where: { $0.id == serverID }) else { return "The server does not exist; read list." }
-        if server.requiresReview { return "Imported fields await the user's review in Settings → MCP before the server can connect." }
+        if server.requiresReview { return "Imported fields await the user's review in Settings → Extensions before the server can connect." }
         if !server.enabled { return "The server is disabled; enable it to connect." }
         switch status(for: serverID) {
         case .connected(let count):

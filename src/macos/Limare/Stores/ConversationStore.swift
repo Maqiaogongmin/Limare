@@ -289,7 +289,8 @@ final class ConversationStore {
     func newConversation(
         projectID: UUID? = nil,
         workspace: WorkspaceConfiguration? = nil,
-        modelSource: ConversationModelSource? = nil
+        modelSource: ConversationModelSource? = nil,
+        reuseEmpty: Bool = true
     ) -> ConversationRecord {
         let parentProject = projectID.flatMap { pid in projects.first(where: { $0.id == pid }) }
         // SR-I04: Dynamic inheritance at resolution time. Do NOT copy parentProject.workspace.
@@ -299,9 +300,9 @@ final class ConversationStore {
         let effectiveSubModelSource = defaultSubModelSource()
 
         // Reuse only an untouched default placeholder in the exact same scope.
-        if let existingEmpty = conversations.first(where: {
+        if let existingEmpty = reuseEmpty ? conversations.first(where: {
             $0.projectID == projectID && isDisposable($0)
-        }) {
+        }) : nil {
             if let index = conversations.firstIndex(where: { $0.id == existingEmpty.id }) {
                 var candidate = conversations[index]
                 var changed = false

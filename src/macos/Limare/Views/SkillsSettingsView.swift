@@ -173,11 +173,12 @@ private struct SkillRowView: View {
 
 // MARK: - Skill Detail Sheet
 
-private struct SkillDetailSheet: View {
+struct SkillDetailSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     let skill: Skill
     @Bindable var state: SkillsSettingsState
+    var onBack: (() -> Void)? = nil
 
     private var isDescriptionLong: Bool {
         skill.description.count > 120 || skill.description.contains("\n")
@@ -187,6 +188,13 @@ private struct SkillDetailSheet: View {
         VStack(spacing: 0) {
             // Header
             HStack(alignment: .center) {
+                if let onBack {
+                    Button(action: onBack) {
+                        Label("Back", systemImage: "chevron.left")
+                    }
+                    .buttonStyle(.plain)
+                    Divider().frame(height: 16)
+                }
                 HStack(spacing: AppSpacing.xSmall) {
                     Text(skill.name)
                         .font(AppTypography.interfaceTitle2)

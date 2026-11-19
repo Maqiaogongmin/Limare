@@ -141,6 +141,153 @@ private final class UsageMockProtocol: URLProtocol, @unchecked Sendable {
 
 @MainActor
 final class ProviderUsageTests: XCTestCase {
+    func testConversationPerformanceUsesWeightedProviderUsage() {
+        var stats = ConversationPerformance()
+        XCTAssertNil(stats.tokensPerSecond)
+        XCTAssertNil(stats.cacheHitRate)
+        stats.add(.from(ProviderUsageTelemetry(inputTokens: 100, outputTokens: 60, cacheReadTokens: 20),
+                        format: .chatCompletions, finished: true), decodeDuration: 3)
+        stats.add(.from(ProviderUsageTelemetry(inputTokens: 10, outputTokens: 40, cacheReadTokens: 70, cacheWriteTokens: 20),
+                        format: .anthropicMessages, finished: true), decodeDuration: 2)
+        XCTAssertEqual(stats.tokensPerSecond, 20)
+        XCTAssertEqual(stats.cacheHitRate, 0.45)
+        stats.add(.from(ProviderUsageTelemetry(inputTokens: 1000, outputTokens: 10),
+                        format: .chatCompletions, finished: true), decodeDuration: nil)
+        XCTAssertEqual(stats.tokensPerSecond, 20)
+        XCTAssertEqual(stats.cacheHitRate, 0.45)
+        stats.add(.from(ProviderUsageTelemetry(inputTokens: 100, cacheReadTokens: 0),
+                        format: .chatCompletions, finished: true), decodeDuration: nil)
+        XCTAssertEqual(try! XCTUnwrap(stats.cacheHitRate), 0.3, accuracy: 0.00001)
+    }
+
+    func testChatAndResponsesRequestsHaveStableToolSchemas() throws {
+        let provider = ProviderConfiguration(name: "Fixture", baseURL: "https://example.test/v1")
+        let messages = [ChatRequestMessage(role: "system", content: "stable system"),
+                        ChatRequestMessage(role: "user", content: "stable request")]
+        let tools = [HarnessToolDefinitions.browserUseDefinition] + HarnessToolDefinitions.workspaceTools
+        var chatBodies = Set<Data>()
+        var responseBodies = Set<Data>()
+        for _ in 0..<100 {
+            chatBodies.insert(try XCTUnwrap(OpenAIChatRequestBuilder.buildURLRequest(
+                provider: provider, modelID: "fixture", messages: messages, tools: tools).httpBody))
+            responseBodies.insert(try XCTUnwrap(OpenAIResponsesRequestBuilder.buildURLRequest(
+                provider: provider, modelID: "fixture", messages: messages, tools: tools).httpBody))
+        }
+        XCTAssertEqual(chatBodies.count, 1)
+        XCTAssertEqual(responseBodies.count, 1)
+        for data in [try XCTUnwrap(chatBodies.first), try XCTUnwrap(responseBodies.first)] {
+            let body = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            XCTAssertEqual((body["tools"] as? [[String: Any]])?.count, tools.count)
+        }
+        let changed = try XCTUnwrap(OpenAIChatRequestBuilder.buildURLRequest(
+            provider: provider, modelID: "fixture", messages: messages, tools: Array(tools.dropLast())).httpBody)
+        XCTAssertNotEqual(changed, chatBodies.first)
+    }
+
+    func testDeepSeekOfficialThinkingAndReasoningHistory() throws {
+        for id in ["deepseek-flash", "deepseek-v4-pro"] {
+            let model = ProviderModel(id: id, displayName: id, baseSupportsReasoning: true, reasoningEffortValues: ["high", "max"])
+            let provider = ProviderConfiguration(name: "DeepSeek", baseURL: "https://api.deepseek.com/v1", models: [model])
+            let options = ChatInferenceOptions(thinkingLevel: .off, provider: provider, model: model)
+            XCTAssertTrue(options.preserveReasoningHistory)
+            let messages = [ChatRequestMessage(role: "user", content: "first"),
+                            .assistant(content: "answer", reasoningContent: "reason one"),
+                            ChatRequestMessage(role: "user", content: "second"),
+                            .assistant(content: "answer", reasoningContent: "reason two")]
+            let payload = try OpenAIChatRequestBuilder.buildPayload(provider: provider, modelID: id,
+                messages: messages, tools: [HarnessToolDefinitions.browserUseDefinition], options: options)
+            XCTAssertEqual((payload["thinking"] as? [String: String])?["type"], "disabled")
+            let assistants = (payload["messages"] as? [[String: Any]])?.filter { $0["role"] as? String == "assistant" }
+            XCTAssertEqual(assistants?.compactMap { $0["reasoning_content"] as? String }, ["reason one", "reason two"])
+        }
+        let gateway = ProviderConfiguration(name: "Gateway", baseURL: "https://api.deepseek.com.example.test")
+        XCTAssertFalse(gateway.isDeepSeekOfficial)
+    }
+
+    func testToolArgumentsStayPrivateOnDiskAndExactDuringRun() throws {
+        let shell = ProviderToolCall(id: "shell", function: .init(name: "shell_execute", arguments: #"{ "command": "ls /tmp" }"#))
+        XCTAssertEqual(ChatStore.sanitizedToolInput(shell), shell.function.arguments)
+        let raw = #"{"url":"https://example.test/?token=secret","text":"private"}"#
+        let browser = ProviderToolCall(id: "browser", function: .init(name: "browser_use", arguments: raw))
+        let safe = ChatStore.sanitizedToolInput(browser)
+        XCTAssertFalse(safe.contains("secret"))
+        XCTAssertFalse(safe.contains("private"))
+        let record = ToolCallRecord(providerCallID: browser.id, name: "browser_use", input: safe, state: .completed, output: "done")
+        let messages = [ChatMessage(role: .assistant, content: "", toolCalls: [record])]
+        let wire = ConversationRunCoordinator.buildChatRequestHistory(messages: messages, systemPrompt: "system", wireToolArguments: [browser.id: raw])
+        XCTAssertEqual(wire[1].toolCalls?.first?.function.arguments, raw)
+        let restored = ConversationRunCoordinator.buildChatRequestHistory(messages: messages, systemPrompt: "system")
+        XCTAssertEqual(restored[1].toolCalls?.first?.function.arguments, safe)
+    }
+
+    func testDeferredToolNamesRecoverOnlySuccessfulResults() throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let tool = HarnessToolDefinitions.browserUseDefinition
+        let schema = String(decoding: try encoder.encode(tool), as: UTF8.self)
+        let loaded = ToolCallRecord(providerCallID: "one", name: "tool_search", input: "{}", state: .completed,
+                                    output: "Loaded 1 tool(s):\n" + schema)
+        let failed = ToolCallRecord(providerCallID: "two", name: "tool_search", input: "{}", state: .failed,
+                                    output: "Loaded 1 tool(s):\n" + schema)
+        XCTAssertEqual(ConversationRunCoordinator.loadedDeferredToolNames(in: [ChatMessage(role: .assistant, content: "", toolCalls: [loaded])]), [tool.function.name])
+        XCTAssertTrue(ConversationRunCoordinator.loadedDeferredToolNames(in: [ChatMessage(role: .assistant, content: "", toolCalls: [failed])]).isEmpty)
+    }
+
+    func testDeepSeekWorkingSetKeepsEarlierReasoning() {
+        let messages = (0..<12).flatMap { index in
+            [ChatMessage(role: .user, content: "question \(index)"),
+             ChatMessage(role: .assistant, content: "answer \(index)", reasoningContent: String(repeating: "thinking ", count: 500))]
+        }
+        let preserving = WorkingSetProtocolContext(apiFormat: .chatCompletions, modelID: "deepseek-flash", preserveReasoningHistory: true)
+        let ordinary = WorkingSetProtocolContext(apiFormat: .chatCompletions, modelID: "other")
+        let kept = ContextWorkingSetManager.reduceWorkingSet(messages: messages, systemPrompt: "system", effectiveInputBudget: 1500, protocolContext: preserving)
+        let trimmed = ContextWorkingSetManager.reduceWorkingSet(messages: messages, systemPrompt: "system", effectiveInputBudget: 1500, protocolContext: ordinary)
+        XCTAssertEqual(kept.report.reasoningItemsReduced, 0)
+        XCTAssertGreaterThan(trimmed.report.reasoningItemsReduced, 0)
+    }
+
+    func testParallelToolHooksFollowTheirOwnResults() async throws {
+        let root = self.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let package = root.appendingPathComponent("package/hooks", isDirectory: true)
+        try FileManager.default.createDirectory(at: package, withIntermediateDirectories: true)
+        let config = #"{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"pwd"}]}],"PostToolUse":[{"hooks":[{"type":"command","command":"pwd"}]}]}}"#
+        try Data(config.utf8).write(to: package.appendingPathComponent("hooks.json"))
+        let logs = DebugLogStore()
+        let trust = HookTrustStore(storageDirectory: root.appendingPathComponent("trust"))
+        let store = HookStore(trustStore: trust, logs: logs, storageDirectory: root.appendingPathComponent("store"))
+        let source = try store.importPackage(from: package.deletingLastPathComponent())
+        store.trustAndEnable(sourceID: source.id)
+        let workspace = WorkspaceStore(storageRootURL: root.appendingPathComponent("workspace-store"), logs: logs)
+        try workspace.setWorkspace(root)
+        let hooks = HookSessionCoordinator(hookStore: store, workspace: workspace, logs: logs)
+        let conversation = UUID(), run = UUID()
+        _ = await hooks.beginRun(conversationID: conversation, runID: run, workspaceURL: root)
+        let permissions = PermissionStore(logs: logs, defaults: .standard, defaultsKey: "cache-hook-\(UUID())", initialMode: .fullAccess)
+        let executor = ToolExecutor(workspace: workspace, permissions: permissions, logs: logs, hookCoordinator: hooks)
+            .scoped(for: conversation, runID: run)
+        let first = ProviderToolCall(id: "first", function: .init(name: "file_list", arguments: #"{"path":"."}"#))
+        let second = ProviderToolCall(id: "second", function: .init(name: "file_list", arguments: #"{"path":"."}"#))
+        async let one = executor.execute(first) { _ in }
+        async let two = executor.execute(second) { _ in }
+        let outcomes = await [one, two]
+        for outcome in outcomes {
+            XCTAssertEqual(outcome.content.components(separatedBy: root.path).count - 1, 2)
+            XCTAssertEqual(outcome.content.components(separatedBy: "<system-reminder>").count - 1, 1)
+        }
+        XCTAssertNil(hooks.consumePendingToolHookContext(conversationID: conversation, runID: run))
+    }
+
+    func testCacheRateUsesOnlyComparableInput() {
+        var totals = UsageTotals()
+        totals.add(NormalizedUsage(input: 100, output: 10, cacheRead: 25, status: .complete))
+        totals.add(NormalizedUsage(input: 200, output: 10, status: .complete))
+        totals.add(NormalizedUsage(input: 300, output: 10, cacheRead: 50, status: .partial), cacheMeasurementComplete: false)
+        totals.add(NormalizedUsage(input: 10, output: 1, cacheRead: 0, status: .complete))
+        XCTAssertEqual(totals.input, 610)
+        XCTAssertEqual(totals.cacheMeasuredInput, 110)
+        XCTAssertEqual(totals.cacheMeasuredRead, 25)
+    }
     private func session() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [UsageMockProtocol.self]
@@ -948,6 +1095,7 @@ final class ProviderUsageTests: XCTestCase {
             120
         )
         XCTAssertEqual(appState.conversationRuns.contextUsage[cDirectChat.id]?.lastActualInputTokens, 120)
+        XCTAssertNotNil(appState.conversationRuns.conversationPerformance[cDirectChat.id]?.tokensPerSecond)
 
         let cGroupChat = appState.conversations.newBackgroundConversation(
             workspace: ws,

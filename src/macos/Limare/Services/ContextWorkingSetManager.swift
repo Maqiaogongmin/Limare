@@ -12,15 +12,18 @@ struct WorkingSetProtocolContext: Sendable, Equatable {
     let apiFormat: ProviderAPIFormat?
     let providerID: UUID?
     let modelID: String?
+    let preserveReasoningHistory: Bool
 
     init(
         apiFormat: ProviderAPIFormat? = nil,
         providerID: UUID? = nil,
-        modelID: String? = nil
+        modelID: String? = nil,
+        preserveReasoningHistory: Bool = false
     ) {
         self.apiFormat = apiFormat
         self.providerID = providerID
         self.modelID = modelID
+        self.preserveReasoningHistory = preserveReasoningHistory
     }
 }
 
@@ -374,7 +377,7 @@ enum ContextWorkingSetManager {
         let currentRunStart = currentRunStartIndex(in: messages, protectionHints: protectionHints)
         for idx in reducibleIndices where idx < currentRunStart {
             var modified = false
-            if working[idx].reasoningContent != nil {
+            if protocolContext?.preserveReasoningHistory != true, working[idx].reasoningContent != nil {
                 working[idx].reasoningContent = nil
                 reasoningCount += 1
                 strippedReasoningMessageIDs.append(working[idx].id)

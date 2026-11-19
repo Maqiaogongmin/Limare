@@ -345,7 +345,8 @@ final class ContextLifecycle {
             protocolContext: WorkingSetProtocolContext(
                 apiFormat: options.apiFormat,
                 providerID: options.providerID,
-                modelID: options.model?.id
+                modelID: options.model?.id,
+                preserveReasoningHistory: options.preserveReasoningHistory && !tools.isEmpty
             ),
             calibrationFactor: calibrationFactor,
             targetBudgetRatio: ContextWorkingSetManager.defaultTargetBudgetRatio,
@@ -471,7 +472,8 @@ final class ContextLifecycle {
         let protocolContext = WorkingSetProtocolContext(
             apiFormat: options.apiFormat,
             providerID: options.providerID,
-            modelID: options.model?.id ?? modelID
+            modelID: options.model?.id ?? modelID,
+            preserveReasoningHistory: options.preserveReasoningHistory && !tools.isEmpty
         )
 
         // Soft threshold or hard threshold exceeded: execute WorkingSet Reduction first
@@ -879,6 +881,15 @@ final class ContextLifecycle {
             }
         }
         return blockers
+    }
+
+    func retainedMessages(conversationID: UUID, messages: [ChatMessage], protectionHints: ContextProtectionHints) -> [ChatMessage] {
+        let state = store.load(conversationID: conversationID).flatMap {
+            Self.validateProvenance(state: $0, messages: messages) ? $0 : nil
+        }
+        var hints = protectionHints
+        hints.acknowledgedToolCallIDs = ContextWorkingSetManager.acknowledgedToolCallIDs(in: messages)
+        return assemble(messages: messages, state: state, protectionHints: hints)
     }
 
     private func assemble(messages: [ChatMessage], state: ContextCompactionState?, protectionHints: ContextProtectionHints) -> [ChatMessage] {

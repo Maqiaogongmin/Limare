@@ -1188,6 +1188,7 @@ final class ChatStore {
         if call.function.name == "shell_execute",
            let data = call.function.arguments.data(using: .utf8),
            var object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            guard object["environment"] != nil else { return call.function.arguments }
             if let environment = object["environment"] as? [String: Any] {
                 object["environment"] = environment.mapValues { _ in "••••" }
             }

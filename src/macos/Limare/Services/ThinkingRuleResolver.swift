@@ -80,6 +80,19 @@ enum ThinkingRuleResolver {
             ))
         }
 
+        // DeepSeek's official V4 API requires all previous reasoning when tools are present.
+        if ctx.isDeepSeekOfficial {
+            for model in ["deepseek-flash", "deepseek-v4-pro"] {
+                rules.append(ThinkingRule(
+                    kind: .officialVendor,
+                    scope: .modelPattern(model),
+                    wireFormat: .deepSeekSibling,
+                    reasoningEcho: ReasoningEchoPolicy(fieldName: "reasoning_content", timing: .always),
+                    label: "deepseek-v4-official"
+                ))
+            }
+        }
+
         // DeepSeek V4 vendor-native sibling shape.
         rules.append(ThinkingRule(
             kind: .officialVendor,

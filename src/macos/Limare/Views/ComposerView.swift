@@ -303,6 +303,22 @@ struct ComposerView: View {
                 .alignmentGuide(.top) { $0[.bottom] + AppSpacing.xSmall }
             }
 
+            if let id = window.conversationID, let performance = appState.conversationRuns.conversationPerformance[id],
+               performance.tokensPerSecond != nil || performance.cacheHitRate != nil {
+                HStack(spacing: AppSpacing.small) {
+                    if let speed = performance.tokensPerSecond {
+                        Text("\(speed.formatted(.number.precision(.fractionLength(1)))) tok/s")
+                    }
+                    if let rate = performance.cacheHitRate {
+                        Text("Cache hit: \(rate.formatted(.percent.precision(.fractionLength(1))))")
+                    }
+                    Spacer(minLength: 0)
+                }
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(AppColors.textMuted)
+                .padding(.horizontal, AppSpacing.xSmall)
+                .accessibilityIdentifier("composer.conversationPerformance")
+            }
         }
         .frame(maxWidth: isEmptyState ? AppLayout.emptyStateMaximumWidth : AppLayout.transcriptMaximumWidth)
         .frame(maxWidth: .infinity)

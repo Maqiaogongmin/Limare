@@ -254,7 +254,13 @@ final class AppState {
             runtimeImageGenerationService: runtimeImageGenerationService,
             browserSessionStore: browser,
             representationResolver: representationResolver,
-            resourceConversionPolicies: resourceConversionPolicies
+            resourceConversionPolicies: resourceConversionPolicies,
+            isSkillFile: { [weak skills] url, wsURL in
+                skills?.isSkillFile(url, workspaceURL: wsURL) ?? false
+            },
+            onSkillDirectoryModified: { [weak skills] wsURL in
+                skills?.rescan(workspaceURL: wsURL ?? skills?.workspaceURL)
+            }
         )
         // Stage 10: Legacy v0.1 runtime is quarantined; ToolExecutor connects exclusively to ComputerUseV2Engine.
 

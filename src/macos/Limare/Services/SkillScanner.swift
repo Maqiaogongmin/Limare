@@ -9,39 +9,57 @@ struct SkillScanner {
         self.customGlobalRoots = customGlobalRoots
     }
 
+    static func workspaceRoots(for workspaceURL: URL) -> [URL] {
+        [
+            workspaceURL.appendingPathComponent(".agents/skills", isDirectory: true),
+            workspaceURL.appendingPathComponent(".claude/skills", isDirectory: true),
+            workspaceURL.appendingPathComponent(".cline/skills", isDirectory: true),
+            workspaceURL.appendingPathComponent(".skills", isDirectory: true),
+            workspaceURL.appendingPathComponent("skills", isDirectory: true)
+        ]
+    }
+
+    static func defaultGlobalRoots(fileManager: FileManager = .default) -> [URL] {
+        let home = fileManager.homeDirectoryForCurrentUser
+        return [
+            home.appendingPathComponent(".agents/skills", isDirectory: true),
+            home.appendingPathComponent(".claude/skills", isDirectory: true),
+            home.appendingPathComponent(".config/skills", isDirectory: true),
+            home.appendingPathComponent(".limare/skills", isDirectory: true),
+            home.appendingPathComponent("Library/Application Support/Limare/skills", isDirectory: true),
+            home.appendingPathComponent(".gemini/antigravity/builtin/skills", isDirectory: true)
+        ]
+    }
+
+    var usesDefaultGlobalRoots: Bool {
+        customGlobalRoots == nil
+    }
+
+    func activeGlobalRoots() -> [URL] {
+        customGlobalRoots ?? Self.defaultGlobalRoots(fileManager: fileManager)
+    }
+
+    func allScanRoots(workspaceURL: URL?) -> [URL] {
+        var roots: [URL] = []
+        if let workspaceURL {
+            roots.append(contentsOf: Self.workspaceRoots(for: workspaceURL))
+        }
+        roots.append(contentsOf: activeGlobalRoots())
+        return roots
+    }
+
     func scan(workspaceURL: URL?) -> [Skill] {
         var discovered: [Skill] = []
         var seenCanonicalPaths = Set<String>()
         var seenIDs = Set<String>()
 
         if let workspaceURL {
-            let workspaceRoots = [
-                workspaceURL.appendingPathComponent(".agents/skills", isDirectory: true),
-                workspaceURL.appendingPathComponent(".claude/skills", isDirectory: true),
-                workspaceURL.appendingPathComponent(".cline/skills", isDirectory: true),
-                workspaceURL.appendingPathComponent(".skills", isDirectory: true),
-                workspaceURL.appendingPathComponent("skills", isDirectory: true)
-            ]
-            for root in workspaceRoots {
+            for root in Self.workspaceRoots(for: workspaceURL) {
                 scanRoot(root, location: .workspace(root), into: &discovered, seenCanonicalPaths: &seenCanonicalPaths, seenIDs: &seenIDs)
             }
         }
 
-        let globalRoots: [URL]
-        if let customGlobalRoots {
-            globalRoots = customGlobalRoots
-        } else {
-            let home = fileManager.homeDirectoryForCurrentUser
-            globalRoots = [
-                home.appendingPathComponent(".agents/skills", isDirectory: true),
-                home.appendingPathComponent(".claude/skills", isDirectory: true),
-                home.appendingPathComponent(".config/skills", isDirectory: true),
-                home.appendingPathComponent(".limare/skills", isDirectory: true),
-                home.appendingPathComponent("Library/Application Support/Limare/skills", isDirectory: true),
-                home.appendingPathComponent(".gemini/antigravity/builtin/skills", isDirectory: true)
-            ]
-        }
-        for root in globalRoots {
+        for root in activeGlobalRoots() {
             scanRoot(root, location: .global(root), into: &discovered, seenCanonicalPaths: &seenCanonicalPaths, seenIDs: &seenIDs)
         }
 
@@ -104,7 +122,12 @@ struct SkillScanner {
                 location: location,
                 isEnabled: true,
                 updatedAt: modDate,
-                body: parsed.body
+                body: parsed.body,
+                icon: parsed.icon,
+                color: parsed.color,
+                examples: parsed.examples,
+                mcpServers: parsed.mcpServers,
+                isHidden: parsed.isHidden
             )
             discovered.append(skill)
         }

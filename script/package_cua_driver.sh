@@ -6,11 +6,11 @@ DIST_DIR="${REPO_ROOT}/dist"
 CACHE_DIR="${HOME}/.cache/limare-helpers"
 
 # Pinned upstream version & cryptographic hashes
-PINNED_VERSION="0.28.2"
-PINNED_BIN_SHA256="9a7731f7e961a57963f0deb132878367fdf7354e7327a4d558fe4a68e4686b81"
-PINNED_TARBALL_URL="https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.28.2/cua-driver-rs-0.28.2-darwin-universal.tar.gz"
-PINNED_TARBALL_SHA256="e273181b26709c88b1d809474deb3c592b4efae3530b11d76318f1887fc3fbb1"
-TARBALL_BIN_SUBPATH="cua-driver-rs-0.28.2-darwin-universal/CuaDriver.app/Contents/MacOS/cua-driver"
+PINNED_VERSION="0.54.0"
+PINNED_BIN_SHA256="01f65191045385d4febc377f417ff90af0b66a9eeda746a59b45450b4008ad52"
+PINNED_TARBALL_URL="https://github.com/trycua/cua/releases/download/cua-driver-rs-v${PINNED_VERSION}/cua-driver-rs-${PINNED_VERSION}-darwin-universal.tar.gz"
+PINNED_TARBALL_SHA256="d0d29e62a6f54454ad637f7b738c8b6dcff6538d7d03e505c87ad1f8c13685d2"
+TARBALL_BIN_SUBPATH="cua-driver-rs-${PINNED_VERSION}-darwin-universal/CuaDriver.app/Contents/MacOS/cua-driver"
 
 mkdir -p "${DIST_DIR}" "${CACHE_DIR}"
 OUT_BIN="${DIST_DIR}/cua-driver"
@@ -121,8 +121,8 @@ EOF
 
 # Verify executable version
 VERSION_OUTPUT=$("$OUT_BIN" --version 2>&1 || true)
-if [[ "$VERSION_OUTPUT" != *"0.28.2"* ]]; then
-  echo "[-] ERROR: Output binary version mismatch! Expected 0.28.2, got: ${VERSION_OUTPUT}" >&2
+if [[ "$VERSION_OUTPUT" != *"${PINNED_VERSION}"* ]]; then
+  echo "[-] ERROR: Output binary version mismatch! Expected ${PINNED_VERSION}, got: ${VERSION_OUTPUT}" >&2
   exit 1
 fi
 

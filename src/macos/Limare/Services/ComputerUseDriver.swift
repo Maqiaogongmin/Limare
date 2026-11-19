@@ -37,10 +37,12 @@ public protocol ComputerUseDriver: Sendable {
 
     /// Stage 3: Observes window state and captures normalized AX elements + window screenshot.
     func observeWindow(target: WindowTarget) async throws -> ComputerUseObservation
+    func observeWindow(target: WindowTarget, includeScreenshot: Bool, query: String?) async throws -> ComputerUseObservation
 
     /// Stage 5: Performs a mechanical click on a generation-bound element reference.
     func click(element: ComputerUseElementRef) async throws -> ComputerUseDriverActionResult
     func click(element: ComputerUseElementRef, deliveryMode: String?) async throws -> ComputerUseDriverActionResult
+    func click(target: WindowTarget, x: Int, y: Int, captureID: String) async throws -> ComputerUseDriverActionResult
 
     /// Stage 7: Performs a double click on an element reference.
     func doubleClick(element: ComputerUseElementRef, deliveryMode: String?) async throws -> ComputerUseDriverActionResult
@@ -90,6 +92,16 @@ public struct ComputerUseDriverRunSession: Equatable, Sendable {
 }
 
 public extension ComputerUseDriver {
+    func observeWindow(target: WindowTarget, includeScreenshot: Bool, query: String?) async throws -> ComputerUseObservation {
+        guard !includeScreenshot && query == nil else {
+            throw ComputerUseDriverError.driverToolFailed(tool: "get_window_state", reason: "Screenshot or query is not supported by this driver.")
+        }
+        return try await observeWindow(target: target)
+    }
+
+    func click(target: WindowTarget, x: Int, y: Int, captureID: String) async throws -> ComputerUseDriverActionResult {
+        throw ComputerUseDriverError.driverToolFailed(tool: "click", reason: "Pixel clicks are not supported by this driver.")
+    }
     func prepareRunSession(runID: UUID) async throws -> ComputerUseDriverRunSession {
         ComputerUseDriverRunSession(runID: runID, publicSessionLabel: "limare-" + runID.uuidString.lowercased(),
             transportGeneration: await readiness().currentGeneration ?? 0, generation: 1, ensure: .active)
@@ -242,6 +254,8 @@ public struct ComputerUseElement: Equatable, Hashable, Sendable, Codable {
     public let actions: [String]
     public let screenFrame: WindowBounds
     public let normalizedFrame: WindowBounds
+    public let subrole: String?
+    public let screenshotFrame: WindowBounds?
 
     public init(
         token: String,
@@ -253,7 +267,9 @@ public struct ComputerUseElement: Equatable, Hashable, Sendable, Codable {
         isEnabled: Bool = true,
         actions: [String] = [],
         screenFrame: WindowBounds,
-        normalizedFrame: WindowBounds
+        normalizedFrame: WindowBounds,
+        subrole: String? = nil,
+        screenshotFrame: WindowBounds? = nil
     ) {
         self.token = token
         self.index = index
@@ -265,6 +281,8 @@ public struct ComputerUseElement: Equatable, Hashable, Sendable, Codable {
         self.actions = actions
         self.screenFrame = screenFrame
         self.normalizedFrame = normalizedFrame
+        self.subrole = subrole
+        self.screenshotFrame = screenshotFrame
     }
 }
 
@@ -278,6 +296,12 @@ public struct ComputerUseObservation: Equatable, Sendable {
     public let elements: [ComputerUseElement]
     public let treeMarkdown: String?
     public let screenshotData: Data?
+    public let captureID: String?
+    public let screenshotError: String?
+    public let truncated: Bool
+    public let truncationReason: String?
+    public let truncationHint: String?
+    public let degradedReason: String?
     public var screenshotArtifactID: UUID?
     public let timestamp: Date
 
@@ -288,6 +312,12 @@ public struct ComputerUseObservation: Equatable, Sendable {
         elements: [ComputerUseElement],
         treeMarkdown: String? = nil,
         screenshotData: Data? = nil,
+        captureID: String? = nil,
+        screenshotError: String? = nil,
+        truncated: Bool = false,
+        truncationReason: String? = nil,
+        truncationHint: String? = nil,
+        degradedReason: String? = nil,
         screenshotArtifactID: UUID? = nil,
         timestamp: Date = Date()
     ) {
@@ -297,8 +327,33 @@ public struct ComputerUseObservation: Equatable, Sendable {
         self.elements = elements
         self.treeMarkdown = treeMarkdown
         self.screenshotData = screenshotData
+        self.captureID = captureID
+        self.screenshotError = screenshotError
+        self.truncated = truncated
+        self.truncationReason = truncationReason
+        self.truncationHint = truncationHint
+        self.degradedReason = degradedReason
         self.screenshotArtifactID = screenshotArtifactID
         self.timestamp = timestamp
+    }
+}
+
+/// The normalized image bytes and dimensions actually handed to the provider.
+public struct ComputerUseScreenshot: Sendable {
+    public let data: Data
+    public let mimeType: String
+    public let width: Int
+    public let height: Int
+    public let rawWidth: Int
+    public let rawHeight: Int
+
+    public init(data: Data, mimeType: String, width: Int, height: Int, rawWidth: Int, rawHeight: Int) {
+        self.data = data
+        self.mimeType = mimeType
+        self.width = width
+        self.height = height
+        self.rawWidth = rawWidth
+        self.rawHeight = rawHeight
     }
 }
 

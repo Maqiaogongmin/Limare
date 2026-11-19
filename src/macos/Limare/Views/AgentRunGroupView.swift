@@ -47,24 +47,13 @@ struct AgentRunGroupView: View {
         return "\(prefix) · " + parts.joined(separator: " · ")
     }
 
-    private var headerIconColor: Color {
-        let presentation = ToolCallPresentationResolver.resolve(toolCall: toolCall, runs: runs)
-        switch presentation.tone {
-        case .danger: return .red
-        case .warning: return .orange
-        case .success: return .purple
-        case .active: return .blue
-        case .neutral: return .purple
-        }
-    }
-
     var body: some View {
         let currentRuns = runs
         if !currentRuns.isEmpty {
             VStack(alignment: .leading, spacing: AppSpacing.xSmall) {
                 HStack(spacing: AppSpacing.xSmall) {
                     Image(systemName: "sparkles")
-                        .foregroundStyle(headerIconColor)
+                        .foregroundStyle(.secondary)
                         .font(.caption)
                     Text(aggregateHeader(for: currentRuns))
                         .font(.caption.weight(.semibold))

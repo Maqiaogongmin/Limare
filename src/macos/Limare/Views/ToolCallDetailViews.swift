@@ -113,8 +113,8 @@ private struct DiffLineRow: View {
 
     private var color: Color? {
         switch line.kind {
-        case .removed: AppColors.statusError
-        case .added: AppColors.statusSuccess
+        case .removed: AppColors.textSecondary
+        case .added: AppColors.textPrimary
         case .unchanged: nil
         }
     }
@@ -127,8 +127,7 @@ private struct DiffLineRow: View {
         }
     }
 
-    /// As the Changes view draws a line (`GitDiffView`): only the mark takes the colour, over a
-    /// faint tint; whole lines in red and green were glaring.
+    /// The plus and minus marks distinguish changes in the transcript’s neutral palette.
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
             Text(prefix)

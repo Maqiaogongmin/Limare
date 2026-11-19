@@ -78,6 +78,12 @@ extension ComputerUseV2Engine {
                         summary: summary
                     )
                 }
+            },
+            normalizeScreenshot: { original in
+                let raw = try ImageNormalizationKernel.probe(original)
+                let image = try ImageNormalizationKernel.normalize(original)
+                return ComputerUseScreenshot(data: image.data, mimeType: image.mimeType,
+                    width: image.width, height: image.height, rawWidth: raw.width, rawHeight: raw.height)
             }
         )
     }

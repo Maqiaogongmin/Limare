@@ -4,6 +4,13 @@ All notable behavior and architecture changes to Limare are recorded here. Entri
 
 ## Unreleased
 
+## 0.1.11 — 2026-11-19
+
+- **扩展管理**：在扩展页面统一查看和管理 Skills、MCP、Hooks 和 Computer Use，并支持通过对话创建扩展。
+- **模型用量**：查看缓存命中率与对话中的模型响应速度，改进模型请求的缓存复用。
+- **电脑操作**：更新 Computer Use 驱动，改进后台操作以及截图和坐标支持。
+- **对话体验**：优化执行记录和错误提示，改进扩展选择与文本拖选。
+
 ## 0.1.10 — 2026-11-17
 
 - **生成式界面**：在 Mac 和手机远程对话中展示回复里的交互式卡片和图表。

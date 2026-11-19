@@ -50,7 +50,7 @@ struct AgentRunRow: View {
                     } else if let err = run.error, !err.isEmpty {
                         Text(err)
                             .font(.caption)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                 }
@@ -71,7 +71,7 @@ struct AgentRunRow: View {
         switch run.status {
         case .queued:
             Circle()
-                .fill(Color.orange)
+                .fill(Color.secondary)
                 .frame(width: 8, height: 8)
         case .running:
             ProgressView()
@@ -79,11 +79,11 @@ struct AgentRunRow: View {
                 .frame(width: 14, height: 14)
         case .completed:
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(.secondary)
                 .font(.system(size: 14))
         case .failed:
             Image(systemName: "exclamationmark.circle.fill")
-                .foregroundStyle(.red)
+                .foregroundStyle(.secondary)
                 .font(.system(size: 14))
         case .cancelled:
             Image(systemName: "slash.circle.fill")
@@ -91,7 +91,7 @@ struct AgentRunRow: View {
                 .font(.system(size: 14))
         case .timedOut:
             Image(systemName: "clock.badge.exclamationmark.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(.secondary)
                 .font(.system(size: 14))
         }
     }

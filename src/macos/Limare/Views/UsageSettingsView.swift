@@ -25,6 +25,18 @@ private enum UsagePeriod: String, CaseIterable, Identifiable {
     }
 }
 
+private enum UsageGroupSort: String, CaseIterable, Identifiable {
+    case tokens, requests, name
+    var id: Self { self }
+    var title: String {
+        switch self {
+        case .tokens: String(localized: "Total tokens")
+        case .requests: String(localized: "Requests")
+        case .name: String(localized: "Name")
+        }
+    }
+}
+
 struct UsageSettingsView: View {
     @Environment(AppState.self) private var appState
     @State private var period: UsagePeriod = .week
@@ -33,6 +45,9 @@ struct UsageSettingsView: View {
     @State private var queryError: String?
     @State private var loading = false
     @State private var refreshID = 0
+    @State private var hoveredDay: Date?
+    @State private var expandedGroups: Set<String> = []
+    @State private var groupSort: UsageGroupSort = .tokens
 
     private static let inputColor = Color(red: 0.22, green: 0.47, blue: 0.94)
     private static let outputColor = Color(red: 0.16, green: 0.70, blue: 0.50)
@@ -165,7 +180,7 @@ struct UsageSettingsView: View {
     private func overview(_ report: UsageReport) -> some View {
         SettingsSection(
             title: "Overview",
-            description: "Requests count model calls, including tool loops and retries that start a new call."
+            description: "Requests count model calls, including tool loops and retries that start a new call. Cache figures use requests with complete cache data."
         ) {
             HStack(alignment: .top, spacing: 0) {
                 kpiColumn(title: String(localized: "Input tokens"), value: format(report.totals.input)) {
@@ -243,8 +258,10 @@ struct UsageSettingsView: View {
 
     private func nonZeroInputTags(_ totals: UsageTotals) -> [String] {
         var tags: [String] = []
-        if let cacheRead = totals.cacheRead, cacheRead > 0 {
-            tags.append(String(localized: "Cache read: \(cacheRead.formatted())"))
+        if totals.cacheMeasuredInput > 0 {
+            let rate = Double(totals.cacheMeasuredRead) / Double(totals.cacheMeasuredInput)
+            tags.append(String(localized: "Cache hit: \(totals.cacheMeasuredRead.formatted()) (\(rate.formatted(.percent.precision(.fractionLength(1)))))"))
+            tags.append(String(localized: "Cache miss: \((totals.cacheMeasuredInput - totals.cacheMeasuredRead).formatted())"))
         }
         if let cacheWrite = totals.cacheWrite, cacheWrite > 0 {
             tags.append(String(localized: "Cache write: \(cacheWrite.formatted())"))
@@ -279,6 +296,37 @@ struct UsageSettingsView: View {
                 )
                 .foregroundStyle(Self.outputColor)
                 .cornerRadius(3)
+                if let hoveredDay, Calendar.current.isDate(day.date, inSameDayAs: hoveredDay) {
+                    RuleMark(x: .value("Date", day.date, unit: .day))
+                        .foregroundStyle(Color.secondary.opacity(0.4))
+                        .annotation(position: .top, overflowResolution: .init(x: .fit, y: .fit)) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(day.date, format: .dateTime.month().day())
+                                Text("Input: \(format(day.totals.input))")
+                                Text("Output: \(format(day.totals.output))")
+                            }
+                            .font(AppTypography.interfaceCaption)
+                            .padding(8)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
+                        }
+                }
+            }
+            .chartOverlay { proxy in
+                GeometryReader { geometry in
+                    Rectangle().fill(.clear).contentShape(Rectangle())
+                        .onContinuousHover { phase in
+                            switch phase {
+                            case .active(let point):
+                                guard let plot = proxy.plotFrame else { hoveredDay = nil; return }
+                                let frame = geometry[plot]
+                                guard frame.contains(point), let date: Date = proxy.value(atX: point.x - frame.origin.x) else {
+                                    hoveredDay = nil; return
+                                }
+                                hoveredDay = Calendar.current.startOfDay(for: date)
+                            case .ended: hoveredDay = nil
+                            }
+                        }
+                }
             }
             .chartLegend(.hidden)
             .chartXAxis {
@@ -359,83 +407,71 @@ struct UsageSettingsView: View {
     // MARK: - Providers & Models
 
     private func groups(_ report: UsageReport) -> some View {
-        let maxGroupTokens = max(1, report.groups.map { ($0.totals.input ?? 0) + ($0.totals.output ?? 0) }.max() ?? 1)
+        let sorted = report.groups.sorted { lhs, rhs in
+            switch groupSort {
+            case .tokens: return (groupTotalTokens(lhs.totals) ?? -1) > (groupTotalTokens(rhs.totals) ?? -1)
+            case .requests: return lhs.totals.requests > rhs.totals.requests
+            case .name: return (lhs.provider + lhs.model).localizedStandardCompare(rhs.provider + rhs.model) == .orderedAscending
+            }
+        }
         return SettingsSection(
             title: "Providers and models",
-            description: "Names are saved at the time of each request."
+            description: "Names are saved at the time of each request.",
+            trailing: {
+                Picker("Sort by", selection: $groupSort) {
+                    ForEach(UsageGroupSort.allCases) { sort in Text(sort.title).tag(sort) }
+                }
+                .labelsHidden()
+                .frame(width: 150)
+            }
         ) {
-            ForEach(report.groups) { group in
+            HStack {
+                Text("Provider / Model").frame(maxWidth: .infinity, alignment: .leading)
+                Text("Total tokens").frame(width: 125, alignment: .trailing)
+                Text("Requests").frame(width: 75, alignment: .trailing)
+                Text("Cache hit rate").frame(width: 100, alignment: .trailing)
+            }
+            .font(AppTypography.interfaceCaption)
+            .foregroundStyle(AppColors.textSecondary)
+            .padding(.leading, 20)
+            ForEach(sorted) { group in
+                SettingsDivider()
                 VStack(alignment: .leading, spacing: AppSpacing.xSmall) {
-                    HStack(alignment: .firstTextBaseline, spacing: AppSpacing.xSmall) {
-                        HStack(spacing: 4) {
-                            Text(group.provider)
-                                .font(AppTypography.interfaceSemibold)
-                            Text("/")
-                                .foregroundStyle(AppColors.textMuted)
-                            Text(group.model)
-                                .font(AppTypography.interfaceMedium)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
+                    Button {
+                        if !expandedGroups.insert(group.id).inserted { expandedGroups.remove(group.id) }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: expandedGroups.contains(group.id) ? "chevron.down" : "chevron.right")
+                                .font(.system(size: 10, weight: .semibold)).frame(width: 14)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(group.model).font(AppTypography.interfaceMedium).lineLimit(1)
+                                Text(group.provider).font(AppTypography.interfaceCaption).foregroundStyle(AppColors.textSecondary).lineLimit(1)
+                            }.frame(maxWidth: .infinity, alignment: .leading)
+                            Text(format(groupTotalTokens(group.totals))).frame(width: 125, alignment: .trailing)
+                            Text(group.totals.requests.formatted()).frame(width: 75, alignment: .trailing)
+                            Text(cacheRate(group.totals)).frame(width: 100, alignment: .trailing)
                         }
-                        Spacer(minLength: AppSpacing.small)
-                        HStack(alignment: .firstTextBaseline, spacing: AppSpacing.small) {
-                            Text(format(groupTotalTokens(group.totals)))
-                                .font(AppTypography.interfaceSemibold)
-                                .monospacedDigit()
-                            Text("\(group.totals.requests) requests")
-                                .font(AppTypography.interfaceCaption)
-                                .foregroundStyle(AppColors.textSecondary)
-                                .monospacedDigit()
-                        }
+                        .contentShape(Rectangle())
                     }
-
-                    groupShareBar(totals: group.totals, maxTokens: maxGroupTokens)
-
-                    Text(groupDetailLine(group.totals))
-                        .font(AppTypography.interfaceCaption)
-                        .foregroundStyle(AppColors.textSecondary)
-                        .monospacedDigit()
+                    .buttonStyle(.plain)
+                    .monospacedDigit()
+                    if expandedGroups.contains(group.id) {
+                        Text(groupDetailLine(group.totals))
+                            .font(AppTypography.interfaceCaption)
+                            .foregroundStyle(AppColors.textSecondary)
+                            .monospacedDigit()
+                            .padding(.leading, 20)
+                            .textSelection(.enabled)
+                    }
                 }
-                .padding(.vertical, 2)
-
-                if group.id != report.groups.last?.id {
-                    SettingsDivider()
-                }
+                .padding(.vertical, 4)
             }
         }
     }
 
-    private func groupShareBar(totals: UsageTotals, maxTokens: Int) -> some View {
-        let input = max(0, totals.input ?? 0)
-        let output = max(0, totals.output ?? 0)
-        let total = input + output
-        return GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(Color.primary.opacity(0.05))
-                if total > 0 && geo.size.width > 0 {
-                    let filledWidth = max(4, geo.size.width * CGFloat(total) / CGFloat(maxTokens))
-                    let inputRatio = CGFloat(input) / CGFloat(total)
-                    let outputRatio = CGFloat(output) / CGFloat(total)
-                    HStack(spacing: input > 0 && output > 0 ? 1 : 0) {
-                        if input > 0 {
-                            Rectangle()
-                                .fill(Self.inputColor)
-                                .frame(width: filledWidth * inputRatio)
-                        }
-                        if output > 0 {
-                            Rectangle()
-                                .fill(Self.outputColor)
-                                .frame(width: filledWidth * outputRatio)
-                        }
-                    }
-                    .frame(width: filledWidth, height: 4, alignment: .leading)
-                    .clipShape(Capsule())
-                }
-            }
-        }
-        .frame(height: 4)
-        .accessibilityHidden(true)
+    private func cacheRate(_ totals: UsageTotals) -> String {
+        guard totals.cacheMeasuredInput > 0 else { return "—" }
+        return (Double(totals.cacheMeasuredRead) / Double(totals.cacheMeasuredInput)).formatted(.percent.precision(.fractionLength(1)))
     }
 
     private func groupTotalTokens(_ totals: UsageTotals) -> Int? {
@@ -448,8 +484,10 @@ struct UsageSettingsView: View {
             String(localized: "Input: \(format(totals.input))"),
             String(localized: "Output: \(format(totals.output))")
         ]
-        if let cacheRead = totals.cacheRead, cacheRead > 0 {
-            parts.append(String(localized: "Cache read: \(cacheRead.formatted())"))
+        if totals.cacheMeasuredInput > 0 {
+            let rate = Double(totals.cacheMeasuredRead) / Double(totals.cacheMeasuredInput)
+            parts.append(String(localized: "Cache hit: \(totals.cacheMeasuredRead.formatted()) (\(rate.formatted(.percent.precision(.fractionLength(1)))))"))
+            parts.append(String(localized: "Cache miss: \((totals.cacheMeasuredInput - totals.cacheMeasuredRead).formatted())"))
         }
         if let cacheWrite = totals.cacheWrite, cacheWrite > 0 {
             parts.append(String(localized: "Cache write: \(cacheWrite.formatted())"))

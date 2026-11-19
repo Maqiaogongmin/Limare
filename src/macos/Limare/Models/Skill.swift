@@ -35,6 +35,11 @@ struct Skill: Identifiable, Sendable, Equatable, Hashable {
     var isEnabled: Bool
     var updatedAt: Date
     var body: String
+    var icon: String? = nil
+    var color: ExtensionCardColor? = nil
+    var examples: [String] = []
+    var mcpServers: [String] = []
+    var isHidden: Bool = false
 
     var sourcePath: String {
         fileURL.path

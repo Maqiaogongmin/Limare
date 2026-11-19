@@ -28,15 +28,7 @@ struct ToolCallCard: View {
         ToolCallPresentationResolver.resolve(toolCall: toolCall, awaitingAnswer: isAwaitingAnswer, workspace: workspaceURL)
     }
 
-    private var statusColor: Color {
-        switch presentation.tone {
-        case .neutral: return .secondary
-        case .active: return .blue
-        case .success: return .green
-        case .warning: return .orange
-        case .danger: return .red
-        }
-    }
+    private var statusColor: Color { .secondary }
 
     private var workspaceURL: URL? {
         window.conversationID.map {
@@ -167,7 +159,7 @@ struct ToolCallCard: View {
                     if let seconds = ShellRunPresentation.silenceSeconds(toolCall, now: context.date), seconds >= 60 {
                         Label("No output for \(seconds) seconds", systemImage: "exclamationmark.triangle.fill")
                             .font(AppTypography.interfaceCaption)
-                            .foregroundStyle(AppColors.statusWarning)
+                            .foregroundStyle(AppColors.textSecondary)
                             .padding(.leading, Self.contentIndent)
                     }
                 }
@@ -176,7 +168,7 @@ struct ToolCallCard: View {
             if let timeout = ShellRunPresentation.timeoutMessage(toolCall) {
                 Text(timeout)
                     .font(AppTypography.interfaceCaption)
-                    .foregroundStyle(AppColors.statusWarning)
+                    .foregroundStyle(AppColors.textSecondary)
                     .textSelection(.enabled)
                     .padding(.leading, Self.contentIndent)
                     .padding(.vertical, AppSpacing.xxSmall)
@@ -186,10 +178,10 @@ struct ToolCallCard: View {
                 HStack(spacing: AppSpacing.xSmall) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 11))
-                        .foregroundStyle(AppColors.statusWarning)
+                        .foregroundStyle(AppColors.textSecondary)
                     Text("Failed, but files were changed (\(notice.paths.count))")
                         .font(.caption)
-                        .foregroundStyle(AppColors.statusWarning)
+                        .foregroundStyle(AppColors.textSecondary)
                         .lineLimit(1)
                         .accessibilityIdentifier("toolcard.changedOnFailure")
                     if notice.ownerMessageID == window.chat.retractableUserMessageID {
@@ -222,6 +214,7 @@ struct ToolCallCard: View {
                     .padding(.vertical, AppSpacing.xSmall)
             }
         }
+        .tint(AppColors.textSecondary)
         .sheet(item: $pendingUndo) { request in
             UndoMessageSheet(messageID: request.messageID)
                 .environment(appState)
@@ -273,7 +266,7 @@ private struct ToolCallDetails: View {
                 }
                 if toolCall.mechanicalTerminalFact?.shellTerminal == nil, ShellRunPresentation.timeoutMessage(toolCall) == nil, let error = toolCall.errorMessage, !error.isEmpty {
                     Text(error)
-                        .foregroundStyle(AppColors.statusError)
+                        .foregroundStyle(AppColors.textSecondary)
                         .lineLimit(2)
                         .textSelection(.enabled)
                         .help(error)

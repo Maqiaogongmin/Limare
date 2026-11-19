@@ -201,7 +201,7 @@ public actor CuaDriverBackend: ComputerUseDriver {
 
             // 2. MCP initialize handshake
             let initParams: [String: Any] = [
-                "protocolVersion": "2024-11-05",
+                "protocolVersion": "2025-06-18",
                 "capabilities": [String: Any](),
                 "clientInfo": [
                     "name": "Limare",
@@ -210,7 +210,8 @@ public actor CuaDriverBackend: ComputerUseDriver {
             ]
             let initResponse = try await transportInstance.sendRPC(method: "initialize", params: initParams, timeoutSeconds: 10)
             guard initResponse["error"] == nil,
-                  let _ = initResponse["result"] as? [String: Any] else {
+                  let result = initResponse["result"] as? [String: Any],
+                  result["protocolVersion"] as? String == "2025-06-18" else {
                 throw ComputerUseDriverError.handshakeFailed(reason: "Invalid initialize response: \(initResponse.value)")
             }
 
@@ -384,7 +385,7 @@ public actor CuaDriverBackend: ComputerUseDriver {
     }
 
     /// Constructs a trusted, deterministic environment for the driver child process.
-    /// Strips ALL variables starting with `CUA_DRIVER_` to enforce pure direct runtime.
+    /// Ignores inherited driver controls and disables embedded helper telemetry.
     public static func makeTrustedEnvironment(
         inherited: [String: String] = ProcessInfo.processInfo.environment
     ) -> [String: String] {
@@ -404,6 +405,7 @@ public actor CuaDriverBackend: ComputerUseDriver {
         for k in Array(env.keys) where k.hasPrefix("CUA_DRIVER_") {
             env.removeValue(forKey: k)
         }
+        env["CUA_DRIVER_RS_TELEMETRY_ENABLED"] = "0"
         return env
     }
 
@@ -660,7 +662,7 @@ public actor CuaDriverBackend: ComputerUseDriver {
     }
 
     private func launchThroughDriver(bundleID: String, background: Bool) async throws -> ApplicationLaunchResult {
-        let resp = try await callTool(name: "launch_app", arguments: ["bundle_id": bundleID, "background": background])
+        let resp = try await callTool(name: "launch_app", arguments: ["bundle_id": bundleID])
         guard let sc = resp["structuredContent"] as? [String: Any],
               let pid = sc["pid"] as? Int else {
             let detail = (resp["content"] as? [[String: Any]])?.compactMap { $0["text"] as? String }.joined(separator: "\n") ?? "Unknown error"
@@ -688,10 +690,22 @@ public actor CuaDriverBackend: ComputerUseDriver {
     /// Observes the target window state via driver backend:
     /// Captures normalized AX elements, geometry bounds, and window-only screenshot.
     public func observeWindow(target: WindowTarget) async throws -> ComputerUseObservation {
-        let resp = try await callTool(name: "get_window_state", arguments: [
+        try await observeWindow(target: target, includeScreenshot: false, query: nil)
+    }
+
+    public func observeWindow(target: WindowTarget, includeScreenshot: Bool, query: String?) async throws -> ComputerUseObservation {
+        let screenshotURL = FileManager.default.temporaryDirectory.appendingPathComponent("limare-cua-\(UUID().uuidString).png")
+        defer { if includeScreenshot { try? FileManager.default.removeItem(at: screenshotURL) } }
+        var arguments: [String: Any] = [
             "pid": target.pid,
-            "window_id": target.windowID
-        ])
+            "window_id": target.windowID,
+            "tree_format": "both",
+            "max_elements": query?.isEmpty == false ? 2000 : 500,
+            "include_screenshot": includeScreenshot
+        ]
+        if let query, !query.isEmpty { arguments["query"] = query }
+        if includeScreenshot { arguments["screenshot_out_file"] = screenshotURL.path }
+        let resp = try await callTool(name: "get_window_state", arguments: arguments)
 
         guard let sc = resp["structuredContent"] as? [String: Any] else {
             let detail = (resp["content"] as? [[String: Any]])?.compactMap { $0["text"] as? String }.joined(separator: "\n") ?? "Unknown error"
@@ -727,7 +741,9 @@ public actor CuaDriverBackend: ComputerUseDriver {
                 effWbH = rH
             }
         }
-        let windowBounds = WindowBounds(x: effWbX, y: effWbY, width: effWbW, height: effWbH)
+        let windowBounds = includeScreenshot && wbW > 0 && wbH > 0
+            ? WindowBounds(x: wbX, y: wbY, width: wbW, height: wbH)
+            : WindowBounds(x: effWbX, y: effWbY, width: effWbW, height: effWbH)
 
         // Parse accessibility elements and normalize frames relative to window origin
         let elements: [ComputerUseElement] = rawElements.compactMap { dict in
@@ -754,6 +770,12 @@ public actor CuaDriverBackend: ComputerUseDriver {
                 height: fh
             )
 
+            let screenshotFrame: WindowBounds? = (dict["screenshot_frame"] as? [String: Any]).map { frame in
+                WindowBounds(x: (frame["x"] as? NSNumber)?.doubleValue ?? 0,
+                    y: (frame["y"] as? NSNumber)?.doubleValue ?? 0,
+                    width: (frame["w"] as? NSNumber)?.doubleValue ?? (frame["width"] as? NSNumber)?.doubleValue ?? 0,
+                    height: (frame["h"] as? NSNumber)?.doubleValue ?? (frame["height"] as? NSNumber)?.doubleValue ?? 0)
+            }
             return ComputerUseElement(
                 token: token,
                 index: index,
@@ -764,21 +786,17 @@ public actor CuaDriverBackend: ComputerUseDriver {
                 isEnabled: isEnabled,
                 actions: actions,
                 screenFrame: screenFrame,
-                normalizedFrame: normalizedFrame
+                normalizedFrame: normalizedFrame,
+                subrole: dict["subrole"] as? String,
+                screenshotFrame: screenshotFrame
             )
         }
 
-        // Extract raw window screenshot from content
-        var screenshotData: Data? = nil
-        let contents = (resp["content"] as? [[String: Any]]) ?? []
-        for item in contents {
-            if let type = item["type"] as? String, type == "image",
-               let b64 = item["data"] as? String,
-               let data = Data(base64Encoded: b64) {
-                screenshotData = data
-                break
-            }
-        }
+        let reportedScreenshotError = sc["screenshot_error"].flatMap { $0 is NSNull ? nil : $0 }
+        let imageValid = sc["screenshot_frame_valid"] as? Bool != false && reportedScreenshotError == nil
+        let screenshotData = includeScreenshot && imageValid ? try? Data(contentsOf: screenshotURL) : nil
+        let screenshotError: String? = includeScreenshot && screenshotData == nil
+            ? (reportedScreenshotError as? String ?? "Window screenshot could not be captured.") : nil
 
         let treeMarkdown = sc["tree_markdown"] as? String
 
@@ -789,65 +807,81 @@ public actor CuaDriverBackend: ComputerUseDriver {
             elements: elements,
             treeMarkdown: treeMarkdown,
             screenshotData: screenshotData,
+            captureID: sc["capture_id"] as? String,
+            screenshotError: screenshotError,
+            truncated: sc["truncated"] as? Bool ?? false,
+            truncationReason: sc["truncation_reason"] as? String,
+            truncationHint: sc["truncation_hint"] as? String,
+            degradedReason: sc["degraded_reason"] as? String,
             timestamp: Date()
         )
     }
 
     // MARK: - Stage 5 & Stage 7: Mechanical Actions
 
+    private static func backgroundDelivery(_ requested: String?) throws -> String {
+        guard requested == nil || requested == "background" else {
+            throw ComputerUseDriverError.driverToolFailed(tool: "computer_use", reason: "Only background delivery is supported.")
+        }
+        return "background"
+    }
+
     /// Stage 5: Performs a mechanical click on an element reference in background mode.
     public func click(element: ComputerUseElementRef) async throws -> ComputerUseDriverActionResult {
         try await click(element: element, deliveryMode: "background")
     }
 
+    public func click(target: WindowTarget, x: Int, y: Int, captureID: String) async throws -> ComputerUseDriverActionResult {
+        try await executeAction(name: "click", element: nil, target: target, args: [
+            "pid": target.pid, "window_id": target.windowID,
+            "x": x, "y": y, "capture_id": captureID, "delivery_mode": "background"
+        ])
+    }
+
     /// Performs a mechanical click on an element reference with specified delivery mode.
     public func click(element: ComputerUseElementRef, deliveryMode: String?) async throws -> ComputerUseDriverActionResult {
-        let mode = deliveryMode ?? "background"
+        let mode = try Self.backgroundDelivery(deliveryMode)
         let args: [String: Any] = [
             "element_token": element.backendToken,
             "pid": element.target.pid,
             "window_id": element.target.windowID,
-            "delivery_mode": mode,
-            "mode": mode
+            "delivery_mode": mode
         ]
         return try await executeAction(name: "click", element: element, target: element.target, args: args)
     }
 
     /// Stage 7: Performs a double click on an element reference.
     public func doubleClick(element: ComputerUseElementRef, deliveryMode: String? = "background") async throws -> ComputerUseDriverActionResult {
-        let mode = deliveryMode ?? "background"
+        let mode = try Self.backgroundDelivery(deliveryMode)
         let args: [String: Any] = [
             "element_token": element.backendToken,
             "pid": element.target.pid,
             "window_id": element.target.windowID,
-            "delivery_mode": mode,
-            "mode": mode
+            "delivery_mode": mode
         ]
         return try await executeAction(name: "double_click", element: element, target: element.target, args: args)
     }
 
     /// Stage 7: Performs a right click on an element reference.
     public func rightClick(element: ComputerUseElementRef, deliveryMode: String? = "background") async throws -> ComputerUseDriverActionResult {
-        let mode = deliveryMode ?? "background"
+        let mode = try Self.backgroundDelivery(deliveryMode)
         let args: [String: Any] = [
             "element_token": element.backendToken,
             "pid": element.target.pid,
             "window_id": element.target.windowID,
-            "delivery_mode": mode,
-            "mode": mode
+            "delivery_mode": mode
         ]
         return try await executeAction(name: "right_click", element: element, target: element.target, args: args)
     }
 
     /// Stage 7: Injects typed text into a target element or window.
     public func typeText(text: String, element: ComputerUseElementRef?, target: WindowTarget, deliveryMode: String? = "background") async throws -> ComputerUseDriverActionResult {
-        let mode = deliveryMode ?? "background"
+        let mode = try Self.backgroundDelivery(deliveryMode)
         var args: [String: Any] = [
             "text": text,
             "pid": target.pid,
             "window_id": target.windowID,
-            "delivery_mode": mode,
-            "mode": mode
+            "delivery_mode": mode
         ]
         if let element {
             args["element_token"] = element.backendToken
@@ -857,13 +891,12 @@ public actor CuaDriverBackend: ComputerUseDriver {
 
     /// Stage 7: Injects a key press into a target window.
     public func pressKey(key: String, target: WindowTarget, modifiers: [String]? = nil, deliveryMode: String? = "background") async throws -> ComputerUseDriverActionResult {
-        let mode = deliveryMode ?? "background"
+        let mode = try Self.backgroundDelivery(deliveryMode)
         var args: [String: Any] = [
             "key": key,
             "pid": target.pid,
             "window_id": target.windowID,
-            "delivery_mode": mode,
-            "mode": mode
+            "delivery_mode": mode
         ]
         if let modifiers, !modifiers.isEmpty {
             args["modifiers"] = modifiers
@@ -873,13 +906,12 @@ public actor CuaDriverBackend: ComputerUseDriver {
 
     /// Stage 7: Injects a hotkey chord into a target window.
     public func hotkey(keys: [String], target: WindowTarget, deliveryMode: String? = "background") async throws -> ComputerUseDriverActionResult {
-        let mode = deliveryMode ?? "background"
+        let mode = try Self.backgroundDelivery(deliveryMode)
         let args: [String: Any] = [
             "keys": keys,
             "pid": target.pid,
             "window_id": target.windowID,
-            "delivery_mode": mode,
-            "mode": mode
+            "delivery_mode": mode
         ]
         return try await executeAction(name: "hotkey", element: nil, target: target, args: args)
     }
@@ -897,14 +929,13 @@ public actor CuaDriverBackend: ComputerUseDriver {
 
     /// Stage 7: Scrolls inside a window or element.
     public func scroll(direction: String, amount: Int? = nil, element: ComputerUseElementRef?, target: WindowTarget, deliveryMode: String? = "background") async throws -> ComputerUseDriverActionResult {
-        let mode = deliveryMode ?? "background"
+        let mode = try Self.backgroundDelivery(deliveryMode)
         var args: [String: Any] = [
             "direction": direction,
             "amount": amount ?? 3,
             "pid": target.pid,
             "window_id": target.windowID,
-            "delivery_mode": mode,
-            "mode": mode
+            "delivery_mode": mode
         ]
         if let element {
             args["element_token"] = element.backendToken
@@ -914,7 +945,7 @@ public actor CuaDriverBackend: ComputerUseDriver {
 
     /// Stage 7: Drags from one element to another within the target window.
     public func drag(from: ComputerUseElementRef, to: ComputerUseElementRef, deliveryMode: String? = "background") async throws -> ComputerUseDriverActionResult {
-        let mode = deliveryMode ?? "background"
+        let mode = try Self.backgroundDelivery(deliveryMode)
         let fromX = from.normalizedFrame.x + from.normalizedFrame.width / 2.0
         let fromY = from.normalizedFrame.y + from.normalizedFrame.height / 2.0
         let toX = to.normalizedFrame.x + to.normalizedFrame.width / 2.0
@@ -926,8 +957,7 @@ public actor CuaDriverBackend: ComputerUseDriver {
             "to_y": toY,
             "pid": from.target.pid,
             "window_id": from.target.windowID,
-            "delivery_mode": mode,
-            "mode": mode
+            "delivery_mode": mode
         ]
         return try await executeAction(name: "drag", element: from, target: from.target, args: args)
     }

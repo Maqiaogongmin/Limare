@@ -1,5 +1,11 @@
 import Foundation
 
+extension ProviderConfiguration {
+    var isDeepSeekOfficial: Bool {
+        URLComponents(string: baseURL)?.host?.lowercased() == "api.deepseek.com"
+    }
+}
+
 public enum ProviderKind: String, Codable, CaseIterable, Sendable {
     case openAICompatible
 

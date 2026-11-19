@@ -3,6 +3,8 @@ import AppKit
 
 struct MessageListView: View {
     let messages: [ChatMessage]
+    var errorMessage: String? = nil
+    var onDismissError: @MainActor () -> Void = {}
     /// The user message offering the retract action, if any.
     var retractableMessageID: UUID? = nil
     var onRetract: @MainActor (UUID) -> Void = { _ in }
@@ -63,6 +65,10 @@ struct MessageListView: View {
                         ForEach(markersByEntry[entry.id] ?? [], id: \.date) { marker in
                             CompactionStatusLine(state: .finished(tokensBefore: marker.tokensBefore, tokensAfter: marker.tokensAfter))
                         }
+                    }
+                    if let errorMessage {
+                        ConversationErrorLine(message: errorMessage, onDismiss: onDismissError)
+                            .id(Self.errorLineID)
                     }
                     if let trailingCompaction {
                         CompactionStatusLine(state: trailingCompaction)
@@ -153,6 +159,10 @@ struct MessageListView: View {
             .onChange(of: coordinator.isFollowingTail) { _, isFollowing in
                 frozenFold = isFollowing ? nil : TranscriptTurnGrouping.lastTurnFold(of: entries)
             }
+            .onChange(of: errorMessage) { _, message in
+                guard message != nil, coordinator.isFollowingTail else { return }
+                proxy.scrollTo(Self.errorLineID, anchor: .bottom)
+            }
             .onChange(of: trailingCompaction) { _, status in
                 // The line appears at the end: keep it in view when the user is at the bottom.
                 guard status != nil, coordinator.isFollowingTail else { return }
@@ -204,12 +214,13 @@ struct MessageListView: View {
 
     /// The trailing Compact status line's scroll identity.
     private static let compactionStatusID = UUID()
+    private static let errorLineID = UUID()
 
     /// Never animated (Enchanted scrolls the same way): an animated scroll that runs while rows are
     /// added or a turn folds into one row ends on an offset computed for the old layout. The
     /// target is the last entry: the last message may sit inside a fold without an id of its own.
     private func scrollToBottom(proxy: ScrollViewProxy, entryID: UUID?) {
-        guard let targetID = entryID else { return }
+        guard let targetID = errorMessage == nil ? entryID : Self.errorLineID else { return }
         proxy.scrollTo(targetID, anchor: .bottom)
         DispatchQueue.main.async {
             proxy.scrollTo(targetID, anchor: .bottom)
@@ -265,7 +276,7 @@ private struct CompactionStatusLine: View {
                     .help("The model now reads a summary of the conversation up to here (about \(Self.tokens(before)) → \(Self.tokens(after)) tokens). The transcript is unchanged.")
             case .failed(let message):
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(AppColors.statusError)
+                    .foregroundStyle(.secondary)
                 Text("Compact failed: \(message)")
                     .textSelection(.enabled)
             }
@@ -329,6 +340,7 @@ private struct TranscriptEntryView: View, Equatable {
                 } label: {
                     ExecutionHistoryLabel(count: history.count + (finalPlanCalls.isEmpty ? 0 : 1), unsuccessfulCount: entry.unsuccessfulCount + finalPlanCalls.filter { TranscriptTurnGrouping.isUnsuccessful($0.state) }.count)
                 }
+                .tint(AppColors.textSecondary)
                 if !entry.pinnedToolCalls.isEmpty {
                     FoldedChangeNotices(toolCalls: entry.pinnedToolCalls)
                 }
@@ -379,7 +391,7 @@ private struct ExecutionHistoryLabel: View {
     var body: some View {
         Group {
             if unsuccessfulCount > 0 {
-                Text("Execution · \(count) records\(Text(" · \(unsuccessfulCount) unsuccessful").foregroundColor(AppColors.statusWarning))")
+                Text("Execution · \(count) records\(Text(" · \(unsuccessfulCount) unsuccessful"))")
             } else {
                 Text("Execution · \(count) records")
             }
@@ -1015,6 +1027,34 @@ private struct UserBubbleChrome: ViewModifier {
     }
 }
 
+/// An operation error belongs to the conversation and remains selectable in full.
+struct ConversationErrorLine: View {
+    let message: String
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: AppSpacing.small) {
+            Image(systemName: "exclamationmark.circle")
+                .padding(.top, 2)
+            Text(message)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            .buttonStyle(.plain)
+            .help("Dismiss error")
+        }
+        .font(AppTypography.interfaceSubheadline)
+        .foregroundStyle(.secondary)
+        .padding(AppSpacing.small)
+        .background(AppColors.noticeFill, in: RoundedRectangle(cornerRadius: AppRadius.row))
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 /// A reply the runtime wrote, not the model ("Request failed.", "Stopped."): a small status
 /// line, not prose.
 private struct RuntimeNoticeLabel: View {
@@ -1174,7 +1214,7 @@ private struct TurnCopyButton: View {
         } label: {
             Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
                 .font(.system(size: 11))
-                .foregroundStyle(isCopied ? Color.accentColor : Color.secondary)
+                .foregroundStyle(.secondary)
                 .frame(width: 14, height: 14)
         }
         .buttonStyle(.plain)
@@ -1300,7 +1340,7 @@ private struct SpeakerButton: View {
                 } else if isActive {
                     Image(systemName: state.isPaused ? "play.fill" : "pause.fill")
                         .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(.secondary)
                         .frame(width: 14, height: 14)
                 } else {
                     Image(systemName: "speaker.wave.2")

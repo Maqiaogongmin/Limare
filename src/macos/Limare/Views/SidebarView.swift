@@ -257,9 +257,7 @@ struct SettingsSidebarView: View {
             }
 
             Section("Extensions") {
-                row("Skills", systemImage: "wand.and.stars", screen: .settingsSkills)
-                row("MCP", systemImage: "network", screen: .settingsMCP)
-                row("Hooks", systemImage: "arrow.triangle.branch", screen: .settingsHooks)
+                row("Extensions", systemImage: "puzzlepiece.extension", screen: .settingsExtensions)
             }
 
             Section("Advanced") {

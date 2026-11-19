@@ -222,11 +222,13 @@ private struct HookPackageRowView: View {
 
 // MARK: - Hook Detail Sheet
 
-private struct HookDetailSheet: View {
+struct HookDetailSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     let source: HookSource
     @Bindable var state: HooksSettingsState
+    var onBack: (() -> Void)? = nil
+    var onDelete: (() -> Void)? = nil
 
     private var isTrusted: Bool {
         appState.hooks.isTrusted(source: source)
@@ -268,6 +270,13 @@ private struct HookDetailSheet: View {
                             }
                             .buttonStyle(.plain)
                         } else {
+                            if let onBack {
+                                Button(action: onBack) {
+                                    Label("Back", systemImage: "chevron.left")
+                                }
+                                .buttonStyle(.plain)
+                                Divider().frame(height: 16)
+                            }
                             HStack(spacing: AppSpacing.xSmall) {
                                 Text(source.name)
                                     .font(AppTypography.interfaceTitle2)
@@ -344,7 +353,7 @@ private struct HookDetailSheet: View {
             Button("Delete Package", role: .destructive) {
                 if let id = state.pendingDeleteSourceID {
                     appState.hooks.removeSource(sourceID: id)
-                    dismiss()
+                    if let onDelete { onDelete() } else { dismiss() }
                 }
             }
             Button("Cancel", role: .cancel) {

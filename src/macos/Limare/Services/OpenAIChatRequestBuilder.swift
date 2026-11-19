@@ -222,6 +222,7 @@ enum OpenAIChatRequestBuilder {
             usesUnifiedReasoningEffort: base.contains("volces") || base.contains("ark.") || base.contains("api.venice.ai"),
             isMistral: base.contains("mistral.ai"),
             isDashScope: base.contains("dashscope"),
+            isDeepSeekOfficial: provider.isDeepSeekOfficial,
             offEffort: ThinkingRuleResolver.explicitOffEffort(baseURL: provider.baseURL, modelID: modelID, level: level),
             userRules: []
         )
@@ -498,7 +499,7 @@ enum OpenAIChatRequestBuilder {
             attachmentResolver: attachmentResolver,
             artifactResolver: artifactResolver
         )
-        request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
 
         return request
     }

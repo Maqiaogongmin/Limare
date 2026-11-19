@@ -21,7 +21,7 @@ enum LimareSelfDescription {
     static func section(_ facts: Facts) -> String {
         var lines = [
             "# About Limare, the app you run in",
-            "Settings pages: General, Personalization, Permissions, Remote Access, Providers, Model Groups, Skills, MCP, Hooks. When something needs the user, say exactly where to go; when a tool can do it, do it yourself.",
+            "Settings pages: General, Personalization, Permissions, Remote Access, Providers, Model Groups, Extensions. When something needs the user, say exactly where to go; when a tool can do it, do it yourself.",
             "- shell_execute: " + shellLine(facts.permissionMode) + " sudo does not work (give the user the Terminal command).",
             "- Permission mode \"\(facts.permissionMode.displayName)\": \(facts.permissionMode.detail) Set in Settings → Permissions.",
             "- Never ask for secrets (API keys, tokens, passwords) in the conversation or put them in tool arguments; Limare collects them in its own secure window. Model provider keys go in Settings → Providers.",
@@ -35,8 +35,7 @@ enum LimareSelfDescription {
         if facts.askUserQuestionAvailable {
             lines.append("- ask_user_question shows the user a card of choices and waits for their decision; use it at real forks, not for permission or secrets.")
         }
-        lines.append("- Skills: folders with a SKILL.md in ~/.agents/skills/<name>/ or <project>/.agents/skills/; the user enables and rescans them in Settings → Skills.")
-        lines.append("- Hooks come from ~/.codex/hooks.json, <project>/.codex/hooks.json or packages imported in Settings → Hooks; a new hook runs only after the user trusts it there.")
+        lines.append("- Extensions (Settings → Extensions): Skills (~/.limare/skills/ or ~/.agents/skills/), MCP servers, Hooks (~/.codex/hooks.json or imported) and Computer Use appear as Extension Cards. When asked to connect or integrate an external tool, read and follow the extension-card-builder skill.")
         if facts.browserAvailable {
             lines.append("- browser_use drives Limare's per-conversation browser; for a login, ask the user to sign in in that tab.")
         }
@@ -61,7 +60,7 @@ enum LimareSelfDescription {
     private static func computerUseLine(_ facts: Facts) -> String {
         switch facts.computerUse {
         case .disabled:
-            return "off; the user turns it on in Settings → General."
+            return "off; the user turns it on in Settings → Extensions (or General)."
         case .needsScreenRecording:
             return "needs macOS Screen Recording permission: System Settings → Privacy & Security → Screen Recording."
         case .needsAccessibility:

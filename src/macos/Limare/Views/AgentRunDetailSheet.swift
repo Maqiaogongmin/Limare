@@ -97,10 +97,10 @@ struct AgentRunDetailSheet: View {
                             VStack(alignment: .leading, spacing: AppSpacing.small) {
                                 Text("Error")
                                     .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.red)
+                                    .foregroundStyle(.secondary)
                                 Text(err)
                                     .font(.body)
-                                    .foregroundStyle(.red)
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -147,13 +147,13 @@ struct AgentRunDetailSheet: View {
         case .queued, .running:
             ProgressView().controlSize(.small)
         case .completed:
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(.secondary)
         case .failed:
-            Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red)
+            Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.secondary)
         case .cancelled:
             Image(systemName: "slash.circle.fill").foregroundStyle(.secondary)
         case .timedOut:
-            Image(systemName: "clock.badge.exclamationmark.fill").foregroundStyle(.orange)
+            Image(systemName: "clock.badge.exclamationmark.fill").foregroundStyle(.secondary)
         }
     }
 }

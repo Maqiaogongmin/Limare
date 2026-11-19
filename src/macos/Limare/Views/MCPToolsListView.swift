@@ -7,6 +7,7 @@ struct MCPToolsListView: View {
 
     @State private var searchText = ""
     @State private var expandedToolIDs: Set<String> = []
+    @State private var expandedDescriptionIDs: Set<String> = []
 
     private var filteredTools: [MCPTool] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -99,6 +100,7 @@ struct MCPToolsListView: View {
 
     private func toolCard(_ tool: MCPTool) -> some View {
         let isExpanded = expandedToolIDs.contains(tool.id)
+        let isLongDescription = tool.description.count > 160 || tool.description.contains("\n")
         return VStack(alignment: .leading, spacing: AppSpacing.small) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: AppSpacing.xxxSmall) {
@@ -120,7 +122,17 @@ struct MCPToolsListView: View {
                         Text(tool.description)
                             .font(.subheadline)
                             .foregroundStyle(AppColors.textSecondary)
+                            .lineLimit(!isLongDescription || expandedDescriptionIDs.contains(tool.id) ? nil : 3)
                             .fixedSize(horizontal: false, vertical: true)
+                        if isLongDescription {
+                            Button(expandedDescriptionIDs.contains(tool.id) ? "Show less" : "Show more") {
+                                if !expandedDescriptionIDs.insert(tool.id).inserted {
+                                    expandedDescriptionIDs.remove(tool.id)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .font(.caption.weight(.medium))
+                        }
                     }
                 }
 

@@ -147,6 +147,8 @@ final class ToolExecutor {
     private(set) var computerUseV2Engine: ComputerUseV2Engine?
     var computerUseRoute: ComputerUseExecutionRoute = .v2Production
     var runAuthorityResolver: (@Sendable () async -> Bool)?
+    private let isSkillFile: (@MainActor (URL, URL?) -> Bool)?
+    private let onSkillDirectoryModified: (@MainActor (URL?) -> Void)?
 
     /// True only when the executor that will receive `delegate_task` has a subagent coordinator
     /// and is not itself a subagent's executor.
@@ -178,7 +180,9 @@ final class ToolExecutor {
         canonicalMessageResolver: (@MainActor (UUID) -> [ChatMessage]?)? = nil,
         representationResolver: RepresentationResolver? = nil,
         resourceConversionPolicies: ResourceConversionConsumerPolicies? = nil,
-        runAuthorityResolver: (@Sendable () async -> Bool)? = nil
+        runAuthorityResolver: (@Sendable () async -> Bool)? = nil,
+        isSkillFile: (@MainActor (URL, URL?) -> Bool)? = nil,
+        onSkillDirectoryModified: (@MainActor (URL?) -> Void)? = nil
     ) {
         self.workspace = workspace
         self.permissions = permissions
@@ -207,6 +211,8 @@ final class ToolExecutor {
         self.representationResolver = representationResolver
         self.resourceConversionPolicies = resourceConversionPolicies
         self.runAuthorityResolver = runAuthorityResolver
+        self.isSkillFile = isSkillFile
+        self.onSkillDirectoryModified = onSkillDirectoryModified
     }
 
     func setComputerUseV2Engine(_ engine: ComputerUseV2Engine?) {
@@ -292,7 +298,9 @@ final class ToolExecutor {
             canonicalMessageResolver: self.canonicalMessageResolver,
             representationResolver: self.representationResolver,
             resourceConversionPolicies: self.resourceConversionPolicies,
-            runAuthorityResolver: self.runAuthorityResolver
+            runAuthorityResolver: self.runAuthorityResolver,
+            isSkillFile: self.isSkillFile,
+            onSkillDirectoryModified: self.onSkillDirectoryModified
         )
         scoped.setConversationContext(activeConversationID: { conversationID }, modelSources: { modelSources })
         scoped.imageDataReader = imageDataReader
@@ -355,6 +363,19 @@ final class ToolExecutor {
     ) async -> ToolExecutionOutcome {
         let startedAt = ContinuousClock.now
         var latestApproval = ToolApprovalState.notRequired
+        var hookContexts: [String] = []
+        func appendHookContext(_ result: HookAggregatedResult) {
+            guard hookExecutionScope != nil else { return }
+            let contributions = result.executions.compactMap { $0.asExtensionContribution() }
+            if let validated = try? ExtensionContribution.deduplicateAndValidate(contributions: contributions),
+               let context = ExtensionContribution.projectHookContext(from: validated), !context.isEmpty {
+                hookContexts.append(context)
+            }
+        }
+        func withHookContext(_ outcome: ToolExecutionOutcome) -> ToolExecutionOutcome {
+            guard !hookContexts.isEmpty else { return outcome }
+            return outcome.appendingText("\n\n<system-reminder>\n" + hookContexts.joined(separator: "\n\n") + "\n</system-reminder>")
+        }
         let trackedUpdate: UpdateHandler = { update in
             latestApproval = update.approvalState
             onUpdate(update)
@@ -368,11 +389,13 @@ final class ToolExecutor {
                     conversationID: scope.conversationID,
                     runID: scope.runID,
                     call: call,
-                    model: nil
+                    model: nil,
+                    enqueueContext: false
                 )
             } else {
                 preResult = await hookCoordinator.onPreToolUse(call: call, model: nil)
             }
+            appendHookContext(preResult)
             if preResult.shouldDeny {
                 let duration = milliseconds(since: startedAt)
                 let reason = preResult.denyReason ?? "Denied by hook"
@@ -384,7 +407,7 @@ final class ToolExecutor {
                     approvalState: .denied,
                     durationMilliseconds: duration
                 )
-                return deniedOutcome
+                return withHookContext(deniedOutcome)
             }
         }
 
@@ -442,8 +465,8 @@ final class ToolExecutor {
                     throw ToolExecutorError.unknownTool(call.function.name)
                 }
             }
-            await recordPostToolHook(hookCoordinator, call: call, outcome: outcome)
-            return outcome
+            if let result = await recordPostToolHook(hookCoordinator, call: call, outcome: outcome) { appendHookContext(result) }
+            return withHookContext(outcome)
         } catch is CancellationError {
             let duration = milliseconds(since: startedAt)
             let message = "Cancelled by user."
@@ -455,8 +478,8 @@ final class ToolExecutor {
                 approvalState: latestApproval,
                 durationMilliseconds: duration
             )
-            await recordPostToolHook(hookCoordinator, call: call, outcome: outcome)
-            return outcome
+            if let result = await recordPostToolHook(hookCoordinator, call: call, outcome: outcome) { appendHookContext(result) }
+            return withHookContext(outcome)
         } catch {
             let duration = milliseconds(since: startedAt)
             let message = error.localizedDescription
@@ -468,8 +491,8 @@ final class ToolExecutor {
                 approvalState: latestApproval,
                 durationMilliseconds: duration
             )
-            await recordPostToolHook(hookCoordinator, call: call, outcome: outcome)
-            return outcome
+            if let result = await recordPostToolHook(hookCoordinator, call: call, outcome: outcome) { appendHookContext(result) }
+            return withHookContext(outcome)
         }
     }
 
@@ -477,18 +500,19 @@ final class ToolExecutor {
         _ hookCoordinator: HookSessionCoordinator?,
         call: ProviderToolCall,
         outcome: ToolExecutionOutcome
-    ) async {
-        guard let hookCoordinator else { return }
+    ) async -> HookAggregatedResult? {
+        guard let hookCoordinator else { return nil }
         if let scope = hookExecutionScope {
-            _ = await hookCoordinator.onPostToolUse(
+            return await hookCoordinator.onPostToolUse(
                 conversationID: scope.conversationID,
                 runID: scope.runID,
                 call: call,
                 outcome: outcome,
-                model: nil
+                model: nil,
+                enqueueContext: false
             )
         } else {
-            _ = await hookCoordinator.onPostToolUse(call: call, outcome: outcome, model: nil)
+            return await hookCoordinator.onPostToolUse(call: call, outcome: outcome, model: nil)
         }
     }
 
@@ -1369,6 +1393,9 @@ final class ToolExecutor {
             return try files.write(url: context.url, content: arguments.content)
         }
         permissions.fileReadVersions.record(arguments.content, at: context.url, conversationID: fileVersionConversationID)
+        if isSkillFile?(context.url, workspace.url) == true {
+            onSkillDirectoryModified?(workspace.url)
+        }
         let output = "Wrote \(count) bytes to \(context.url.path)." + memoryCapacityFeedback(for: context.url)
         onUpdate(.init(state: .completed, approvalState: approval, output: output))
         logs.info("Tool", output)
@@ -1390,6 +1417,9 @@ final class ToolExecutor {
             try files.editContent(url: context.url, oldText: arguments.oldText, newText: arguments.newText, writingTo: location)
         }
         permissions.fileReadVersions.record(updated, at: context.url, conversationID: fileVersionConversationID)
+        if isSkillFile?(context.url, workspace.url) == true {
+            onSkillDirectoryModified?(workspace.url)
+        }
         let count = updated.utf8.count
         let output = "Edited \(context.url.path); resulting file is \(count) bytes." + memoryCapacityFeedback(for: context.url)
         onUpdate(.init(state: .completed, approvalState: approval, output: output))
@@ -3166,12 +3196,32 @@ final class ToolExecutor {
         )
 
 
+        var resultParts: [ToolResultPart]? = nil
+        if let screenshot = result.screenshot {
+            do {
+                guard let artifactStore else { throw ArtifactStoreError.storeUnavailable }
+                let descriptor = try artifactStore.save(
+                    data: screenshot.data, conversationID: conversationID,
+                    filename: screenshot.mimeType == "image/png" ? "Window.png" : "Window.jpg",
+                    mimeType: screenshot.mimeType,
+                    producerProvenance: .computerUseObservation,
+                    retentionClass: .temporaryExtraction
+                )
+                resultParts = [.text(payload), .artifact(id: descriptor.artifactID, semanticRole: .screenshot, mimeType: screenshot.mimeType)]
+            } catch {
+                await engine.elementRegistry.invalidateSession(conversationID: conversationID.uuidString, runID: runID.uuidString)
+                let errorPayload = jsonString(["status": "failed", "error": "Could not save the window screenshot: \(error.localizedDescription)"])
+                onUpdate(.init(state: .failed, approvalState: approvalState, output: errorPayload))
+                return ToolExecutionOutcome(content: errorPayload, isError: true, approvalState: approvalState, durationMilliseconds: duration)
+            }
+        }
         onUpdate(.init(state: terminalState, approvalState: approvalState, output: payload))
         return ToolExecutionOutcome(
             content: payload,
             isError: !result.isSuccess,
             approvalState: approvalState,
             durationMilliseconds: duration,
+            resultParts: resultParts,
             mechanicalTerminalFact: mechanicalFact
         )
     }

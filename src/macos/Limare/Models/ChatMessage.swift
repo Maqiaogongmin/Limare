@@ -818,28 +818,12 @@ enum HarnessToolDefinitions {
         required: ["action"]
     )
 
-    static let computerUseV2Definition: ChatToolDefinition = definition(
-        name: "computer_use",
-        description: "Operate macOS apps through their accessibility tree, in the background by default. launch_app opens an app and returns its window; capture observes a window. Every result includes the window's current elements with references (e1, e2, ...); use the references from the most recent result in the next action. Each app asks the user for permission once per conversation. Password managers, Keychain, System Settings and password fields are off limits: ask the user to do those steps. list_windows needs a pid or target_app. If an app is launched but has no window yet (launchedAwaitingWindow), use capture(target_app) instead of launching again.",
-        properties: [
-            "action": .init(type: "string", description: "The action kind: launch_app, list_apps, list_windows, capture, click, double_click, right_click, type, key, set_value, scroll, drag, wait."),
-            "target_app": .init(type: "string", description: "Target application bundle identifier (e.g. 'com.apple.calculator') or application name."),
-            "pid": .init(type: "number", description: "Process ID for list_windows or targeting."),
-            "window_id": .init(type: "number", description: "Window ID for targeting."),
-            "element": .init(type: "string", description: "Opaque element reference identifier (e.g. 'e1', 'e2') from current window observation."),
-            "text": .init(type: "string", description: "Text content to type into the target element or window."),
-            "key": .init(type: "string", description: "Key name to press (e.g. 'return', 'tab', 'escape', 'space')."),
-            "keys": .init(type: "array", description: "Key combinations or modifier keys to press (e.g. ['cmd', 'c'])."),
-            "value": .init(type: "string", description: "Value to set directly on the target element."),
-            "direction": .init(type: "string", description: "Scroll direction: up, down, left, right."),
-            "amount": .init(type: "number", description: "Scroll notches or amount (default 3)."),
-            "from_element": .init(type: "string", description: "Source element reference for drag (or use element)."),
-            "to_element": .init(type: "string", description: "Destination element reference for drag."),
-            "duration_ms": .init(type: "number", description: "Duration in milliseconds for wait (default 1000)."),
-            "delivery_mode": .init(type: "string", description: "'background' (default) acts without stealing focus; 'foreground' brings the window to the front first."),
-        ],
-        required: ["action"]
-    )
+    static let computerUseV2Definition: ChatToolDefinition = {
+        let tool = ComputerUseV2ToolDefinition.shared
+        return definition(name: tool.name, description: tool.description,
+            properties: tool.properties.mapValues { .init(type: $0.type, description: $0.description) },
+            required: tool.required)
+    }()
 
     /// The actions mcp_manage offers; the executor dispatches every one of them.
     static let mcpManageActions = ["list", "status", "create", "patch", "remove", "enable", "disable", "reconnect", "authenticate", "logout"]
@@ -875,7 +859,7 @@ enum HarnessToolDefinitions {
         2. create: a local server (transport stdio, command + args of a program installed on this Mac) or a remote one (transport http, url). mcp_manage cannot install software. Check with the shell whether a local server's program is installed; if it is missing, give the user the install command to run in Terminal.
         3. Credentials (tokens, API keys) only as references: patch set env {"NAME": "${secret:NAME}"} (local) or headers {"Authorization": "${secret:Authorization}"} (remote). Then call authenticate: Limare asks the user for each value in its own secure window (with Touch ID) and stores it privately. Never ask the user to paste a secret into the conversation and never put one in tool arguments. Tell the user which kind of token to create and with what minimal permissions.
         4. status: transport/auth state, missing_credentials and next_action; follow next_action. A connected server's tools appear from the next turn.
-        Users can do the same in Settings → MCP. Do not edit configuration files or install via shell.
+        Users can do the same in Settings → Extensions. Do not edit configuration files or install via shell.
         """,
         properties: mcpManageProperties,
         required: ["action"]

@@ -229,11 +229,13 @@ private struct MCPRowView: View {
 
 // MARK: - MCP Management Sheet
 
-private struct MCPManagementSheet: View {
+struct MCPManagementSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     let server: MCPServerConfig
     @Bindable var state: MCPSettingsState
+    var onBack: (() -> Void)? = nil
+    var onDelete: (() -> Void)? = nil
 
     @State private var didCopyConfig = false
     @State private var runtimeActionError: String?
@@ -313,7 +315,7 @@ private struct MCPManagementSheet: View {
                 do {
                     try appState.mcp.delete(id: server.id)
                     state.resetSheetState()
-                    dismiss()
+                    if let onDelete { onDelete() } else { dismiss() }
                 } catch {
                     state.pendingDeleteServerID = nil
                     state.deleteErrorMessage = String(localized: "Failed to delete server “\(server.id)”: \(error.localizedDescription)")
@@ -344,6 +346,13 @@ private struct MCPManagementSheet: View {
         VStack(spacing: 0) {
             // Header
             HStack(alignment: .center) {
+                if let onBack {
+                    Button(action: onBack) {
+                        Label("Back", systemImage: "chevron.left")
+                    }
+                    .buttonStyle(.plain)
+                    Divider().frame(height: 16)
+                }
                 HStack(spacing: AppSpacing.xSmall) {
                     Text(server.id)
                         .font(AppTypography.interfaceTitle2)
@@ -379,6 +388,11 @@ private struct MCPManagementSheet: View {
             // Scrollable Content
             ScrollView {
                 VStack(alignment: .leading, spacing: AppSemanticSpacing.settingsSectionGap) {
+                    if let note = server.note, !note.isEmpty {
+                        Text(note)
+                            .foregroundStyle(AppColors.textSecondary)
+                            .textSelection(.enabled)
+                    }
                     // Status Section
                     statusView
                     if let runtimeActionError {

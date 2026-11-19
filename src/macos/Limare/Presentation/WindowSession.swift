@@ -48,6 +48,20 @@ final class WindowSession: Identifiable {
     var conversationID: UUID? { chat.viewedConversationID }
     var conversation: ConversationRecord? { chat.viewedConversation }
 
+    /// Switches this window to chat, populates the draft with `prompt`, and focuses the composer at the end.
+    func openChatWithPrompt(_ prompt: String, preferEmptyOverwrite: Bool = true) {
+        screen = .chat
+        let trimmedDraft = chat.draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedDraft.isEmpty {
+            chat.draft = prompt
+        } else if preferEmptyOverwrite {
+            chat.draft += "\n" + prompt
+        } else {
+            chat.draft = prompt
+        }
+        composerFocusAtEndRequest += 1
+    }
+
     /// Shows a conversation. Leaving another one stops what belonged to it in this window:
     /// dictation into this composer, reading one of its messages aloud, and the Computer Use
     /// session if that conversation holds it and has no run in progress. Other windows are not

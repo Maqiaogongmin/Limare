@@ -49,6 +49,8 @@ public final class ComputerUseV2Engine: @unchecked Sendable {
     /// The role of the element with keyboard focus in an app (by pid). Keystrokes sent without an
     /// element go there, so a focused password field is caught before typing.
     public let focusedRole: @Sendable (Int) -> String?
+    public let normalizeScreenshot: (@Sendable (Data) throws -> ComputerUseScreenshot)?
+    public let hitTestRole: @Sendable (Int, Double, Double) -> String?
 
     public init(
         driver: any ComputerUseDriver,
@@ -58,7 +60,9 @@ public final class ComputerUseV2Engine: @unchecked Sendable {
         appAuthorizer: any ComputerUseAppAuthorizing,
         onLog: LogHandler? = nil,
         onEvent: EventHandler? = nil,
-        focusedRole: @escaping @Sendable (Int) -> String? = ComputerUseV2Engine.accessibilityFocusedRole
+        focusedRole: @escaping @Sendable (Int) -> String? = ComputerUseV2Engine.accessibilityFocusedRole,
+        normalizeScreenshot: (@Sendable (Data) throws -> ComputerUseScreenshot)? = nil,
+        hitTestRole: @escaping @Sendable (Int, Double, Double) -> String? = ComputerUseV2Engine.accessibilityRoleAtPosition
     ) {
         self.driver = driver
         self.targetStore = targetStore
@@ -68,6 +72,8 @@ public final class ComputerUseV2Engine: @unchecked Sendable {
         self.onLog = onLog
         self.onEvent = onEvent
         self.focusedRole = focusedRole
+        self.normalizeScreenshot = normalizeScreenshot
+        self.hitTestRole = hitTestRole
     }
 
     /// Reads the focused element through Accessibility, which Computer Use already requires.
@@ -83,6 +89,37 @@ public final class ComputerUseV2Engine: @unchecked Sendable {
         }
         if attribute(kAXSubroleAttribute) == "AXSecureTextField" { return "AXSecureTextField" }
         return attribute(kAXRoleAttribute)
+    }
+
+    public static func accessibilityRoleAtPosition(pid: Int, x: Double, y: Double) -> String? {
+        let app = AXUIElementCreateApplication(pid_t(pid))
+        var element: AXUIElement?
+        guard AXUIElementCopyElementAtPosition(app, Float(x), Float(y), &element) == .success,
+              let element else { return nil }
+        var subrole: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &subrole) == .success,
+           subrole as? String == "AXSecureTextField" { return "AXSecureTextField" }
+        var role: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role) == .success else { return nil }
+        return role as? String
+    }
+
+    private static func observationPayload(_ observation: ComputerUseObservation, refs: [ComputerUseElementRef]) -> [String: Any] {
+        let tree = ComputerUseElementRegistry.modelTreeMarkdown(observation, refs: refs) ?? ""
+        var payload: [String: Any] = [:]
+        if refs.isEmpty || refs.contains(where: { tree.contains("[\($0.refID)]") }) {
+            payload["tree_markdown"] = tree
+        } else {
+            payload["elements"] = refs.map { ["ref": $0.refID, "role": $0.role, "label": $0.label as Any] }
+        }
+        if observation.truncated {
+            payload["truncated"] = true
+            let guidance = "Use capture with query to find a control, or request a screenshot."
+            payload["truncation_hint"] = observation.truncationHint.map { "\($0) \(guidance)" } ?? "The tree is truncated. \(guidance)"
+        }
+        if let reason = observation.truncationReason { payload["truncation_reason"] = reason }
+        if let reason = observation.degradedReason { payload["degraded_reason"] = reason }
+        return payload
     }
 
     @discardableResult
@@ -144,6 +181,9 @@ public final class ComputerUseV2Engine: @unchecked Sendable {
 
     private func dispatchScoped(input: ComputerUseV2ActionInput, conversationID: UUID, runID: UUID,
         isAuthoritative: @escaping @Sendable () async -> Bool) async -> ComputerUseV2ActionResult {
+        guard input.deliveryMode == nil || input.deliveryMode == "background" else {
+            return .init(status: .unsupported, actionKind: input.action, detail: "Computer Use works in the background. Please perform any foreground step yourself.")
+        }
         // Gate 0: Mutation authority preflight
         guard await isAuthoritative() else {
             return ComputerUseV2ActionResult(
@@ -307,15 +347,14 @@ public final class ComputerUseV2Engine: @unchecked Sendable {
                     generation: currentGen
                 )
 
-                let detailObj: [String: Any] = [
+                var detailObj: [String: Any] = [
                     "status": "launched",
                     "bundle_id": bundleID,
                     "pid": target.pid,
                     "window_id": target.windowID,
-                    "title": target.title as Any,
-                    "tree_markdown": ComputerUseElementRegistry.modelTreeMarkdown(obs, refs: modelElements) as Any,
-                    "elements": modelElements.map { ["ref": $0.refID, "role": $0.role, "label": $0.label as Any] }
+                    "title": target.title as Any
                 ]
+                detailObj.merge(Self.observationPayload(obs, refs: modelElements)) { _, new in new }
                 let json = (try? JSONSerialization.data(withJSONObject: detailObj)) ?? Data()
                 let detailText = String(data: json, encoding: .utf8) ?? "Launched \(bundleID)"
 
@@ -395,26 +434,45 @@ public final class ComputerUseV2Engine: @unchecked Sendable {
         // Action: capture / observe
         if input.action == .capture || input.action == .observe {
             do {
-                let obs = try await driver.observeWindow(target: target)
+                let obs = try await driver.observeWindow(target: target, includeScreenshot: input.includeScreenshot, query: input.query)
                 let modelElements = await elementRegistry.registerObservation(
                     obs,
                     conversationID: convIDStr,
                     runID: runIDStr,
                     generation: currentGen
                 )
-                let detailObj: [String: Any] = [
+                var detailObj: [String: Any] = [
                     "status": "observed",
-                    "target": ["bundle_id": target.bundleID, "pid": target.pid, "window_id": target.windowID],
-                    "tree_markdown": ComputerUseElementRegistry.modelTreeMarkdown(obs, refs: modelElements) as Any,
-                    "elements": modelElements.map { ["ref": $0.refID, "role": $0.role, "label": $0.label as Any] }
+                    "target": ["bundle_id": target.bundleID, "pid": target.pid, "window_id": target.windowID]
                 ]
+                detailObj.merge(Self.observationPayload(obs, refs: modelElements)) { _, new in new }
+                var screenshot: ComputerUseScreenshot?
+                if input.includeScreenshot {
+                    if let data = obs.screenshotData, let normalizeScreenshot {
+                        do {
+                            let image = try normalizeScreenshot(data)
+                            guard image.width > 0, image.height > 0, image.rawWidth > 0, image.rawHeight > 0 else {
+                                throw ComputerUseDriverError.protocolMalformed(detail: "Invalid screenshot dimensions")
+                            }
+                            screenshot = image
+                            await elementRegistry.setScreenshot(image, observation: obs, conversationID: convIDStr, runID: runIDStr)
+                            detailObj["image"] = ["width": image.width, "height": image.height]
+                            if obs.captureID == nil { detailObj["image_note"] = "This screenshot cannot be used for a pixel click." }
+                        } catch {
+                            detailObj["screenshot_error"] = "Window screenshot could not be decoded: \(error.localizedDescription)"
+                        }
+                    } else {
+                        detailObj["screenshot_error"] = obs.screenshotError ?? "Window screenshot is unavailable."
+                    }
+                }
                 let json = (try? JSONSerialization.data(withJSONObject: detailObj)) ?? Data()
                 let detailText = String(data: json, encoding: .utf8) ?? "Observed window"
                 return ComputerUseV2ActionResult(
                     status: .dispatched,
                     actionKind: input.action,
                     targetAppBundleID: target.bundleID,
-                    detail: detailText
+                    detail: detailText,
+                    screenshot: screenshot
                 )
             } catch {
                 return ComputerUseV2ActionResult(status: .failed, actionKind: input.action, targetAppBundleID: target.bundleID, detail: error.localizedDescription)
@@ -465,27 +523,42 @@ public final class ComputerUseV2Engine: @unchecked Sendable {
                 detail: "Run authority revoked during session ensure")
         }
 
-        // Governed Foreground Escalation: Explicit, tracked window activation (zero stealth focus shifts)
-        if input.deliveryMode == "foreground" {
-            logInfo("Governed foreground activation for target window \(target.windowID) (\(target.bundleID))")
-            recordEvent(
-                conversationID: conversationID,
-                runID: runID,
-                kind: "computerUse.foregroundEscalated",
-                summary: "Explicitly activated target window \(target.windowID) (\(target.bundleID)) for foreground interaction."
-            )
-            _ = try? await driver.activateWindow(target: target)
-        }
-
         // Mechanical Driver Dispatch
         do {
             let receipt: ComputerUseDriverActionResult
             switch input.action {
             case .click:
-                guard let ref = elementRef else {
-                    return ComputerUseV2ActionResult(status: .failed, actionKind: .click, targetAppBundleID: target.bundleID, detail: "click requires 'element' parameter.")
+                if let ref = elementRef, input.x == nil, input.y == nil {
+                    receipt = try await driver.click(element: ref, deliveryMode: "background")
+                } else if elementRef == nil, let x = input.x, let y = input.y {
+                    guard let visual = await elementRegistry.takeScreenshot(conversationID: convIDStr, runID: runIDStr), visual.target == target,
+                          x.isFinite, y.isFinite, x >= 0, y >= 0,
+                          x < Double(visual.screenshot.width), y < Double(visual.screenshot.height) else {
+                        return .init(status: .failed, actionKind: .click, targetAppBundleID: target.bundleID, detail: "Capture the current window screenshot before clicking within its bounds.")
+                    }
+                    let windows = try await driver.listWindows(pid: target.pid)
+                    guard let current = windows.first(where: { $0.windowID == target.windowID }), current.bounds == visual.bounds else {
+                        return .init(status: .staleObservation, actionKind: .click, targetAppBundleID: target.bundleID, detail: "Window moved or resized; capture a new screenshot.")
+                    }
+                    let rawX = Int(x * Double(visual.screenshot.rawWidth) / Double(visual.screenshot.width))
+                    let rawY = Int(y * Double(visual.screenshot.rawHeight) / Double(visual.screenshot.height))
+                    let screenX = visual.bounds.x + Double(rawX) * visual.bounds.width / Double(visual.screenshot.rawWidth)
+                    let screenY = visual.bounds.y + Double(rawY) * visual.bounds.height / Double(visual.screenshot.rawHeight)
+                    let secureHit = visual.elements.contains { element in
+                        guard element.role == "AXSecureTextField" || element.subrole == "AXSecureTextField" else { return false }
+                        let frame = element.screenshotFrame ?? element.screenFrame
+                        let px = element.screenshotFrame == nil ? screenX : Double(rawX)
+                        let py = element.screenshotFrame == nil ? screenY : Double(rawY)
+                        return px >= frame.x && py >= frame.y && px < frame.x + frame.width && py < frame.y + frame.height
+                    }
+                    if secureHit || hitTestRole(target.pid, screenX, screenY) == "AXSecureTextField" {
+                        return .init(status: .blocked, actionKind: .click, targetAppBundleID: target.bundleID, detail: "Please handle password fields yourself.")
+                    }
+                    guard await isAuthoritative() else { return .init(status: .cancelled, actionKind: .click, detail: "Run cancelled.") }
+                    receipt = try await driver.click(target: target, x: rawX, y: rawY, captureID: visual.captureID)
+                } else {
+                    return .init(status: .failed, actionKind: .click, targetAppBundleID: target.bundleID, detail: "Provide either an element or screenshot coordinates x and y.")
                 }
-                receipt = try await driver.click(element: ref, deliveryMode: input.deliveryMode)
 
             case .doubleClick:
                 guard let ref = elementRef else {
@@ -539,10 +612,7 @@ public final class ComputerUseV2Engine: @unchecked Sendable {
             await elementRegistry.invalidateSession(conversationID: convIDStr, runID: runIDStr)
             if let postObs = try? await driver.observeWindow(target: target) {
                 let refs = await elementRegistry.registerObservation(postObs, conversationID: convIDStr, runID: runIDStr, generation: currentGen)
-                observation = [
-                    "tree_markdown": ComputerUseElementRegistry.modelTreeMarkdown(postObs, refs: refs) as Any,
-                    "elements": refs.map { ["ref": $0.refID, "role": $0.role, "label": $0.label as Any] }
-                ]
+                observation = Self.observationPayload(postObs, refs: refs)
             }
 
             var responsePayload: [String: Any] = [
@@ -558,10 +628,6 @@ public final class ComputerUseV2Engine: @unchecked Sendable {
                 responsePayload["observation_note"] = "The window could not be read after this action; capture it before the next element action."
             }
 
-            if !receipt.isSuccess && input.deliveryMode != "foreground" {
-                responsePayload["hint"] = "If the window needs focus for this, retry with delivery_mode 'foreground' (it brings the window to the front)."
-            }
-
             let jsonData = (try? JSONSerialization.data(withJSONObject: responsePayload)) ?? Data()
             let contentString = String(data: jsonData, encoding: .utf8) ?? "{}"
 
@@ -573,14 +639,11 @@ public final class ComputerUseV2Engine: @unchecked Sendable {
                 receipt: receipt
             )
         } catch {
-            var errorPayload: [String: Any] = [
+            let errorPayload: [String: Any] = [
                 "status": "failed",
                 "action": input.action.rawValue,
                 "error": error.localizedDescription
             ]
-            if input.deliveryMode != "foreground" {
-                errorPayload["hint"] = "If the window needs focus for this, retry with delivery_mode 'foreground' (it brings the window to the front)."
-            }
             let errData = (try? JSONSerialization.data(withJSONObject: errorPayload)) ?? Data()
             let errString = String(data: errData, encoding: .utf8) ?? error.localizedDescription
             return ComputerUseV2ActionResult(status: .failed, actionKind: input.action, targetAppBundleID: target.bundleID, detail: errString)

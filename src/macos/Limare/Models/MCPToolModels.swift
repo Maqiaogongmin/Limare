@@ -263,7 +263,7 @@ enum MCPTransportError: LocalizedError, Sendable, Equatable {
         case .unknownServer(let id): return String(localized: "Unknown MCP server: \(id)")
         case .serverDisabled(let id): return String(localized: "MCP server is disabled: \(id)")
         case .authenticationRequired(let msg): return msg
-        case .signInRequired(let id): return "MCP server '\(id)' requires sign-in. Sign in from Settings → MCP, or ask the agent to run mcp_manage action 'authenticate'."
+        case .signInRequired(let id): return "MCP server '\(id)' requires sign-in. Sign in from Settings → Extensions, or ask the agent to run mcp_manage action 'authenticate'."
         case .accessForbidden(let msg): return msg
         case .networkUnreachable(let msg): return msg
         case .serverError(let code, let msg): return String(localized: "Remote server error (\(code)): \(msg)")
@@ -273,7 +273,7 @@ enum MCPTransportError: LocalizedError, Sendable, Equatable {
         case .invalidURL(let msg): return String(localized: "Invalid MCP URL: \(msg)")
         case .configurationError(let msg): return String(localized: "MCP configuration error: \(msg)")
         case .credentialMissing(let id, let names):
-            return "MCP server '\(id)' needs \(names.joined(separator: ", ")). Limare asks for it in its own secure prompt (Settings → MCP → Enter Credentials…, or mcp_manage action 'authenticate')."
+            return "MCP server '\(id)' needs \(names.joined(separator: ", ")). Limare asks for it in its own secure prompt (Settings → Extensions → Enter Credentials…, or mcp_manage action 'authenticate')."
         }
     }
 }

@@ -21,6 +21,15 @@ public actor ComputerUseElementRegistry {
         var generation: Int
         var snapshotID: String
         var elementsByRefID: [String: ComputerUseElementRef] = [:]
+        var visual: VisualSnapshot?
+    }
+
+    public struct VisualSnapshot: Sendable {
+        let target: WindowTarget
+        let bounds: WindowBounds
+        let captureID: String
+        let screenshot: ComputerUseScreenshot
+        let elements: [ComputerUseElement]
     }
 
     private var sessions: [SessionKey: SessionState] = [:]
@@ -47,7 +56,7 @@ public actor ComputerUseElementRegistry {
                 snapshotID: observation.snapshotID,
                 backendToken: elem.token,
                 target: observation.target,
-                role: elem.role,
+                role: elem.subrole == "AXSecureTextField" ? "AXSecureTextField" : elem.role,
                 label: elem.label ?? elem.title,
                 normalizedFrame: elem.normalizedFrame
             )
@@ -80,6 +89,24 @@ public actor ComputerUseElementRegistry {
             output.replaceCharacters(in: match.range, with: prefix + "[" + (mapped.count == 1 ? mapped[0] : "unaddressable") + "]")
         }
         return output as String
+    }
+
+    public func setScreenshot(_ image: ComputerUseScreenshot, observation: ComputerUseObservation,
+                              conversationID: String, runID: String) {
+        let key = SessionKey(conversationID: conversationID, runID: runID)
+        guard var session = sessions[key], session.snapshotID == observation.snapshotID,
+              let captureID = observation.captureID, !captureID.isEmpty else { return }
+        session.visual = VisualSnapshot(target: observation.target, bounds: observation.windowBounds,
+                                        captureID: captureID, screenshot: image, elements: observation.elements)
+        sessions[key] = session
+    }
+
+    public func takeScreenshot(conversationID: String, runID: String) -> VisualSnapshot? {
+        let key = SessionKey(conversationID: conversationID, runID: runID)
+        guard var session = sessions[key], let visual = session.visual else { return nil }
+        session.visual = nil
+        sessions[key] = session
+        return visual
     }
 
     /// Resolves a reference from the latest observation.
