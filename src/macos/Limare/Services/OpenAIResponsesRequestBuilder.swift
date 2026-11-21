@@ -35,6 +35,10 @@ enum OpenAIResponsesRequestBuilder {
             apiKey: apiKey,
             isChat: true
         )
+        if let key = options.promptCacheKey, !key.isEmpty,
+           !provider.extraHeaders.keys.contains(where: { $0.caseInsensitiveCompare("session_id") == .orderedSame }) {
+            request.setValue(key, forHTTPHeaderField: "session_id")
+        }
 
         let payload = try buildPayload(
             provider: provider,
@@ -65,6 +69,8 @@ enum OpenAIResponsesRequestBuilder {
             "store": false,
             "parallel_tool_calls": true
         ]
+
+        if let key = options.promptCacheKey, !key.isEmpty { payload["prompt_cache_key"] = key }
 
         let targetModel = options.model ?? provider.models.first(where: { $0.id == modelID })
         let resolution = try ProviderThinkingResolution.resolve(requested: options.thinkingLevel, model: targetModel, provider: provider, maxTokens: options.resolvedMaxOutputTokens(for: targetModel))

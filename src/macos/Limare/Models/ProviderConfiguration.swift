@@ -1,6 +1,15 @@
 import Foundation
 
 extension ProviderConfiguration {
+    var isOfficialOpenAIEndpoint: Bool {
+        guard let url = URLComponents(string: baseURL) else { return false }
+        return url.scheme?.lowercased() == "https" && url.host?.lowercased() == "api.openai.com"
+            && url.port == nil && ["", "/", "/v1", "/v1/"].contains(url.path)
+            && url.user == nil && url.password == nil && url.query == nil && url.fragment == nil
+    }
+}
+
+extension ProviderConfiguration {
     var isDeepSeekOfficial: Bool {
         URLComponents(string: baseURL)?.host?.lowercased() == "api.deepseek.com"
     }

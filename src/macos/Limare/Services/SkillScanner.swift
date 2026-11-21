@@ -81,7 +81,7 @@ struct SkillScanner {
 
         guard let entries = try? fileManager.contentsOfDirectory(
             at: standardizedRoot,
-            includingPropertiesForKeys: [.isDirectoryKey, .contentModificationDateKey],
+            includingPropertiesForKeys: [.isDirectoryKey, .addedToDirectoryDateKey, .creationDateKey, .contentModificationDateKey],
             options: [.skipsHiddenFiles]
         ) else {
             return
@@ -110,7 +110,15 @@ struct SkillScanner {
                 continue
             }
 
-            let modDate = (try? skillFileURL.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? Date()
+            let resourceKeys: Set<URLResourceKey> = [.isDirectoryKey, .addedToDirectoryDateKey, .creationDateKey, .contentModificationDateKey]
+            let dirValues = try? canonicalDir.resourceValues(forKeys: resourceKeys)
+            let fileValues = try? skillFileURL.resourceValues(forKeys: resourceKeys)
+            let modDate = fileValues?.contentModificationDate ?? Date()
+            let addedAt = dirValues?.addedToDirectoryDate
+                ?? fileValues?.addedToDirectoryDate
+                ?? dirValues?.creationDate
+                ?? fileValues?.creationDate
+                ?? modDate
 
             let skill = Skill(
                 id: id,
@@ -127,7 +135,8 @@ struct SkillScanner {
                 color: parsed.color,
                 examples: parsed.examples,
                 mcpServers: parsed.mcpServers,
-                isHidden: parsed.isHidden
+                isHidden: parsed.isHidden,
+                addedAt: addedAt
             )
             discovered.append(skill)
         }

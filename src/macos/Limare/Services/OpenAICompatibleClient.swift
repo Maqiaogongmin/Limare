@@ -113,11 +113,34 @@ extension Notification.Name {
     static let streamUsageCompatibilityChanged = Notification.Name("LimareStreamUsageCompatibilityChanged")
 }
 
+private final class ParameterCompatibility: @unchecked Sendable {
+    private let lock = NSLock()
+    private var rejected: Set<String> = []
+
+    private func key(_ provider: ProviderConfiguration, param: String) -> String {
+        "\(provider.id.uuidString)|\(provider.baseURL)|\(provider.apiFormat.rawValue)|\(param)"
+    }
+
+    func isRejected(_ provider: ProviderConfiguration, param: String) -> Bool {
+        lock.withLock { rejected.contains(key(provider, param: param)) }
+    }
+
+    func markRejected(_ provider: ProviderConfiguration, param: String) {
+        _ = lock.withLock { rejected.insert(key(provider, param: param)) }
+    }
+
+    func invalidate(_ id: UUID) {
+        let prefix = id.uuidString + "|"
+        lock.withLock { rejected = rejected.filter { !$0.hasPrefix(prefix) } }
+    }
+}
+
 struct OpenAICompatibleClient: ProviderClient {
     private let session: URLSession
     private var credentialResolver: (@Sendable (ProviderConfiguration) async throws -> String)?
     private var usageRecorder: UsageRecorder?
     private let streamUsageCompatibility: StreamUsageCompatibility
+    private let parameterCompatibility: ParameterCompatibility
 
     private static let productionSession: URLSession = {
         let configuration = URLSessionConfiguration.default
@@ -132,6 +155,7 @@ struct OpenAICompatibleClient: ProviderClient {
         self.credentialResolver = nil
         self.usageRecorder = nil
         self.streamUsageCompatibility = StreamUsageCompatibility()
+        self.parameterCompatibility = ParameterCompatibility()
     }
 
     func recordingUsage(_ recorder: UsageRecorder?) -> Self {
@@ -141,7 +165,10 @@ struct OpenAICompatibleClient: ProviderClient {
     }
 
     func streamUsageWasRejected(_ provider: ProviderConfiguration) -> Bool { streamUsageCompatibility.isRejected(provider) }
-    func invalidateStreamUsageCompatibility(_ id: UUID) { streamUsageCompatibility.invalidate(id) }
+    func invalidateStreamUsageCompatibility(_ id: UUID) {
+        streamUsageCompatibility.invalidate(id)
+        parameterCompatibility.invalidate(id)
+    }
 
     func resolvingCredentials(_ resolver: @escaping @Sendable (ProviderConfiguration) async throws -> String) -> Self {
         var copy = self
@@ -277,6 +304,8 @@ struct OpenAICompatibleClient: ProviderClient {
                 var record = UsageRequestRecord(providerID: provider.id, providerName: provider.name,
                     modelID: modelID, modelName: modelName, format: provider.apiFormat, kind: options.usageKind)
                 var omitUsageOption = streamUsageCompatibility.isRejected(provider)
+                var omitPromptCacheKey = parameterCompatibility.isRejected(provider, param: "prompt_cache_key")
+                var omitCacheControl = parameterCompatibility.isRejected(provider, param: "cache_control")
                 let compatibilityGeneration = streamUsageCompatibility.generation(provider.id)
                 var fallbackPending = false
                 var fallbackAttempted = false
@@ -285,11 +314,13 @@ struct OpenAICompatibleClient: ProviderClient {
                     record.endedAt = Date(); record.outcome = outcome
                     await usageRecorder.append(record)
                 }
+                let maxTransientAttempts = options.usageKind == .title ? 1 : Self.maximumRequestAttempts
                 for attempt in 1...Self.maximumRequestAttempts {
                     let metrics = TransportMetricsRecorder(restrictOAuthResource: provider.authenticationSelection.credentialKind == .oauthAccessToken)
                     var semanticOutput = false
                     var retryResponse: HTTPURLResponse?
                     var usageOptionRejected = false
+                    var rejectedOptionalParam: (name: String, reason: String)? = nil
                     var dispatched = false
                     let capture = UsageAttemptCapture()
                     let callback: @Sendable (ProviderStreamDiagnostics) -> Void = { diagnostics in
@@ -345,7 +376,8 @@ struct OpenAICompatibleClient: ProviderClient {
                                 thinking: resolution.effective.rawValue,
                                 supportsReasoning: options.model?.supportsReasoning,
                                 effortValues: options.model?.reasoningEffortValues,
-                                continuationJSON: continuationData, kimiCodeProfile: provider.providerIdentity == .kimiCode)
+                                continuationJSON: continuationData, kimiCodeProfile: provider.providerIdentity == .kimiCode,
+                                includePromptCacheControl: !omitCacheControl)
                             ProviderRequestConfigurator.configureHeaders(request: &request, provider: provider, apiKey: apiKey, isChat: true)
                             await onRequestToolNames?(tools.map(\.function.name))
                             let reportDiagnostics = Self.diagnosticsReporter(callback, provider: provider, modelID: modelID, options: options, request: request)
@@ -360,6 +392,10 @@ struct OpenAICompatibleClient: ProviderClient {
                             retryResponse = http
                             guard (200..<300).contains(http.statusCode) else {
                                 let body = try await readLimitedBody(bytes: bytes)
+                                if provider.apiFormat == .anthropicMessages, !omitCacheControl, provider.providerIdentity != .kimiCode,
+                                   Self.rejectsParameter(["cache_control"], status: http.statusCode, message: String(decoding: body, as: UTF8.self)) {
+                                    rejectedOptionalParam = ("cache_control", "cache_control_unsupported")
+                                }
                                 throw ProviderClientError.http(status: http.statusCode, message: Self.httpErrorMessage(from: body, status: http.statusCode))
                             }
                             let decoder = NativeStreamDecoder(protocol: wire)
@@ -508,13 +544,15 @@ struct OpenAICompatibleClient: ProviderClient {
                             return
 
                         case .responses:
+                            var wireOptions = options
+                            if omitPromptCacheKey { wireOptions.promptCacheKey = nil }
                             let request = try OpenAIResponsesRequestBuilder.buildURLRequest(
                                 provider: provider,
                                 apiKey: apiKey,
                                 modelID: modelID,
                                 messages: messages,
                                 tools: tools,
-                                options: options,
+                                options: wireOptions,
                                 attachmentResolver: attachmentResolver,
                                 artifactResolver: artifactResolver
                             )
@@ -542,6 +580,10 @@ struct OpenAICompatibleClient: ProviderClient {
                             retryResponse = http
                             guard (200..<300).contains(http.statusCode) else {
                                 let body = try await readLimitedBody(bytes: bytes)
+                                if !omitPromptCacheKey, options.promptCacheKey != nil,
+                                   Self.rejectsParameter(["prompt_cache_key"], status: http.statusCode, message: String(decoding: body, as: UTF8.self)) {
+                                    rejectedOptionalParam = ("prompt_cache_key", "prompt_cache_key_unsupported")
+                                }
                                 throw ProviderClientError.http(
                                     status: http.statusCode,
                                     message: Self.httpErrorMessage(from: body, status: http.statusCode)
@@ -583,17 +625,33 @@ struct OpenAICompatibleClient: ProviderClient {
                            case .http(let status, let message) = error as? ProviderClientError {
                             rejectedUsage = usageOptionRejected || Self.rejectsStreamUsage(status: status, message: message)
                         } else { rejectedUsage = false }
-                        finishAttempt(finished: false, excluded: rejectedUsage)
+                        if rejectedOptionalParam == nil, !rejectedUsage, case .http(let status, let message) = error as? ProviderClientError {
+                            if provider.apiFormat == .responses, !omitPromptCacheKey, options.promptCacheKey != nil,
+                               Self.rejectsParameter(["prompt_cache_key"], status: status, message: message) {
+                                rejectedOptionalParam = ("prompt_cache_key", "prompt_cache_key_unsupported")
+                            } else if provider.apiFormat == .anthropicMessages, !omitCacheControl, provider.providerIdentity != .kimiCode,
+                                      Self.rejectsParameter(["cache_control"], status: status, message: message) {
+                                rejectedOptionalParam = ("cache_control", "cache_control_unsupported")
+                            }
+                        }
+                        finishAttempt(finished: false, excluded: rejectedUsage || rejectedOptionalParam != nil)
                         if rejectedUsage, !fallbackAttempted, !Task.isCancelled, attempt < Self.maximumRequestAttempts {
                             fallbackAttempted = true; fallbackPending = true; omitUsageOption = true
                             await onRetry?(attempt + 1, "stream_usage_unsupported")
+                            continue
+                        }
+                        if let rejectedParam = rejectedOptionalParam, !Task.isCancelled, attempt < Self.maximumRequestAttempts {
+                            parameterCompatibility.markRejected(provider, param: rejectedParam.name)
+                            if rejectedParam.name == "prompt_cache_key" { omitPromptCacheKey = true }
+                            if rejectedParam.name == "cache_control" { omitCacheControl = true }
+                            await onRetry?(attempt + 1, rejectedParam.reason)
                             continue
                         }
                         if let urlError = error as? URLError, urlError.code != .cancelled {
                             await onTransportFailure?(TransportMetricsRecorder.summary(urlError, metrics.value))
                         }
                         guard !Task.isCancelled, !(error is CancellationError),
-                              attempt < Self.maximumRequestAttempts, !semanticOutput,
+                              attempt < maxTransientAttempts, !semanticOutput,
                               RateLimitFallback.current?.available != true,
                               Self.isTransient(error, response: retryResponse) else {
                             let cancelled = Task.isCancelled || error is CancellationError || (error as? URLError)?.code == .cancelled
@@ -690,10 +748,14 @@ struct OpenAICompatibleClient: ProviderClient {
     static let maximumRequestAttempts = 5
 
     static func rejectsStreamUsage(status: Int, message: String) -> Bool {
+        rejectsParameter(["stream_options", "include_usage"], status: status, message: message)
+    }
+
+    static func rejectsParameter(_ names: [String], status: Int, message: String) -> Bool {
         guard status == 400 || status == 422 else { return false }
         func mentionsParameter(_ value: String) -> Bool {
             let lower = value.lowercased()
-            return lower.contains("stream_options") || lower.contains("include_usage")
+            return names.contains { lower.contains($0.lowercased()) }
         }
         func mentionsRejection(_ value: String) -> Bool {
             let lower = value.lowercased()
@@ -734,9 +796,12 @@ struct OpenAICompatibleClient: ProviderClient {
         if let url = error as? URLError {
             return !Self.permanentURLErrors.contains(url.code)
         }
-        if case .streamError? = error as? ProviderClientError {
+        switch error as? ProviderClientError {
+        case .streamError, .responsesFailed:
             if case .providerInvocation(_, true, _) = ModelRoutingClassifier.classify(error) { return true }
             return false
+        default:
+            break
         }
         guard case .http(let status, let message) = error as? ProviderClientError else { return false }
         if status == 400 {

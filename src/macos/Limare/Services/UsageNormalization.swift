@@ -79,7 +79,7 @@ struct UsageRequestRecord: Sendable {
         let normalized = NormalizedUsage.from(telemetry, format: format, finished: finished)
         if normalized.status == .unknown { attemptsWithoutUsage += 1 }
         else { attemptsWithUsage += 1; usage.add(normalized) }
-        if normalized.status != .complete { incompleteAttempts += 1 }
+        if normalized.status == .partial { incompleteAttempts += 1 }
         usage.status = attemptsWithUsage == 0 ? .unknown : (incompleteAttempts == 0 ? .complete : .partial)
     }
 }

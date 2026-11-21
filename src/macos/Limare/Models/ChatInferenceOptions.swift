@@ -30,6 +30,7 @@ struct ChatInferenceOptions: Sendable, Equatable {
     var preserveReasoningHistory: Bool
     var adapterDisabledNativeVision: Bool
     var usageKind: UsageKind
+    var promptCacheKey: String? = nil
 
     init(
         thinkingLevel: ThinkingLevel = .off,

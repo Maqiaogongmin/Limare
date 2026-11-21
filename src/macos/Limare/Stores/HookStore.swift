@@ -17,6 +17,7 @@ final class HookStore {
     private(set) var sources: [HookSource] = []
     private(set) var recentExecutions: [HookExecutionSummary] = []
     var runningStatus: String?
+    @ObservationIgnored var onExecutionsRecorded: (@MainActor ([HookExecutionSummary]) -> Void)?
 
     let trustStore: HookTrustStore
     let runtime: HookRuntime
@@ -174,6 +175,9 @@ final class HookStore {
         }
         if recentExecutions.count > 50 {
             recentExecutions.removeSubrange(50..<recentExecutions.count)
+        }
+        if !executions.isEmpty {
+            onExecutionsRecorded?(executions)
         }
     }
 

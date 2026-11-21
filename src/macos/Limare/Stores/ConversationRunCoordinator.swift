@@ -66,6 +66,7 @@ final class ConversationRunCoordinator {
         let message: ChatMessage
     }
 
+    @ObservationIgnored private var conversationWireToolArguments: [UUID: [String: String]] = [:]
     private(set) var activeRuns: [UUID: ConversationRun] = [:]
     private(set) var queuedInputs: [UUID: [QueuedConversationInput]] = [:]
     private(set) var isQueueSuspended: [UUID: Bool] = [:]
@@ -1668,13 +1669,16 @@ final class ConversationRunCoordinator {
                 }
                 recordModelRejection(error, providerID: provider.id, modelID: modelID)
                 let failureClass = ModelRoutingClassifier.classify(error)
+                let hadMidStreamOutput = conversationMessages(for: conversationID).dropFirst(attemptStartMessageCount).contains {
+                    $0.role == .assistant && (!$0.content.isEmpty || !($0.reasoningContent ?? "").isEmpty || !$0.toolCalls.isEmpty)
+                }
                 let decision = ModelRoutingClassifier.decide(
                     failureClass: failureClass,
                     strategy: .limited,
                     toolExecutionOccurred: candidateToolExecutionOccurred,
                     hasCommittedToolCheckpoint: hasCommittedToolCheckpoint,
                     currentRetryCount: currentRetryCount,
-                    maxRetries: hasCommittedToolCheckpoint ? 2 : 0
+                    maxRetries: (hasCommittedToolCheckpoint || hadMidStreamOutput) ? 2 : 0
                 )
                 if case .retryCurrent(let nextAttempt, let delaySeconds, let reason) = decision {
                     recordFailure(conversationID: conversationID, runID: runID, error: error, provider: provider.name, modelID: modelID, recoverable: "true", decision: decision.eventDecision)
@@ -2049,11 +2053,11 @@ final class ConversationRunCoordinator {
         onToolOutcomeCommitted: (@MainActor (Int) -> Void)? = nil
     ) async throws -> AgentLoopResult {
         // Never persist original browser inputs or shell environment values.
-        var wireToolArguments: [String: String] = [:]
         let initialChatRequests = Self.buildChatRequestHistory(
             messages: conversationMessages(for: conversationID),
             systemPrompt: "",
-            fallback: fallbackConversation
+            fallback: fallbackConversation,
+            wireToolArguments: conversationWireToolArguments[conversationID] ?? [:]
         )
 
         let currentPolicy = runExecutionPolicies[runID] ?? .full
@@ -2108,6 +2112,7 @@ final class ConversationRunCoordinator {
         let loopResult: AgentLoopResult
         var recordedOptions = options
         recordedOptions.usageKind = subagentRuns[runID] != nil ? .subagent : (scheduledRunLookup?(runID) == true ? .scheduled : .chat)
+        recordedOptions.promptCacheKey = conversationID.uuidString
         do { loopResult = try await loopEngine.run(
             provider: provider,
             apiKey: apiKey,
@@ -2275,7 +2280,7 @@ final class ConversationRunCoordinator {
                             messages: working.messages,
                             systemPrompt: systemPrompt,
                             fallback: fallbackConversation,
-                            wireToolArguments: wireToolArguments
+                            wireToolArguments: self.conversationWireToolArguments[conversationID] ?? [:]
                         )
                         return AgentLoopEngine.WorkingContext(messages: baseHistory,
                                                               outputRoom: EffectiveContextLimits.outputRoom(for: working.budget))
@@ -2319,7 +2324,7 @@ final class ConversationRunCoordinator {
                     return
                 }
                 for call in callsToCancel {
-                    wireToolArguments[call.id] = call.function.arguments
+                    self.conversationWireToolArguments[conversationID, default: [:]][call.id] = call.function.arguments
                     let recordID = observer.recordID(for: call.id)
                     if let recordIndex = msgs[msgIndex].toolCalls.firstIndex(where: { ($0.id == recordID) || ($0.providerCallID == call.id) }) {
                         msgs[msgIndex].toolCalls[recordIndex].state = .cancelled
@@ -2389,7 +2394,7 @@ final class ConversationRunCoordinator {
                 guard self.hasMutationAuthority(conversationID: conversationID, runID: runID) else {
                     return ToolExecutionOutcome(content: "Execution cancelled", isError: true, approvalState: .notRequired, durationMilliseconds: 0)
                 }
-                wireToolArguments[call.id] = call.function.arguments
+                self.conversationWireToolArguments[conversationID, default: [:]][call.id] = call.function.arguments
                 // Subagent policy: new delegated work is admitted only when the provider turn that
                 // issued this call advertised delegate_task. A call issued under an advertising turn
                 // is honoured even if the user turned Subagent off afterwards.
@@ -3350,7 +3355,7 @@ final class ConversationRunCoordinator {
     }
 
     /// More MCP tools than this are deferred behind tool_search.
-    static let mcpDeferralThreshold = 15
+    static let mcpDeferralThreshold = 30
 
     /// Recover loaded tools from successful search results still present in the conversation.
     static func loadedDeferredToolNames(in messages: [ChatMessage]) -> Set<String> {
@@ -3738,9 +3743,8 @@ No tools, shell, browser, or file system access are available for this turn. Res
             tools.append(HarnessToolDefinitions.modelUseDefinition)
         }
         if let activation = computerUseActivation,
-           activation.isActivated,
            let convID = conversationID,
-           activation.activeConversationID == convID {
+           ((activation.isActivated && activation.activeConversationID == convID) || activation.hasPendingClaim(for: convID)) {
             // Stage 10: Exactly ONE production Computer Use tool authority: Limare v0.2 window automation
             if toolExecutor.computerUseV2Engine != nil {
                 tools.append(HarnessToolDefinitions.computerUseV2Definition)
@@ -4049,7 +4053,13 @@ No tools, shell, browser, or file system access are available for this turn. Res
         )
     }
 
+    func forgetWireToolArguments(conversationID: UUID) {
+        conversationWireToolArguments.removeValue(forKey: conversationID)
+    }
+
     func forgetContextUsage(conversationID: UUID) {
+        forgetWireToolArguments(conversationID: conversationID)
+        contextLifecycle.clearPinnedReduction(conversationID: conversationID)
         contextUsage.removeValue(forKey: conversationID)
         conversationPerformance.removeValue(forKey: conversationID)
     }

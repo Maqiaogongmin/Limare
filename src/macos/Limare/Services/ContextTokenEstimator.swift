@@ -57,10 +57,11 @@ enum ContextTokenEstimator {
             bytes += call.name.utf8.count + call.input.utf8.count + call.output.utf8.count
         }
         if let echo = message.responsesReasoningEcho {
+            // `encryptedContent` is opaque server-side base64 ciphertext whose byte length
+            // is 20-30x larger than billed input tokens and causes premature working-set reduction.
             for item in echo.items {
                 bytes += item.id.utf8.count
                 for s in item.summary { bytes += s.utf8.count }
-                if let enc = item.encryptedContent { bytes += enc.utf8.count }
             }
         }
         bytes += message.attachments.count * standardImageAttachmentByteCount

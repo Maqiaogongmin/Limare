@@ -344,6 +344,10 @@ final class ComputerUseActivationStore {
         return bindExecutionSession(conversationID: conversationID, currentPermissionMode: refused.mode)
     }
 
+    func hasPendingClaim(for conversationID: UUID) -> Bool {
+        refusedSessions[conversationID] != nil && (capabilityStatus == .ready || capabilityStatus == .needsAccessibility)
+    }
+
     /// Why a refused run cannot use Computer Use, while the other conversation still holds it.
     func refusalReason(conversationID: UUID) -> String? {
         guard refusedSessions[conversationID] != nil,

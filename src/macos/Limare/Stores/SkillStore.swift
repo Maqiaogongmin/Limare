@@ -19,7 +19,11 @@ final class SkillStore {
             }
         }
     }
+    private static let extensionUsageCountsKey = "extensionCardUsageCounts"
+    private static let extensionUsageSeededKey = "extensionCardUsageSeededV1"
+
     private(set) var skills: [Skill] = []
+    private(set) var extensionUsageCounts: [String: Int] = [:]
 
     @ObservationIgnored
     private let logs: DebugLogStore
@@ -44,6 +48,11 @@ final class SkillStore {
         self.disabledKey = disabledKey
         self.scanner = scanner
         self.currentWorkspaceURL = workspaceURL
+        if let stored = defaults.dictionary(forKey: Self.extensionUsageCountsKey) as? [String: Int] {
+            self.extensionUsageCounts = stored
+        } else if let numbers = defaults.dictionary(forKey: Self.extensionUsageCountsKey) as? [String: NSNumber] {
+            self.extensionUsageCounts = numbers.mapValues(\.intValue)
+        }
         if scanner.usesDefaultGlobalRoots {
             BuiltInExtensionBuilderSkill.syncIfNeeded()
         }
@@ -268,6 +277,81 @@ final class SkillStore {
         }
         defaults.set(Array(disabledIDs), forKey: disabledKey)
         logs.info("Skills", "\(skills[index].name) is now \(isEnabled ? "enabled" : "disabled").")
+    }
+
+    func recordExtensionUsage(cardID: String) {
+        guard !cardID.isEmpty else { return }
+        extensionUsageCounts[cardID, default: 0] += 1
+        defaults.set(extensionUsageCounts, forKey: Self.extensionUsageCountsKey)
+    }
+
+    func recordSkillFileRead(_ url: URL, workspaceURL: URL? = nil) {
+        guard let cardID = skillCardID(forFileURL: url, workspaceURL: workspaceURL) else { return }
+        recordExtensionUsage(cardID: cardID)
+    }
+
+    func seedExtensionUsageIfNeeded(from conversations: [ConversationRecord]) {
+        guard !defaults.bool(forKey: Self.extensionUsageSeededKey) else { return }
+        var seededCounts = extensionUsageCounts
+        for conversation in conversations {
+            let convWorkspace = conversation.workspace?.url
+            for message in conversation.messages {
+                for toolCall in message.toolCalls {
+                    if toolCall.name == "computer_use" {
+                        seededCounts["builtin:computer-use", default: 0] += 1
+                    } else if let (serverID, _) = MCPToolNamespace.parse(exposedName: toolCall.name) {
+                        seededCounts["mcp:\(serverID)", default: 0] += 1
+                    } else if toolCall.name == "file_read",
+                              let data = toolCall.input.data(using: .utf8),
+                              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                              let rawPath = json["path"] as? String,
+                              !rawPath.isEmpty {
+                        let expandedPath = (rawPath as NSString).expandingTildeInPath
+                        let fileURL: URL
+                        if expandedPath.hasPrefix("/") {
+                            fileURL = URL(fileURLWithPath: expandedPath)
+                        } else if let convWorkspace {
+                            fileURL = convWorkspace.appendingPathComponent(expandedPath)
+                        } else {
+                            continue
+                        }
+                        if let cardID = skillCardID(forFileURL: fileURL, workspaceURL: convWorkspace) {
+                            seededCounts[cardID, default: 0] += 1
+                        }
+                    }
+                }
+            }
+        }
+        extensionUsageCounts = seededCounts
+        defaults.set(seededCounts, forKey: Self.extensionUsageCountsKey)
+        defaults.set(true, forKey: Self.extensionUsageSeededKey)
+    }
+
+    private func skillCardID(forFileURL url: URL, workspaceURL: URL?) -> String? {
+        let candidateCanonical = url.resolvingSymlinksInPath().standardizedFileURL.path
+        let candidateStd = url.standardizedFileURL.path
+
+        func match(in candidates: [Skill]) -> String? {
+            for skill in candidates {
+                let dirCanonical = skill.directoryURL.resolvingSymlinksInPath().standardizedFileURL.path
+                let dirStd = skill.directoryURL.standardizedFileURL.path
+                let prefixCanonical = dirCanonical.hasSuffix("/") ? dirCanonical : dirCanonical + "/"
+                let prefixStd = dirStd.hasSuffix("/") ? dirStd : dirStd + "/"
+                if candidateCanonical == dirCanonical || candidateCanonical.hasPrefix(prefixCanonical)
+                    || candidateStd == dirStd || candidateStd.hasPrefix(prefixStd) {
+                    return "skill:\(skill.id)"
+                }
+            }
+            return nil
+        }
+
+        if let found = match(in: skills) {
+            return found
+        }
+        if let workspaceURL, workspaceURL != currentWorkspaceURL {
+            return match(in: scanner.scan(workspaceURL: workspaceURL))
+        }
+        return nil
     }
 
     func skillPromptFragment(maximumCount: Int = 20) -> String? {

@@ -40,6 +40,7 @@ struct Skill: Identifiable, Sendable, Equatable, Hashable {
     var examples: [String] = []
     var mcpServers: [String] = []
     var isHidden: Bool = false
+    var addedAt: Date = .distantPast
 
     var sourcePath: String {
         fileURL.path

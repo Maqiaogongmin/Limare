@@ -235,11 +235,16 @@ final class ContextLifecycle {
 
     private let store: ContextLifecycleStore
     private let logs: DebugLogStore
+    private var pinnedReductions: [UUID: ContextWorkingSetManager.PinnedReductionSet] = [:]
     nonisolated static let maximumSummaryCharacters = 12_000
 
     init(store: ContextLifecycleStore, logs: DebugLogStore) {
         self.store = store
         self.logs = logs
+    }
+
+    func clearPinnedReduction(conversationID: UUID) {
+        pinnedReductions.removeValue(forKey: conversationID)
     }
 
     nonisolated static func computePrefixDigest(_ prefix: [ChatMessage]) -> String {
@@ -350,7 +355,8 @@ final class ContextLifecycle {
             ),
             calibrationFactor: calibrationFactor,
             targetBudgetRatio: ContextWorkingSetManager.defaultTargetBudgetRatio,
-            protectionHints: hints
+            protectionHints: hints,
+            pinnedReduction: pinnedReductions[conversationID] ?? .init()
         ).budget
     }
 
@@ -366,7 +372,8 @@ final class ContextLifecycle {
         protocolContext: WorkingSetProtocolContext,
         calibrationFactor: Double,
         targetBudgetRatio: Double,
-        protectionHints: ContextProtectionHints
+        protectionHints: ContextProtectionHints,
+        pinnedReduction: ContextWorkingSetManager.PinnedReductionSet = .init()
     ) -> (messages: [ChatMessage], report: ContextReductionReport, budget: ContextBudget) {
         let (reduced, report) = ContextWorkingSetManager.reduceWorkingSet(
             messages: current,
@@ -376,7 +383,8 @@ final class ContextLifecycle {
             protocolContext: protocolContext,
             calibrationFactor: calibrationFactor,
             targetBudgetRatio: targetBudgetRatio,
-            protectionHints: protectionHints
+            protectionHints: protectionHints,
+            pinnedReduction: pinnedReduction
         )
         let reducedBudget = makeBudget(
             systemPrompt: systemPrompt,
@@ -419,6 +427,7 @@ final class ContextLifecycle {
             if !Self.validateProvenance(state: loadedState, messages: messages) {
                 logs.error("ContextLifecycle", "Discarded stale or unverified compact state for conversation '\(conversationID.uuidString.prefix(8))'.")
                 store.discard(conversationID: conversationID)
+                pinnedReductions.removeValue(forKey: conversationID)
                 state = nil
                 diagnostics.append(.staleDerivedStateDiscarded(conversationID: conversationID))
             }
@@ -456,6 +465,7 @@ final class ContextLifecycle {
 
         // Check if estimated tokens is within soft budget
         if !forceCompaction && budget.estimatedTokens <= softBudget {
+            pinnedReductions.removeValue(forKey: conversationID)
             logs.info("ContextLifecycle", "model=\(modelID) window=\(contextWindow) estimated=\(budget.estimatedTokens) budget=\(effectiveBudget) soft=\(softBudget) factor=\(calibrationFactor) reduce=false compact=false")
             return ContextLifecycleResult(
                 messages: current,
@@ -487,12 +497,16 @@ final class ContextLifecycle {
             protocolContext: protocolContext,
             calibrationFactor: calibrationFactor,
             targetBudgetRatio: targetBudgetRatio,
-            protectionHints: planningHints
+            protectionHints: planningHints,
+            pinnedReduction: pinnedReductions[conversationID] ?? .init()
         )
         let didReduce = reductionReport.didReduce
 
         // If WorkingSet reduction brought context within hard budget (and towards soft/target budget), proceed without compaction
         if !forceCompaction && !afterReductionBudget.needsCompaction {
+            if commitAuthority() {
+                pinnedReductions[conversationID] = didReduce ? reductionReport.pinnedReduction : nil
+            }
             logs.info("ContextLifecycle", "model=\(modelID) window=\(contextWindow) estimatedBefore=\(budget.estimatedTokens) afterReduction=\(afterReductionBudget.estimatedTokens) budget=\(effectiveBudget) factor=\(calibrationFactor) reduced=\(didReduce) compact=false")
             return ContextLifecycleResult(
                 messages: reducedWorking,
@@ -843,6 +857,7 @@ final class ContextLifecycle {
             try Task.checkCancellation()
             do {
                 try store.save(candidate)
+                pinnedReductions.removeValue(forKey: conversationID)
             } catch {
                 let safeReason = SecretMasker.redactCredentials(error.localizedDescription, secrets: allActiveSecrets)
                 logs.error("ContextLifecycle", "Failed to save derived context state: \(safeReason)", masking: allActiveSecrets)

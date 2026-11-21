@@ -138,13 +138,18 @@ struct ModelRoutingClassifier {
                 }
                 let codeLower = code.lowercased()
                 let msg = sanitizedMsg.isEmpty ? "Responses API error [\(code)]" : "Responses API error [\(code)]: \(sanitizedMsg)"
-                if codeLower == "rate_limit_exceeded" {
+                switch codeLower {
+                case "rate_limit_exceeded", "rate_limit_error", "resource_exhausted", "429":
                     return .providerRateLimit(reason: msg)
-                }
-                if codeLower == "server_error" {
+                case "server_error":
                     return .providerInvocation(reason: msg, isTransient: true, statusCode: 500)
+                case "invalid_prompt", "invalid_request_error", "invalid_request", "model_not_found",
+                     "insufficient_quota", "authentication_error", "permission_error", "unauthenticated",
+                     "permission_denied", "400", "401", "403", "404":
+                    return .permanentProviderRejection(reason: msg, statusCode: nil)
+                default:
+                    return .providerInvocation(reason: msg, isTransient: true, statusCode: nil)
                 }
-                return .permanentProviderRejection(reason: msg, statusCode: nil)
             case .streamError(let code, let message):
                 // Like Codex for a failed stream: only a code naming a cause a retry cannot change
                 // stops it; anything else is the provider dropping an accepted stream.

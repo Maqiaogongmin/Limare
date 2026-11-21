@@ -4,6 +4,12 @@ All notable behavior and architecture changes to Limare are recorded here. Entri
 
 ## Unreleased
 
+## 0.1.12 — 2026-11-21
+
+- **模型选择**：输入框中的模型选择器支持搜索，改进菜单的交互与稳定性。
+- **扩展管理**：支持扩展分组与排序，更新扩展卡片的交互和视觉效果。
+- **模型请求**：改进提示缓存复用和用量计算，修复会话交接后的缓存连续性及流式请求重试问题。
+
 ## 0.1.11 — 2026-11-19
 
 - **扩展管理**：在扩展页面统一查看和管理 Skills、MCP、Hooks 和 Computer Use，并支持通过对话创建扩展。

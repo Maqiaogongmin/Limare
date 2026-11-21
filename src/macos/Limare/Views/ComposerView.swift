@@ -9,6 +9,7 @@ struct ComposerView: View {
     @State private var isFileTargeted = false
     @State private var isComposerExpanded = false
     @State private var isEditorFocused = false
+    @State private var isShowingModelBrowser = false
     @State private var measuredContentHeight: CGFloat = AppLayout.composerDraftMinimumHeight
     /// The highlighted row of the command menu.
     @State private var commandSelection = 0
@@ -254,9 +255,9 @@ struct ComposerView: View {
 
                     ComposerThinkingControl(isCompact: isCompact)
 
-                    ContextUsageIndicator(conversationID: window.conversationID)
+                    ContextUsageIndicator(conversationID: window.conversationID, isModelBrowserPresented: isShowingModelBrowser)
 
-                    ComposerModelSelector()
+                    ComposerModelSelector(isShowingModelBrowser: $isShowingModelBrowser)
                         .layoutPriority(1)
 
                     ComposerRunControls(canSend: canSend, onSend: handleSend)
@@ -941,7 +942,7 @@ struct ComposerModelSelector: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowSession.self) private var window
     @AppStorage("limare.composer.recentDirectModels") private var recentDirectModelIDs = ""
-    @State private var isShowingModelBrowser = false
+    @Binding var isShowingModelBrowser: Bool
 
     private var selectableGroups: [ModelGroup] {
         ModelChoiceCatalog.selectableGroups(modelGroups: appState.modelGroups, providers: appState.providers.providers)
@@ -969,121 +970,64 @@ struct ComposerModelSelector: View {
         // A group shows the model it would use now ("chat · DeepSeek V4.1 Flash"). Short of room
         // the group's name goes first, then the icon and the chevron: the model is what the
         // user needs to read, and it truncates only when nothing else is left to give up.
-        ViewThatFits(in: .horizontal) {
-            menu(label: compactModelLabel).fixedSize(horizontal: true, vertical: false)
-            menu(label: modelName).fixedSize(horizontal: true, vertical: false)
-            menu(label: modelName, showsIcon: false).fixedSize(horizontal: true, vertical: false)
-            menu(label: modelName, showsIcon: false, showsChevron: false).fixedSize(horizontal: true, vertical: false)
-            menu(label: modelName, showsIcon: false, showsChevron: false, truncates: true)
+        Button {
+            isShowingModelBrowser = true
+        } label: {
+            ViewThatFits(in: .horizontal) {
+                modelLabel(compactModelLabel).fixedSize(horizontal: true, vertical: false)
+                modelLabel(modelName).fixedSize(horizontal: true, vertical: false)
+                modelLabel(modelName, showsIcon: false).fixedSize(horizontal: true, vertical: false)
+                modelLabel(modelName, showsIcon: false, showsChevron: false).fixedSize(horizontal: true, vertical: false)
+                modelLabel(modelName, showsIcon: false, showsChevron: false, truncates: true)
+            }
         }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("composer.modelSelector")
         .disabled(window.chat.isStreaming)
         .help(modelHelp)
         .accessibilityLabel(activeModelLabel)
-        .sheet(isPresented: $isShowingModelBrowser) {
+        .popover(isPresented: $isShowingModelBrowser, arrowEdge: .top) {
             ComposerModelBrowser(
+                groups: selectableGroups,
+                groupLabel: modelGroupLabel,
+                recentEntries: recentEntries,
                 entries: visibleModelEntries,
-                selectedSource: currentModelSource
-            ) { entry in
-                selectDirectModel(providerID: entry.providerID, modelID: entry.model.id)
-                isShowingModelBrowser = false
-            }
+                selectedSource: currentModelSource,
+                onSelect: { source in
+                    isShowingModelBrowser = false
+                    switch source {
+                    case .group(let groupID): selectGroup(groupID)
+                    case .direct(let providerID, let modelID):
+                        selectDirectModel(providerID: providerID, modelID: modelID)
+                    }
+                },
+                onConfigure: {
+                    isShowingModelBrowser = false
+                    window.screen = .settingsProviders
+                },
+                onClose: { isShowingModelBrowser = false }
+            )
         }
     }
 
-    private func menu(label: String, showsIcon: Bool = true, showsChevron: Bool = true, truncates: Bool = false) -> some View {
-        Menu {
-            if !selectableGroups.isEmpty {
-                Section("Model Groups") {
-                    ForEach(selectableGroups) { group in
-                        // A Toggle draws the menu's own checkmark on the current choice.
-                        Toggle(modelGroupLabel(group), isOn: Binding(
-                            get: {
-                                if case .group(let gID) = currentModelSource { return gID == group.id }
-                                return false
-                            },
-                            set: { _ in selectGroup(group.id) }
-                        ))
-                    }
-                }
+    private func modelLabel(_ label: String, showsIcon: Bool = true, showsChevron: Bool = true, truncates: Bool = false) -> some View {
+        HStack(spacing: AppSpacing.xxSmall) {
+            if showsIcon {
+                Image(systemName: iconName)
+                    .font(.system(size: 11))
             }
-
-            if !recentEntries.isEmpty {
-                Section("Recent Models") {
-                    ForEach(recentEntries) { entry in
-                        Toggle("\(entry.providerName) / \(entry.model.displayName)", isOn: Binding(
-                            get: { isCurrentDirect(providerID: entry.providerID, modelID: entry.model.id) },
-                            set: { _ in selectDirectModel(providerID: entry.providerID, modelID: entry.model.id) }
-                        ))
-                    }
-                }
+            Text(label)
+                .font(.system(size: 12, weight: .medium))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: truncates ? nil : AppLayout.composerModelLabelMaximumWidth, alignment: .leading)
+            if showsChevron {
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .opacity(0.7)
             }
-
-            if !visibleModelEntries.isEmpty {
-                Button("Find a Model…", systemImage: "magnifyingglass") {
-                    isShowingModelBrowser = true
-                }
-            }
-
-            if !visibleModelEntries.isEmpty {
-                Section("Providers & Models") {
-                    ForEach(appState.providers.providers) { provider in
-                        let visibleModels = provider.models.filter { model in
-                            let entryID = ModelGroup.makeEntryId(providerID: provider.id, modelID: model.id)
-                            guard ModelGroupStore.evaluateMemberEligibility(
-                                entryId: entryID,
-                                providers: appState.providers.providers
-                            ).isChatEligible else { return false }
-                            if !model.isHidden && !model.discovery.isAbsent { return true }
-                            if case .direct(let pID, let mID) = currentModelSource {
-                                return pID == provider.id && mID == model.id
-                            }
-                            return false
-                        }
-                        if !visibleModels.isEmpty {
-                            Menu(provider.name) {
-                                ForEach(visibleModels) { model in
-                                    Toggle(model.displayName, isOn: Binding(
-                                        get: { isCurrentDirect(providerID: provider.id, modelID: model.id) },
-                                        set: { _ in selectDirectModel(providerID: provider.id, modelID: model.id) }
-                                    ))
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Divider()
-
-            Button("Configure Providers…") {
-                window.screen = .settingsProviders
-            }
-        } label: {
-            HStack(spacing: AppSpacing.xxSmall) {
-                if showsIcon {
-                    Image(systemName: iconName)
-                        .font(.system(size: 11))
-                }
-
-                // The last resort fills whatever width it is given; the others keep to the cap.
-                Text(label)
-                    .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: truncates ? nil : AppLayout.composerModelLabelMaximumWidth, alignment: .leading)
-
-                if showsChevron {
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 9, weight: .semibold))
-                        .opacity(0.7)
-                }
-            }
-            .composerPill()
         }
-        // A plain button style keeps the label's own quiet colour (see the thinking pill).
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
+        .composerPill()
     }
 
     private var iconName: String {
@@ -1122,11 +1066,6 @@ struct ComposerModelSelector: View {
         groupSummary?.long ?? activeModelLabel
     }
 
-    private func isCurrentDirect(providerID: UUID, modelID: String) -> Bool {
-        if case .direct(let pID, let mID) = currentModelSource { return pID == providerID && mID == modelID }
-        return false
-    }
-
     private func selectGroup(_ groupID: String) {
         if let activeID = window.conversationID {
             appState.conversations.setConversationModelSource(id: activeID, source: .group(groupID: groupID))
@@ -1154,90 +1093,229 @@ struct ComposerModelSelector: View {
 }
 
 private struct ComposerModelBrowser: View {
-    @Environment(AppState.self) private var appState
-    @Environment(WindowSession.self) private var window
-    @Environment(\.dismiss) private var dismiss
+    private struct Choice: Identifiable {
+        let id: String
+        let title: String
+        let source: ConversationModelSource?
+        var providerID: UUID? = nil
+    }
+
     @State private var searchText = ""
+    @State private var highlightedID: String?
+    @State private var lastMouseLocation = NSEvent.mouseLocation
+    @State private var expanded = false
+    @State private var expandedProviders: Set<UUID> = []
     @FocusState private var isSearchFocused: Bool
 
+    let groups: [ModelGroup]
+    let groupLabel: (ModelGroup) -> String
+    let recentEntries: [ModelPickerEntry]
     let entries: [ModelPickerEntry]
     let selectedSource: ConversationModelSource?
-    let onSelect: (ModelPickerEntry) -> Void
+    let onSelect: (ConversationModelSource) -> Void
+    let onConfigure: () -> Void
+    let onClose: () -> Void
+
+    private var query: String { searchText.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private func matches(_ text: String) -> Bool {
+        query.isEmpty || text.localizedCaseInsensitiveContains(query)
+    }
+
+    private func modelChoice(_ entry: ModelPickerEntry, prefix: String, showsProvider: Bool) -> Choice {
+        Choice(id: "\(prefix):\(entry.id)",
+               title: showsProvider ? "\(entry.providerName) / \(entry.model.displayName)" : entry.model.displayName,
+               source: .direct(providerID: entry.providerID, modelID: entry.model.id))
+    }
+
+    private var groupChoices: [Choice] {
+        groups.filter { matches(groupLabel($0)) }.map {
+            Choice(id: "group:\($0.id)", title: groupLabel($0), source: .group(groupID: $0.id))
+        }
+    }
 
     private var filteredEntries: [ModelPickerEntry] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return entries }
-        return entries.filter {
-            $0.providerName.localizedCaseInsensitiveContains(query)
-                || $0.model.displayName.localizedCaseInsensitiveContains(query)
-                || $0.model.id.localizedCaseInsensitiveContains(query)
+        entries.filter { matches($0.providerName) || matches($0.model.displayName) || matches($0.model.id) }
+    }
+
+    private var recentChoices: [Choice] {
+        recentEntries.filter { matches($0.providerName) || matches($0.model.displayName) || matches($0.model.id) }
+            .map { modelChoice($0, prefix: "recent", showsProvider: true) }
+    }
+
+    private var providerSections: [(id: UUID, name: String, choices: [Choice])] {
+        var result: [(id: UUID, name: String, choices: [Choice])] = []
+        for entry in filteredEntries {
+            if let index = result.firstIndex(where: { $0.id == entry.providerID }) {
+                result[index].choices.append(modelChoice(entry, prefix: "provider", showsProvider: false))
+            } else {
+                result.append((entry.providerID, entry.providerName,
+                               [modelChoice(entry, prefix: "provider", showsProvider: false)]))
+            }
+        }
+        return result
+    }
+
+    private var choices: [Choice] {
+        groupChoices + recentChoices + providerSections.flatMap { section in
+            if !query.isEmpty { return section.choices }
+            let provider = Choice(id: "heading:\(section.id)", title: section.name,
+                                  source: nil, providerID: section.id)
+            return [provider] + (isProviderExpanded(section.id) ? section.choices : [])
+        }
+    }
+
+    private func isProviderExpanded(_ id: UUID) -> Bool {
+        !query.isEmpty || expandedProviders.contains(id)
+    }
+
+    private func activate(_ choice: Choice) {
+        if let source = choice.source {
+            choose(source)
+        } else if let id = choice.providerID, query.isEmpty {
+            if expandedProviders.contains(id) { expandedProviders.remove(id) }
+            else { expandedProviders.insert(id) }
         }
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Choose Model")
-                    .font(.headline)
-                Spacer()
-                Button("Done") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-            }
-            .padding(AppSpacing.standard)
-
-            TextField("Search providers or models", text: $searchText)
-                .textFieldStyle(.roundedBorder)
-                .focused($isSearchFocused)
-                .padding(.horizontal, AppSpacing.standard)
-                .padding(.bottom, AppSpacing.small)
-
-            Divider()
-
-            if entries.isEmpty {
-                ContentUnavailableView {
-                    Label("No Models Available", systemImage: "cpu")
-                } description: {
-                    Text("Add a provider or make a model visible to select it here.")
-                } actions: {
-                    Button("Configure Providers…") {
-                        dismiss()
-                        window.screen = .settingsProviders
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if filteredEntries.isEmpty {
-                ContentUnavailableView.search(text: searchText)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List(filteredEntries) { entry in
-                    Button {
-                        onSelect(entry)
-                    } label: {
-                        HStack(spacing: AppSpacing.small) {
-                            VStack(alignment: .leading, spacing: AppSpacing.xxxSmall) {
-                                Text(entry.model.displayName)
-                                    .font(.body.weight(.medium))
-                                Text("\(entry.providerName) · \(entry.model.id)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            Spacer()
-                            if case .direct(let providerID, let modelID) = selectedSource,
-                               providerID == entry.providerID, modelID == entry.model.id {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(Color.accentColor)
+        ScrollViewReader { proxy in
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    TextField("Search providers or models", text: $searchText)
+                        .textFieldStyle(.plain)
+                        .focused($isSearchFocused)
+                        .onKeyPress { press in
+                            switch press.key {
+                            case .downArrow:
+                                moveHighlight(1)
+                                if let highlightedID { proxy.scrollTo(highlightedID, anchor: .center) }
+                                return .handled
+                            case .upArrow:
+                                moveHighlight(-1)
+                                if let highlightedID { proxy.scrollTo(highlightedID, anchor: .center) }
+                                return .handled
+                            case .return:
+                                if let choice = choices.first(where: { $0.id == highlightedID }) ?? choices.first {
+                                    activate(choice)
+                                    return .handled
+                                }
+                                return .ignored
+                            case .escape: close(); return .handled
+                            default: return .ignored
                             }
                         }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
                 }
-                .listStyle(.inset)
+                .padding(12)
+                Divider()
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        if !groupChoices.isEmpty {
+                            sectionTitle("Model Groups")
+                            ForEach(groupChoices) { choiceRow($0) }
+                        }
+                        if !recentChoices.isEmpty {
+                            sectionTitle("Recent Models")
+                            ForEach(recentChoices) { choiceRow($0) }
+                        }
+                        if !providerSections.isEmpty {
+                            sectionTitle("Providers & Models")
+                            ForEach(providerSections, id: \.id) { section in
+                                if query.isEmpty {
+                                    choiceRow(Choice(id: "heading:\(section.id)", title: section.name,
+                                                     source: nil, providerID: section.id))
+                                } else {
+                                    Text(section.name).font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(.secondary)
+                                        .padding(.horizontal, 10).padding(.top, 7).padding(.bottom, 2)
+                                }
+                                if isProviderExpanded(section.id) {
+                                    ForEach(section.choices) { choice in
+                                        choiceRow(choice).padding(.leading, 14)
+                                    }
+                                }
+                            }
+                        }
+                        if choices.isEmpty {
+                            Group {
+                                if query.isEmpty { Text("No Models Available") }
+                                else { Text("No results for \"\(query)\"") }
+                            }
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.vertical, 24)
+                        }
+                    }
+                    .padding(6)
+                }
+                Divider()
+                Button("Configure Providers…", action: onConfigure)
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
             }
+            .frame(width: 360, height: 440)
+            .frame(width: expanded ? 360 : 130, height: expanded ? 440 : 26, alignment: .bottomTrailing)
+            .clipped()
+            .onAppear {
+                lastMouseLocation = NSEvent.mouseLocation
+                highlightedID = choices.first(where: { $0.source != nil && $0.source == selectedSource })?.id ?? choices.first?.id
+                withAnimation(AppMotion.resolved(AppMotion.composerSettle)) { expanded = true }
+                isSearchFocused = true
+            }
+            .onChange(of: searchText) { _, _ in highlightedID = choices.first?.id }
         }
-        .frame(minWidth: 360, idealWidth: 520, minHeight: 360, idealHeight: 520)
-        .onAppear { isSearchFocused = true }
+    }
+
+    private func sectionTitle(_ title: LocalizedStringKey) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10).padding(.top, 8).padding(.bottom, 3)
+    }
+
+    private func choiceRow(_ choice: Choice) -> some View {
+        Button { activate(choice) } label: {
+            HStack {
+                Text(choice.title).lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: 4)
+                if let providerID = choice.providerID {
+                    Image(systemName: isProviderExpanded(providerID) ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+                } else if choice.source == selectedSource {
+                    Image(systemName: "checkmark").font(.system(size: 11, weight: .semibold))
+                }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .background(highlightedID == choice.id ? Color.accentColor.opacity(0.15) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 7))
+        }
+        .buttonStyle(.plain)
+        .onContinuousHover { phase in
+            guard case .active = phase else { return }
+            let location = NSEvent.mouseLocation
+            guard location != lastMouseLocation else { return }
+            lastMouseLocation = location
+            highlightedID = choice.id
+        }
+        .id(choice.id)
+    }
+
+    private func moveHighlight(_ delta: Int) {
+        let all = choices
+        guard !all.isEmpty else { return }
+        let index = all.firstIndex(where: { $0.id == highlightedID }) ?? (delta > 0 ? -1 : 0)
+        highlightedID = all[(index + delta + all.count) % all.count].id
+    }
+
+    private func choose(_ source: ConversationModelSource) {
+        onSelect(source)
+    }
+
+    private func close() {
+        onClose()
     }
 }

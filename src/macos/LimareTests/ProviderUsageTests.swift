@@ -398,6 +398,54 @@ final class ProviderUsageTests: XCTestCase {
         XCTAssertEqual(NormalizedUsage.from(nil, format: .geminiNative, finished: true).status, .unknown)
     }
 
+    func testCacheMeasurementCountsOnlyOneCompleteUsageAttempt() async throws {
+        let directory = root(); defer { try? FileManager.default.removeItem(at: directory) }
+        let recorder = try UsageRecorder(storageRootURL: directory, status: UsageRecordingStatus())
+        let telemetry = ProviderUsageTelemetry(inputTokens: 100, outputTokens: 10, cacheReadTokens: 80)
+        func record(_ outcome: UsageOutcome, _ usages: [ProviderUsageTelemetry?]) -> UsageRequestRecord {
+            var row = UsageRequestRecord(providerID: UUID(), providerName: "P", modelID: "m", modelName: "M", format: .chatCompletions, kind: .chat)
+            row.attemptCount = usages.count; row.outcome = outcome
+            for usage in usages { row.addAttempt(usage, finished: true, excluded: false) }
+            return row
+        }
+        let retried = record(.completed, [nil, telemetry])
+        XCTAssertEqual(retried.usage.status, .complete)
+        await recorder.append(retried)
+        await recorder.append(record(.completed, [telemetry, telemetry]))
+        await recorder.append(record(.failed, [telemetry]))
+        await recorder.append(record(.completed, [nil]))
+        let report = try await recorder.report(since: nil, kind: .chat)
+        XCTAssertEqual(report.totals.cacheMeasuredInput, 100)
+        XCTAssertEqual(report.totals.cacheMeasuredRead, 80)
+    }
+
+    func testPromptCacheKeyOnlyOnOfficialOpenAI() throws {
+        let official = ProviderConfiguration(name: "OpenAI", baseURL: "https://api.openai.com/v1")
+        let gateway = ProviderConfiguration(name: "Gateway", baseURL: "https://api.openai.com.example/v1")
+        var options = ChatInferenceOptions(); options.promptCacheKey = UUID().uuidString
+        let messages = [ChatRequestMessage(role: "user", content: "Hi")]
+        for provider in [official, gateway] {
+            let chat = try OpenAIChatRequestBuilder.buildPayload(provider: provider, modelID: "m", messages: messages, options: options)
+            let responses = try OpenAIResponsesRequestBuilder.buildPayload(provider: provider, modelID: "m", messages: messages, options: options)
+            XCTAssertEqual(chat["prompt_cache_key"] as? String, provider.id == official.id ? options.promptCacheKey : nil)
+            XCTAssertEqual(responses["prompt_cache_key"] as? String, options.promptCacheKey)
+            let responsesReq = try OpenAIResponsesRequestBuilder.buildURLRequest(provider: provider, modelID: "m", messages: messages, options: options)
+            XCTAssertEqual(responsesReq.value(forHTTPHeaderField: "session_id"), options.promptCacheKey)
+        }
+        var customHeaderGateway = gateway
+        customHeaderGateway.extraHeaders = ["Session_Id": "custom-session"]
+        let customReq = try OpenAIResponsesRequestBuilder.buildURLRequest(provider: customHeaderGateway, modelID: "m", messages: messages, options: options)
+        XCTAssertEqual(customReq.value(forHTTPHeaderField: "Session_Id"), "custom-session")
+    }
+
+    func testBrowserInputPreservesUnredactedBytes() {
+        let original = #"{ "url" : "https://example.com/path", "action" : "navigate" }"#
+        let call = ProviderToolCall(id: "call", function: .init(name: "browser_use", arguments: original))
+        XCTAssertEqual(ChatStore.sanitizedToolInput(call), original)
+        let secret = ProviderToolCall(id: "call", function: .init(name: "browser_use", arguments: #"{"url":"https://example.com/?token=secret","text":"secret"}"#))
+        XCTAssertFalse(ChatStore.sanitizedToolInput(secret).contains("secret"))
+    }
+
     func testRecorderPersistenceAndFailureAreVisible() async throws {
         let directory = root(); defer { try? FileManager.default.removeItem(at: directory) }
         let status = UsageRecordingStatus()
@@ -503,7 +551,7 @@ final class ProviderUsageTests: XCTestCase {
         var statement: OpaquePointer?
         XCTAssertEqual(sqlite3_prepare_v2(db, "SELECT outcome, usage_status, attempt_count, attempts_without_usage, input_total FROM usage_request ORDER BY started_at", -1, &statement, nil), SQLITE_OK)
         defer { sqlite3_finalize(statement) }
-        let expected: [(String, String, Int32, Int32)] = [("completed", "unknown", 1, 1), ("failed", "partial", 1, 0), ("completed", "partial", 2, 1), ("completed", "partial", 2, 0)]
+        let expected: [(String, String, Int32, Int32)] = [("completed", "unknown", 1, 1), ("failed", "partial", 1, 0), ("completed", "complete", 2, 1), ("completed", "partial", 2, 0)]
         for row in expected {
             XCTAssertEqual(sqlite3_step(statement), SQLITE_ROW)
             XCTAssertEqual(String(cString: sqlite3_column_text(statement, 0)), row.0)
@@ -550,6 +598,34 @@ final class ProviderUsageTests: XCTestCase {
         XCTAssertFalse(client.streamUsageWasRejected(changed))
         client.invalidateStreamUsageCompatibility(provider.id)
         XCTAssertFalse(client.streamUsageWasRejected(provider))
+    }
+
+    func testTitleDoesNotRetryTransientFailure() async throws {
+        UsageMockProtocol.state.reset(.retry)
+        let provider = ProviderConfiguration(name: "Gateway", baseURL: "https://example.test/v1")
+        let client = OpenAICompatibleClient(session: session())
+        do {
+            for try await _ in client.streamChat(provider: provider, apiKey: "fixture", modelID: "m", messages: [ChatRequestMessage(role: "user", content: "Hi")], options: ChatInferenceOptions(usageKind: .title)) {}
+            XCTFail("Expected transient failure")
+        } catch {}
+        XCTAssertEqual(UsageMockProtocol.state.requests.count, 1)
+    }
+
+    func testTitleCompatibilityFallbackDoesNotRetryTransientFailure() async throws {
+        UsageMockProtocol.state.reset(.script) { _, body in
+            let object = body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            if object?["stream_options"] != nil {
+                return (400, Data(#"{"error":{"message":"Unsupported parameter: include_usage"}}"#.utf8))
+            }
+            return (503, Data(#"{"error":{"message":"unavailable"}}"#.utf8))
+        }
+        let provider = ProviderConfiguration(name: "Gateway", baseURL: "https://example.test/v1")
+        let client = OpenAICompatibleClient(session: session())
+        do {
+            for try await _ in client.streamChat(provider: provider, apiKey: "fixture", modelID: "m", messages: [ChatRequestMessage(role: "user", content: "Hi")], options: ChatInferenceOptions(usageKind: .title)) {}
+            XCTFail("Expected transient failure")
+        } catch {}
+        XCTAssertEqual(UsageMockProtocol.state.requests.count, 2)
     }
 
     func testGenericBadRequestDoesNotRetry() async throws {
@@ -1222,6 +1298,169 @@ final class ProviderUsageTests: XCTestCase {
         XCTAssertEqual(retainedReport.totals.requests, 12)
         XCTAssertTrue(retainedReport.groups.contains { $0.provider == "Snapshot Provider" && $0.model == "Friendly Model" })
         XCTAssertTrue(retainedReport.groups.contains { $0.provider == "Anth Provider" && $0.model == "Claude Cache" })
+    }
+
+    func testEncryptedContentExcludedFromTokenEstimation() {
+        let cipher = String(repeating: "A", count: 300_000)
+        let echoWithCipher = ResponsesReasoningEcho(
+            providerID: UUID(),
+            modelID: "gpt-6.1-sol",
+            items: [ResponsesReasoningItem(id: "rs_1", encryptedContent: cipher, summary: ["Short summary"])]
+        )
+        let echoWithoutCipher = ResponsesReasoningEcho(
+            providerID: echoWithCipher.providerID,
+            modelID: "gpt-6.1-sol",
+            items: [ResponsesReasoningItem(id: "rs_1", encryptedContent: nil, summary: ["Short summary"])]
+        )
+        let withCipher = ChatMessage(role: .assistant, content: "Done", responsesReasoningEcho: echoWithCipher)
+        let withoutCipher = ChatMessage(role: .assistant, content: "Done", responsesReasoningEcho: echoWithoutCipher)
+        XCTAssertEqual(
+            ContextTokenEstimator.rawMessageContentTokens(withCipher),
+            ContextTokenEstimator.rawMessageContentTokens(withoutCipher)
+        )
+        XCTAssertLessThan(ContextTokenEstimator.rawMessageContentTokens(withCipher), 200)
+    }
+
+    func testWorkingSetPinnedReductionAndChronologicalOffload() async throws {
+        let dir = root()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let logs = DebugLogStore(storageRootURL: dir)
+        let lifecycle = ContextLifecycle(store: ContextLifecycleStore(storageRootURL: dir, logs: logs), logs: logs)
+        let convID = UUID()
+        let pid = UUID()
+        // Window 20,000, maxOutput 2,000 -> effective budget ~15,744, soft ~13,382, target ~11,808.
+        let model = ProviderModel(id: "cache-test", displayName: "Cache Test", baseContextWindow: 20_000, baseMaxOutputTokens: 2_000)
+        let options = ChatInferenceOptions(model: model)
+
+        let olderOutput = String(repeating: "1", count: 18_000)   // ~6,000 tok (smaller, older)
+        let newerBigOutput = String(repeating: "2", count: 24_000) // ~8,000 tok (larger, newer)
+        var history: [ChatMessage] = [
+            ChatMessage(role: .user, content: "Task 1"),
+            ChatMessage(role: .assistant, content: "Step 1", toolCalls: [
+                ToolCallRecord(providerCallID: "call_old", name: "file_read", input: "{\"path\":\"a\"}", state: .completed, output: olderOutput)
+            ], resolvedProviderID: pid),
+            ChatMessage(role: .assistant, content: "Step 2", toolCalls: [
+                ToolCallRecord(providerCallID: "call_new_big", name: "file_read", input: "{\"path\":\"b\"}", state: .completed, output: newerBigOutput)
+            ], resolvedProviderID: pid),
+            ChatMessage(role: .user, content: "Follow-up 1"),
+            ChatMessage(role: .assistant, content: "Reply 1", resolvedProviderID: pid),
+            ChatMessage(role: .user, content: "Follow-up 2"),
+            ChatMessage(role: .assistant, content: "Reply 2", resolvedProviderID: pid),
+            ChatMessage(role: .user, content: "Follow-up 3")
+        ]
+
+        // Turn 1: exceeds soft budget; chronological Level 3 offloads `call_old` first, bringing
+        // calibrated tokens below target (~8,300 <= 11,808) while `call_new_big` remains raw.
+        let turn1 = try await lifecycle.workingMessages(
+            conversationID: convID, messages: history, systemPrompt: "sys", tools: [], options: options, modelID: model.id, commitAuthority: { true }
+        )
+        XCTAssertTrue(turn1.didReduceWorkingSetThisCall)
+        XCTAssertEqual(turn1.reductionReport?.pinnedReduction.offloadedToolCallIDs, ["call_old"])
+        XCTAssertTrue(turn1.messages[1].toolCalls[0].output.hasPrefix("[TOOL RESULT OFFLOADED]"))
+        XCTAssertEqual(turn1.messages[2].toolCalls[0].output, newerBigOutput)
+
+        // Turn 2: append small ~500-token message so canonical history is still > soft budget,
+        // while replaying the pinned reduction keeps working set in the [75%, 85%] runway.
+        history.append(ChatMessage(role: .assistant, content: String(repeating: "x", count: 1_500), resolvedProviderID: pid))
+        let turn2 = try await lifecycle.workingMessages(
+            conversationID: convID, messages: history, systemPrompt: "sys", tools: [], options: options, modelID: model.id, commitAuthority: { true }
+        )
+        XCTAssertTrue(turn2.didReduceWorkingSetThisCall)
+        XCTAssertEqual(turn2.reductionReport?.fingerprint, turn1.reductionReport?.fingerprint)
+        XCTAssertEqual(turn2.reductionReport?.pinnedReduction, turn1.reductionReport?.pinnedReduction)
+        XCTAssertEqual(turn2.messages[2].toolCalls[0].output, newerBigOutput)
+    }
+
+    func testPromptCacheKeyAndCacheControl400Fallback() async throws {
+        let client = OpenAICompatibleClient(session: session())
+
+        // 1. Responses gateway rejects `prompt_cache_key` once with 400 -> retries without it and remembers.
+        let responsesProvider = ProviderConfiguration(
+            name: "RelayResp",
+            baseURL: "https://relay.example.test",
+            apiFormat: .responses
+        )
+        UsageMockProtocol.state.reset(.script) { request, _ in
+            let count = UsageMockProtocol.state.requests.count
+            if count == 1 {
+                return (400, Data(#"{"error":{"message":"Unsupported parameter","param":"prompt_cache_key"}}"#.utf8))
+            }
+            let sse = "data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[],\"usage\":{\"input_tokens\":10,\"output_tokens\":2}}}\n\n"
+            return (200, Data(sse.utf8))
+        }
+        var respOptions = ChatInferenceOptions(usageKind: .chat)
+        respOptions.promptCacheKey = "conv-uuid-1"
+        for try await _ in client.streamChat(
+            provider: responsesProvider,
+            apiKey: "k",
+            modelID: "gpt-6.1-sol",
+            messages: [ChatRequestMessage(role: "user", content: "hi")],
+            options: respOptions
+        ) {}
+        let respBodies = UsageMockProtocol.state.bodies
+        XCTAssertEqual(respBodies.count, 2)
+        let firstRespJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: respBodies[0]) as? [String: Any])
+        let secondRespJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: respBodies[1]) as? [String: Any])
+        XCTAssertEqual(firstRespJSON["prompt_cache_key"] as? String, "conv-uuid-1")
+        XCTAssertNil(secondRespJSON["prompt_cache_key"])
+
+        // 2. Anthropic relay rejects `cache_control` once with 400 -> retries without it.
+        let anthProvider = ProviderConfiguration(
+            name: "RelayAnth",
+            baseURL: "https://relay.example.test",
+            apiFormat: .anthropicMessages
+        )
+        UsageMockProtocol.state.reset(.script) { _, _ in
+            let count = UsageMockProtocol.state.requests.count
+            if count == 1 {
+                return (400, Data(#"{"error":{"message":"Extra inputs are not permitted: cache_control"}}"#.utf8))
+            }
+            let sse = """
+            data: {"type":"message_start","message":{"id":"m1","type":"message","role":"assistant","model":"claude-sonnet-4-5","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":1}}}
+
+            data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+            data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}
+
+            data: {"type":"content_block_stop","index":0}
+
+            data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":2}}
+
+            data: {"type":"message_stop"}
+
+            """
+            return (200, Data(sse.utf8))
+        }
+        for try await _ in client.streamChat(
+            provider: anthProvider,
+            apiKey: "k",
+            modelID: "claude-sonnet-4-5",
+            messages: [ChatRequestMessage(role: "user", content: "hi")],
+            options: ChatInferenceOptions(usageKind: .chat)
+        ) {}
+        let anthBodies = UsageMockProtocol.state.bodies
+        XCTAssertEqual(anthBodies.count, 2)
+        let firstAnthJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: anthBodies[0]) as? [String: Any])
+        let secondAnthJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: anthBodies[1]) as? [String: Any])
+        XCTAssertNotNil(firstAnthJSON["cache_control"])
+        XCTAssertNil(secondAnthJSON["cache_control"])
+    }
+
+    func testResponsesFailedStreamErrorsAreTransientExceptPermanentCodes() {
+        for code in ["upstream_error", "unknown", "server_error"] {
+            let err = ProviderClientError.responsesFailed(code: code, message: "Upstream HTTP/2 stream failed")
+            guard case .providerInvocation(_, let isTransient, _) = ModelRoutingClassifier.classify(err) else {
+                return XCTFail("Expected providerInvocation for \(code)")
+            }
+            XCTAssertTrue(isTransient, "Expected transient classification for \(code)")
+        }
+        for code in ["invalid_prompt", "insufficient_quota", "authentication_error", "model_not_found"] {
+            let err = ProviderClientError.responsesFailed(code: code, message: "Rejected")
+            guard case .permanentProviderRejection = ModelRoutingClassifier.classify(err) else {
+                return XCTFail("Expected permanentProviderRejection for \(code)")
+            }
+        }
     }
 }
 

@@ -77,7 +77,8 @@ public enum NativeWireCodec {
                                apiKey: String, modelID: String, messagesJSON: Data, toolsJSON: Data,
                                maxTokens: Int, thinking: String, supportsReasoning: Bool?,
                                effortValues: [String]?, continuationJSON: Data? = nil,
-                               kimiCodeProfile: Bool = false) throws -> URLRequest {
+                               kimiCodeProfile: Bool = false,
+                               includePromptCacheControl: Bool = true) throws -> URLRequest {
         guard let rows = try JSONSerialization.jsonObject(with: messagesJSON) as? [[String: Any]],
               let tools = try JSONSerialization.jsonObject(with: toolsJSON) as? [[String: Any]],
               let level = ThinkingLevel(rawValue: thinking), level != .ultra else { throw NativeWireError.invalidInput }
@@ -100,7 +101,7 @@ public enum NativeWireCodec {
             let encoder = JSONEncoder()
             encoder.keyEncodingStrategy = .convertToSnakeCase
             body = try JSONSerialization.jsonObject(with: encoder.encode(parameter)) as! [String: Any]
-            if host.lowercased() == "api.anthropic.com" {
+            if includePromptCacheControl && !kimiCodeProfile {
                 body["cache_control"] = ["type": "ephemeral"]
             }
             if !tools.isEmpty {

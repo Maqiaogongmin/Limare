@@ -7,6 +7,7 @@ import AppKit
 struct ContextUsageIndicator: View {
     @Environment(AppState.self) private var appState
     let conversationID: UUID?
+    let isModelBrowserPresented: Bool
     @State private var isHovering = false
 
     private var presentation: ContextUsagePresenter.Presentation? {
@@ -20,7 +21,10 @@ struct ContextUsageIndicator: View {
             ContextUsageRing(fraction: presentation.percent.map { Double($0) / 100 })
                 .frame(width: AppControlHeight.composerButton - 8, height: AppControlHeight.composerButton)
                 .contentShape(Rectangle())
-                .onHover { isHovering = $0 }
+                .onHover { isHovering = $0 && !isModelBrowserPresented }
+                .onChange(of: isModelBrowserPresented) { _, isPresented in
+                    if isPresented { isHovering = false }
+                }
                 .popover(isPresented: $isHovering, arrowEdge: .top) {
                     ContextUsageDetail(presentation: presentation)
                 }

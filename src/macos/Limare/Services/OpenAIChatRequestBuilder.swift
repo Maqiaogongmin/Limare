@@ -179,6 +179,7 @@ enum OpenAIChatRequestBuilder {
             "messages": messagesJSON,
             "stream": true,
         ]
+        if let key = options.promptCacheKey, provider.isOfficialOpenAIEndpoint { body["prompt_cache_key"] = key }
         if provider.apiFormat == .chatCompletions && (provider.requestStreamUsage ?? true) {
             body["stream_options"] = ["include_usage": true]
         }

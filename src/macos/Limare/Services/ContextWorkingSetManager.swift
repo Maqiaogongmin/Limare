@@ -41,6 +41,7 @@ struct ContextReductionReport: Sendable, Equatable {
     let reachedSoftBudget: Bool
     let reachedHardBudget: Bool
     let fingerprint: String?
+    let pinnedReduction: ContextWorkingSetManager.PinnedReductionSet
 
     var didReduce: Bool {
         reasoningItemsReduced > 0 || attachmentsReduced > 0 || toolResultsReduced > 0
@@ -58,7 +59,8 @@ struct ContextReductionReport: Sendable, Equatable {
         fingerprint: String? = nil,
         beforeEstimate: TokenEstimate? = nil,
         afterEstimate: TokenEstimate? = nil,
-        reachedTargetBudget: Bool = false
+        reachedTargetBudget: Bool = false,
+        pinnedReduction: ContextWorkingSetManager.PinnedReductionSet = .init()
     ) {
         self.beforeTokens = beforeTokens
         self.afterTokens = afterTokens
@@ -72,12 +74,22 @@ struct ContextReductionReport: Sendable, Equatable {
         self.reachedSoftBudget = reachedSoftBudget
         self.reachedHardBudget = reachedHardBudget
         self.fingerprint = fingerprint
+        self.pinnedReduction = pinnedReduction
     }
 }
 
 /// Pure-logic coordinator for slimming the active Working Context projection
 /// without modifying durable conversation history.
 enum ContextWorkingSetManager {
+    /// Previously applied WorkingSet reductions pinned across turns so prefixes stay cache-stable.
+    struct PinnedReductionSet: Sendable, Equatable {
+        var strippedReasoningMessageIDs: Set<UUID> = []
+        var strippedAttachmentMessageIDs: Set<UUID> = []
+        var offloadedToolCallIDs: Set<String> = []
+        var isEmpty: Bool {
+            strippedReasoningMessageIDs.isEmpty && strippedAttachmentMessageIDs.isEmpty && offloadedToolCallIDs.isEmpty
+        }
+    }
     /// Soft threshold ratio triggering reduction (85% of effective input budget).
     static let softThresholdRatio: Double = 0.85
     /// Configurable target headroom ratio when reduction is executed (75% of effective input budget).
@@ -282,7 +294,8 @@ enum ContextWorkingSetManager {
         protocolContext: WorkingSetProtocolContext? = nil,
         calibrationFactor: Double = 1.0,
         targetBudgetRatio: Double = defaultTargetBudgetRatio,
-        protectionHints: ContextProtectionHints = ContextProtectionHints()
+        protectionHints: ContextProtectionHints = ContextProtectionHints(),
+        pinnedReduction: PinnedReductionSet = PinnedReductionSet()
     ) -> (workingMessages: [ChatMessage], report: ContextReductionReport) {
         let softInputBudget = max(1, Int(Double(effectiveInputBudget) * softThresholdRatio))
         let targetInputBudget = max(1, Int(Double(effectiveInputBudget) * min(softThresholdRatio, targetBudgetRatio)))
@@ -306,26 +319,6 @@ enum ContextWorkingSetManager {
         let mandatoryIndices = mandatoryFloorIndices(in: messages, protectionHints: protectionHints)
         let protectedIndices = Set(tailStart..<messages.count).union(mandatoryIndices)
         let protectedCount = protectedIndices.count
-
-        // If already within soft budget, no reduction needed
-        if initialTokens <= softInputBudget {
-            let report = ContextReductionReport(
-                beforeTokens: initialTokens,
-                afterTokens: initialTokens,
-                reasoningItemsReduced: 0,
-                attachmentsReduced: 0,
-                toolResultsReduced: 0,
-                protectedMessageCount: protectedCount,
-                reachedSoftBudget: true,
-                reachedHardBudget: true,
-                fingerprint: nil,
-                beforeEstimate: initialEstimate,
-                afterEstimate: initialEstimate,
-                reachedTargetBudget: initialTokens <= targetInputBudget
-            )
-            return (messages, report)
-        }
-
         let reducibleIndices = messages.indices.filter { !protectedIndices.contains($0) }.sorted()
 
         var working = messages
@@ -340,7 +333,6 @@ enum ContextWorkingSetManager {
         var currentEstimate = initialEstimate
         var currentTokens = initialTokens
 
-        // Helper to build reduction report
         func makeReport(currEstimate: TokenEstimate) -> ContextReductionReport {
             let currTokens = currEstimate.count
             let didReduce = reasoningCount > 0 || attachmentsCount > 0 || toolResultsCount > 0
@@ -353,6 +345,11 @@ enum ContextWorkingSetManager {
             } else {
                 fp = nil
             }
+            let pinned = didReduce ? PinnedReductionSet(
+                strippedReasoningMessageIDs: Set(strippedReasoningMessageIDs),
+                strippedAttachmentMessageIDs: Set(strippedAttachmentMessageIDs),
+                offloadedToolCallIDs: Set(stubbedToolCallIDs)
+            ) : PinnedReductionSet()
             return ContextReductionReport(
                 beforeTokens: initialTokens,
                 afterTokens: currTokens,
@@ -365,17 +362,12 @@ enum ContextWorkingSetManager {
                 fingerprint: fp,
                 beforeEstimate: initialEstimate,
                 afterEstimate: currEstimate,
-                reachedTargetBudget: currTokens <= targetInputBudget
+                reachedTargetBudget: currTokens <= targetInputBudget,
+                pinnedReduction: pinned
             )
         }
 
-        // Level 1: Reasoning & transient metadata reduction in reducible region.
-        // Reasoning inside the current run is the model's interleaved thinking between tool
-        // calls; providers require it back intact (DeepSeek returns 400 without it, Anthropic
-        // keeps thinking blocks through a tool loop). Pressure from it goes to Levels 2-3 and
-        // compaction instead.
-        let currentRunStart = currentRunStartIndex(in: messages, protectionHints: protectionHints)
-        for idx in reducibleIndices where idx < currentRunStart {
+        func applyLevel1Strip(at idx: Int) -> Bool {
             var modified = false
             if protocolContext?.preserveReasoningHistory != true, working[idx].reasoningContent != nil {
                 working[idx].reasoningContent = nil
@@ -417,57 +409,37 @@ enum ContextWorkingSetManager {
                     modified = true
                 }
             }
-
-            if modified {
-                let eval = evaluateEstimate(working)
-                currentEstimate = eval.estimate
-                currentTokens = eval.tokens
-                if currentTokens <= targetInputBudget {
-                    return (working, makeReport(currEstimate: currentEstimate))
-                }
-            }
+            return modified
         }
 
-        // Level 2: Older attachments downgraded to recoverable textual references
-        for idx in reducibleIndices {
-            if !working[idx].attachments.isEmpty {
-                let count = working[idx].attachments.count
-                attachmentsCount += count
-                strippedAttachmentMessageIDs.append(working[idx].id)
+        func applyLevel2Downgrade(at idx: Int) -> Bool {
+            guard !working[idx].attachments.isEmpty else { return false }
+            let count = working[idx].attachments.count
+            attachmentsCount += count
+            strippedAttachmentMessageIDs.append(working[idx].id)
 
-                var notes: [String] = []
-                for att in working[idx].attachments {
-                    var lines: [String] = [
-                        "[Earlier attachment omitted from active context.",
-                        "File: \(att.filename)",
-                        "Type: \(att.mimeType.isEmpty ? att.kind.rawValue : att.mimeType)"
-                    ]
-                    if !att.relativePath.isEmpty {
-                        lines.append("Stored reference: \(att.relativePath)")
-                    }
-                    lines.append("Original attachment remains available in conversation history.]")
-                    notes.append(lines.joined(separator: "\n"))
+            var notes: [String] = []
+            for att in working[idx].attachments {
+                var lines: [String] = [
+                    "[Earlier attachment omitted from active context.",
+                    "File: \(att.filename)",
+                    "Type: \(att.mimeType.isEmpty ? att.kind.rawValue : att.mimeType)"
+                ]
+                if !att.relativePath.isEmpty {
+                    lines.append("Stored reference: \(att.relativePath)")
                 }
-                let combinedNote = "\n" + notes.joined(separator: "\n\n")
-
-                working[idx].attachments = []
-                if !working[idx].content.contains("[Earlier attachment omitted from active context.") {
-                    working[idx].content += combinedNote
-                }
-
-                let eval = evaluateEstimate(working)
-                currentEstimate = eval.estimate
-                currentTokens = eval.tokens
-                if currentTokens <= targetInputBudget {
-                    return (working, makeReport(currEstimate: currentEstimate))
-                }
+                lines.append("Original attachment remains available in conversation history.]")
+                notes.append(lines.joined(separator: "\n"))
             }
+            let combinedNote = "\n" + notes.joined(separator: "\n\n")
+
+            working[idx].attachments = []
+            if !working[idx].content.contains("[Earlier attachment omitted from active context.") {
+                working[idx].content += combinedNote
+            }
+            return true
         }
 
-        // Level 3: Tool Result Offload in reducible region
-        // Collect candidate tool results and sort by token footprint descending (largest first)
-        // The ordinary tail receives full-fidelity preference. Under hard pressure, eligible
-        // acknowledged/fact-safe payloads there can still be offloaded after older candidates.
         struct ToolCandidate {
             let messageIndex: Int
             let toolIndex: Int
@@ -479,54 +451,35 @@ enum ContextWorkingSetManager {
             let tokens: Int
         }
 
-        var candidates: [ToolCandidate] = []
         let latestMutationID = latestMutationCallID(in: messages)
-        for msgIdx in messages.indices {
-            for toolIdx in working[msgIdx].toolCalls.indices {
-                let call = working[msgIdx].toolCalls[toolIdx]
-                guard call.state.isTerminal,
-                      (hasLaterProviderTurn(after: msgIdx, in: messages) || protectionHints.acknowledgedToolCallIDs.contains(call.id)),
-                      !isActive(call),
-                      !containsArtifactResultPart(call.resultParts),
-                      (!isMutationSensitiveTool(call.name) || hasSufficientMutationFacts(call)),
-                      (call.id != latestMutationID || hasSufficientMutationFacts(call)) else { continue }
-                // An independent error description may contain facts absent from output. Keep it
-                // raw until Context has a separately authorized way to summarize those facts.
-                if let error = call.errorMessage, !error.isEmpty, error != call.output { continue }
-                if !call.output.isEmpty && !call.output.hasPrefix("[TOOL RESULT OFFLOADED]") {
-                    let outputTokens = estimatedTokens(text: call.output)
-                    if outputTokens >= minimumToolResultTokensForOffload {
-                        let durableCallID = !call.providerCallID.isEmpty ? call.providerCallID : call.id.uuidString
-                        candidates.append(ToolCandidate(
-                            messageIndex: msgIdx,
-                            toolIndex: toolIdx,
-                            toolCallID: durableCallID,
-                            toolName: call.name,
-                            toolInput: call.input,
-                            originalOutput: call.output,
-                            hasAliasedErrorMessage: call.errorMessage == call.output,
-                            tokens: outputTokens
-                        ))
-                    }
-                }
-            }
+        func eligibleToolCandidate(messageIndex msgIdx: Int, toolIndex toolIdx: Int) -> ToolCandidate? {
+            let call = working[msgIdx].toolCalls[toolIdx]
+            guard call.state.isTerminal,
+                  (hasLaterProviderTurn(after: msgIdx, in: messages) || protectionHints.acknowledgedToolCallIDs.contains(call.id)),
+                  !isActive(call),
+                  !containsArtifactResultPart(call.resultParts),
+                  (!isMutationSensitiveTool(call.name) || hasSufficientMutationFacts(call)),
+                  (call.id != latestMutationID || hasSufficientMutationFacts(call)) else { return nil }
+            // An independent error description may contain facts absent from output. Keep it
+            // raw until Context has a separately authorized way to summarize those facts.
+            if let error = call.errorMessage, !error.isEmpty, error != call.output { return nil }
+            guard !call.output.isEmpty, !call.output.hasPrefix("[TOOL RESULT OFFLOADED]") else { return nil }
+            let outputTokens = estimatedTokens(text: call.output)
+            guard outputTokens >= minimumToolResultTokensForOffload else { return nil }
+            let durableCallID = !call.providerCallID.isEmpty ? call.providerCallID : call.id.uuidString
+            return ToolCandidate(
+                messageIndex: msgIdx,
+                toolIndex: toolIdx,
+                toolCallID: durableCallID,
+                toolName: call.name,
+                toolInput: call.input,
+                originalOutput: call.output,
+                hasAliasedErrorMessage: call.errorMessage == call.output,
+                tokens: outputTokens
+            )
         }
 
-        // Exhaust historical candidates before breaching the ordinary full-fidelity
-        // suffix. Within each class, preserve the existing largest-first ordering.
-        candidates.sort { (a, b) -> Bool in
-            let aInTail = a.messageIndex >= tailStart
-            let bInTail = b.messageIndex >= tailStart
-            if aInTail != bInTail { return !aInTail }
-            if a.tokens != b.tokens {
-                return a.tokens > b.tokens
-            }
-            return a.messageIndex < b.messageIndex
-        }
-
-        for cand in candidates {
-            // Ordinary suffix is only breached to avoid a known-over-hard request.
-            if cand.messageIndex >= tailStart && currentTokens <= hardInputBudget { continue }
+        func offloadCandidate(_ cand: ToolCandidate) {
             let preview = previewSnippet(cand.originalOutput)
             let stub = """
             [TOOL RESULT OFFLOADED]
@@ -544,6 +497,105 @@ enum ContextWorkingSetManager {
             }
             toolResultsCount += 1
             stubbedToolCallIDs.append(cand.toolCallID)
+        }
+
+        let currentRunStart = currentRunStartIndex(in: messages, protectionHints: protectionHints)
+
+        // Replay previously pinned reductions first so already-sent prefixes remain cache-stable
+        // across turns until the soft threshold is crossed again.
+        if !pinnedReduction.isEmpty {
+            var replayedAny = false
+            for idx in reducibleIndices where idx < currentRunStart {
+                if pinnedReduction.strippedReasoningMessageIDs.contains(working[idx].id),
+                   applyLevel1Strip(at: idx) {
+                    replayedAny = true
+                }
+            }
+            for idx in reducibleIndices {
+                if pinnedReduction.strippedAttachmentMessageIDs.contains(working[idx].id),
+                   applyLevel2Downgrade(at: idx) {
+                    replayedAny = true
+                }
+            }
+            if !pinnedReduction.offloadedToolCallIDs.isEmpty {
+                for msgIdx in working.indices {
+                    for toolIdx in working[msgIdx].toolCalls.indices {
+                        if let cand = eligibleToolCandidate(messageIndex: msgIdx, toolIndex: toolIdx),
+                           pinnedReduction.offloadedToolCallIDs.contains(cand.toolCallID) {
+                            offloadCandidate(cand)
+                            replayedAny = true
+                        }
+                    }
+                }
+            }
+            if replayedAny {
+                let eval = evaluateEstimate(working)
+                currentEstimate = eval.estimate
+                currentTokens = eval.tokens
+            }
+        }
+
+        // If already (or still, after replaying pinned reductions) within soft budget, no new reduction needed.
+        if currentTokens <= softInputBudget {
+            return (working, makeReport(currEstimate: currentEstimate))
+        }
+
+        // Level 1: Reasoning & transient metadata reduction in reducible region.
+        // Reasoning inside the current run is the model's interleaved thinking between tool
+        // calls; providers require it back intact (DeepSeek returns 400 without it, Anthropic
+        // keeps thinking blocks through a tool loop). Pressure from it goes to Levels 2-3 and
+        // compaction instead.
+        for idx in reducibleIndices where idx < currentRunStart {
+            if applyLevel1Strip(at: idx) {
+                let eval = evaluateEstimate(working)
+                currentEstimate = eval.estimate
+                currentTokens = eval.tokens
+                if currentTokens <= targetInputBudget {
+                    return (working, makeReport(currEstimate: currentEstimate))
+                }
+            }
+        }
+
+        // Level 2: Older attachments downgraded to recoverable textual references
+        for idx in reducibleIndices {
+            if applyLevel2Downgrade(at: idx) {
+                let eval = evaluateEstimate(working)
+                currentEstimate = eval.estimate
+                currentTokens = eval.tokens
+                if currentTokens <= targetInputBudget {
+                    return (working, makeReport(currEstimate: currentEstimate))
+                }
+            }
+        }
+
+        // Level 3: Tool Result Offload in reducible region (chronological, oldest-first).
+        // The ordinary tail receives full-fidelity preference. Under hard pressure, eligible
+        // acknowledged/fact-safe payloads there can still be offloaded after older candidates.
+        var candidates: [ToolCandidate] = []
+        for msgIdx in messages.indices {
+            for toolIdx in working[msgIdx].toolCalls.indices {
+                if let cand = eligibleToolCandidate(messageIndex: msgIdx, toolIndex: toolIdx) {
+                    candidates.append(cand)
+                }
+            }
+        }
+
+        // Exhaust historical candidates chronologically before breaching the ordinary full-fidelity
+        // suffix so already-sent prefixes remain cache-stable across turns.
+        candidates.sort { (a, b) -> Bool in
+            let aInTail = a.messageIndex >= tailStart
+            let bInTail = b.messageIndex >= tailStart
+            if aInTail != bInTail { return !aInTail }
+            if a.messageIndex != b.messageIndex {
+                return a.messageIndex < b.messageIndex
+            }
+            return a.toolIndex < b.toolIndex
+        }
+
+        for cand in candidates {
+            // Ordinary suffix is only breached to avoid a known-over-hard request.
+            if cand.messageIndex >= tailStart && currentTokens <= hardInputBudget { continue }
+            offloadCandidate(cand)
 
             let eval = evaluateEstimate(working)
             currentEstimate = eval.estimate

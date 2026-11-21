@@ -149,6 +149,17 @@ final class ToolExecutor {
     var runAuthorityResolver: (@Sendable () async -> Bool)?
     private let isSkillFile: (@MainActor (URL, URL?) -> Bool)?
     private let onSkillDirectoryModified: (@MainActor (URL?) -> Void)?
+    private var onExtensionUsed: (@MainActor (ExtensionUsageEvent) -> Void)?
+
+    enum ExtensionUsageEvent: Sendable {
+        case skillFileRead(url: URL, workspaceURL: URL?)
+        case mcpTool(serverID: String)
+        case computerUse
+    }
+
+    func setExtensionUsageHandler(_ handler: (@MainActor (ExtensionUsageEvent) -> Void)?) {
+        self.onExtensionUsed = handler
+    }
 
     /// True only when the executor that will receive `delegate_task` has a subagent coordinator
     /// and is not itself a subagent's executor.
@@ -309,6 +320,7 @@ final class ToolExecutor {
         scoped.scheduler = scheduler
         scoped.setComputerUseV2Engine(self.computerUseV2Engine)
         scoped.setComputerUseRoute(self.computerUseRoute)
+        scoped.setExtensionUsageHandler(self.onExtensionUsed)
         return scoped
     }
 
@@ -1000,6 +1012,9 @@ final class ToolExecutor {
         case .failure(let failure): throw ToolExecutorError.invalidArguments(failure.message)
         }
         permissions.fileReadVersions.record(content, at: context.url, conversationID: fileVersionConversationID)
+        if isSkillFile?(context.url, workspace.url) == true {
+            onExtensionUsed?(.skillFileRead(url: context.url, workspaceURL: workspace.url))
+        }
         onUpdate(.init(state: .completed, approvalState: approval, output: boundedContent))
         logs.info("Tool", "Read file \(context.url.path).")
         return .init(content: boundedContent, isError: false, approvalState: approval, durationMilliseconds: milliseconds(since: startedAt))
@@ -1624,6 +1639,7 @@ final class ToolExecutor {
         let duration = milliseconds(since: startedAt)
 
         let state: ToolExecutionState = result.isError ? .failed : .completed
+        onExtensionUsed?(.mcpTool(serverID: serverID))
         onUpdate(.init(state: state, approvalState: approval, output: result.content))
         logs.info("MCP", "Finished tool '\(toolName)' on '\(serverID)' in \(duration)ms.")
 
@@ -3154,6 +3170,7 @@ final class ToolExecutor {
         switch result.status {
         case .dispatched:
             terminalState = .completed
+            onExtensionUsed?(.computerUse)
         case .denied, .blocked:
             terminalState = .denied
         case .cancelled:

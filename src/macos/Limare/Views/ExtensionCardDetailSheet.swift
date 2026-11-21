@@ -266,6 +266,7 @@ struct ExtensionCardDetailSheet: View {
             VStack(spacing: AppSpacing.xxSmall) {
                 ForEach(card.examples, id: \.self) { example in
                     Button {
+                        appState.skills.recordExtensionUsage(cardID: card.id)
                         dismiss()
                         window.openChatWithPrompt(example, preferEmptyOverwrite: true)
                     } label: {
@@ -623,20 +624,29 @@ struct ExtensionCardDetailSheet: View {
 }
 
 @ViewBuilder
-func extensionIconBadge(card: ExtensionCardItem, size: CGFloat, cornerRadius: CGFloat, fontSize: CGFloat) -> some View {
+func extensionIconBadge(
+    card: ExtensionCardItem,
+    size: CGFloat,
+    cornerRadius: CGFloat,
+    fontSize: CGFloat,
+    isDesaturated: Bool = false
+) -> some View {
+    let backgroundColor = isDesaturated ? Color.primary.opacity(0.06) : card.color.iconBackground
+    let foregroundColor = isDesaturated ? AppColors.textMuted : card.color.iconForeground
+
     ZStack {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(card.color.iconBackground)
+            .fill(backgroundColor)
             .frame(width: size, height: size)
 
         if let symbol = card.iconSymbol {
             Image(systemName: symbol)
                 .font(.system(size: fontSize, weight: .semibold))
-                .foregroundStyle(card.color.iconForeground)
+                .foregroundStyle(foregroundColor)
         } else {
             Text(card.monogram)
                 .font(.system(size: fontSize, weight: .semibold, design: .rounded))
-                .foregroundStyle(card.color.iconForeground)
+                .foregroundStyle(foregroundColor)
         }
     }
 }

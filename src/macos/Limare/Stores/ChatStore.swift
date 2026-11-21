@@ -821,6 +821,7 @@ final class ChatStore {
         }
         let conversationID = viewedConversationID ?? standaloneConversationID
         runCoordinator.discardInteractiveInputs(conversationID: conversationID)
+        runCoordinator.forgetWireToolArguments(conversationID: conversationID)
         clearPendingAttachments()
         messages.removeAll()
         conversation.removeAll()
@@ -1201,19 +1202,24 @@ final class ChatStore {
         if call.function.name == "browser_use",
            let data = call.function.arguments.data(using: .utf8),
            var object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            var changed = false
             if object["text"] != nil {
                 object["text"] = "••••"
+                changed = true
             }
             if let rawURL = object["url"] as? String,
                let comp = URLComponents(string: rawURL),
-               let scheme = comp.scheme, let host = comp.host {
+               let scheme = comp.scheme, let host = comp.host,
+               comp.query != nil || comp.fragment != nil || comp.user != nil || comp.password != nil {
                 var safeComp = URLComponents()
                 safeComp.scheme = scheme
                 safeComp.host = host
                 safeComp.path = comp.path
                 if let port = comp.port { safeComp.port = port }
-                object["url"] = safeComp.string ?? "\(scheme)://\(host)\(comp.path)"
+                let safeURL = safeComp.string ?? "\(scheme)://\(host)\(comp.path)"
+                if safeURL != rawURL { object["url"] = safeURL; changed = true }
             }
+            guard changed else { return call.function.arguments }
             if let sanitized = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]),
                let result = String(data: sanitized, encoding: .utf8) {
                 return result

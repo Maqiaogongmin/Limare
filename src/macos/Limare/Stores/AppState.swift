@@ -295,6 +295,24 @@ final class AppState {
                 (sub: conversations?.activeConversation?.subModelSource, primary: conversations?.activeConversation?.modelSource)
             }
         )
+        toolExecutor.setExtensionUsageHandler { [weak skills] event in
+            switch event {
+            case .skillFileRead(let url, let workspaceURL):
+                skills?.recordSkillFileRead(url, workspaceURL: workspaceURL)
+            case .mcpTool(let serverID):
+                skills?.recordExtensionUsage(cardID: "mcp:\(serverID)")
+            case .computerUse:
+                skills?.recordExtensionUsage(cardID: "builtin:computer-use")
+            }
+        }
+        hooks.onExecutionsRecorded = { [weak skills] executions in
+            for exec in executions {
+                skills?.recordExtensionUsage(cardID: "hook:\(exec.sourceID.uuidString)")
+            }
+        }
+        if storageRootURL == nil && LimareStorage.isLimareApp {
+            skills.seedExtensionUsageIfNeeded(from: conversations.conversations)
+        }
         self.toolExecutor = toolExecutor
 
         let titleGenerator = ConversationTitleGenerator(
@@ -646,7 +664,7 @@ final class AppState {
     func markBackgroundReplyUnread(conversationID: UUID) {
         guard let conversation = conversations.conversations.first(where: { $0.id == conversationID }),
               !conversation.isNativeDelegationChild else { return }
-        let isBeingRead = NSApp.isActive && windows.contains {
+        let isBeingRead = NSApp?.isActive == true && windows.contains {
             $0.conversationID == conversationID && $0.screen == .chat && $0.hostWindow?.isKeyWindow == true
         }
         if !isBeingRead {

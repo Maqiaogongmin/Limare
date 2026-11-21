@@ -175,7 +175,7 @@ actor UsageRecorder {
         let sql = """
             SELECT provider_id, provider_name_snapshot, model_id, model_name_snapshot, started_at,
                    input_total, output_total, cache_read, cache_write, reasoning, tool_use_prompt, provider_total, usage_status,
-                   attempt_count
+                   attempt_count, attempts_without_usage, outcome
             FROM usage_request WHERE (?1 IS NULL OR started_at >= ?1)
               AND (?2 IS NULL OR usage_kind = ?2) AND (?3 IS NULL OR provider_id = ?3)
             ORDER BY started_at
@@ -200,7 +200,8 @@ actor UsageRecorder {
             let usage = NormalizedUsage(input: number(5), output: number(6), cacheRead: number(7), cacheWrite: number(8),
                 reasoning: number(9), toolUsePrompt: number(10), providerTotal: number(11),
                 status: UsageStatus(rawValue: string(12)) ?? .unknown)
-            let cacheMeasurementComplete = usage.status == .complete && sqlite3_column_int(statement, 13) == 1
+            let cacheMeasurementComplete = usage.status == .complete && string(15) == UsageOutcome.completed.rawValue
+                && sqlite3_column_int(statement, 13) - sqlite3_column_int(statement, 14) == 1
             report.totals.add(usage, cacheMeasurementComplete: cacheMeasurementComplete)
             let key = [string(0), string(1), string(2), string(3)].joined(separator: "\u{1f}")
             var group = groups[key] ?? UsageGroup(id: key, provider: string(1), model: string(3), totals: UsageTotals())

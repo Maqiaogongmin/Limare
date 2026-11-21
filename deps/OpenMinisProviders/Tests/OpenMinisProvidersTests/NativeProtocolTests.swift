@@ -193,4 +193,19 @@ final class NativeProtocolTests: XCTestCase {
         let parts = (body["contents"] as! [[String: Any]]).flatMap { $0["parts"] as? [[String: Any]] ?? [] }
         XCTAssertEqual(parts.first(where: { $0["functionCall"] != nil })?["thoughtSignature"] as? String, "opaque-signature")
     }
+
+    func testAnthropicThirdPartyEndpointCacheControlAndOptOut() throws {
+        let relay = try NativeWireCodec.request(protocol: .anthropicMessages, baseURL: "https://relay.example.com/v1",
+            appendV1: true, apiKey: "fixture", modelID: "claude-opus-4-8", messagesJSON: messages,
+            toolsJSON: tools, maxTokens: 4096, thinking: "off", supportsReasoning: false, effortValues: nil)
+        let relayBody = try JSONSerialization.jsonObject(with: relay.httpBody!) as! [String: Any]
+        XCTAssertEqual((relayBody["cache_control"] as? [String: String])?["type"], "ephemeral")
+
+        let omitted = try NativeWireCodec.request(protocol: .anthropicMessages, baseURL: "https://relay.example.com/v1",
+            appendV1: true, apiKey: "fixture", modelID: "claude-opus-4-8", messagesJSON: messages,
+            toolsJSON: tools, maxTokens: 4096, thinking: "off", supportsReasoning: false, effortValues: nil,
+            includePromptCacheControl: false)
+        let omittedBody = try JSONSerialization.jsonObject(with: omitted.httpBody!) as! [String: Any]
+        XCTAssertNil(omittedBody["cache_control"])
+    }
 }
