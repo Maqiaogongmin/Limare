@@ -926,9 +926,10 @@ final class ContextLifecycle {
 
     nonisolated static func summarizeToolCall(_ call: ToolCallRecord) -> String {
         let name = call.name.isEmpty ? "tool" : call.name
+        let maxOutputChars = call.state == .completed ? 240 : 1_000
         var trimmedOutput = call.output.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedOutput.count > 1_000 {
-            trimmedOutput = String(trimmedOutput.prefix(1_000)) + " [truncated]"
+        if trimmedOutput.count > maxOutputChars {
+            trimmedOutput = String(trimmedOutput.prefix(maxOutputChars)) + " [truncated]"
         }
         var trimmedError = call.errorMessage?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let err = trimmedError, err.count > 1_000 {
@@ -1004,29 +1005,42 @@ final class ContextLifecycle {
         let joined = chunks.joined(separator: "\n")
         if joined.count <= maximumSummaryCharacters { return joined }
 
-        // Bounded deterministic summary: preserve critical tool outcome and constraint lines
+        // Bounded deterministic summary: preserve non-success tool outcomes and redacted secrets,
+        // while keeping completed tool summaries and conversation prose bounded within the total budget.
         var criticalLines: [String] = []
         var normalLines: [String] = []
         for line in joined.components(separatedBy: "\n") {
-            if line.contains("[failed]") || line.contains("[denied]") || line.contains("[timed out]") || line.contains("[interrupted") || line.contains("••••") || (line.contains("Tool ") && line.contains("[completed]")) {
+            if line.contains("[failed]") || line.contains("[denied]") || line.contains("[timed out]") || line.contains("[interrupted") || line.contains("••••") {
                 criticalLines.append(line)
             } else {
                 normalLines.append(line)
             }
         }
 
-        let criticalBlock = criticalLines.joined(separator: "\n")
-        let availableProse = max(0, maximumSummaryCharacters - criticalBlock.count - 100)
+        let maxCriticalCharacters = (maximumSummaryCharacters * 60) / 100
+        var criticalBlock = criticalLines.joined(separator: "\n")
+        if criticalBlock.count > maxCriticalCharacters {
+            let notice = "[Earlier critical outcomes truncated]\n"
+            let tailBudget = max(0, maxCriticalCharacters - notice.count)
+            criticalBlock = tailBudget > 0 ? notice + String(criticalBlock.suffix(tailBudget)) : String(criticalBlock.suffix(maxCriticalCharacters))
+        }
+
+        let criticalHeader = "\n\n[Authoritative Tool Outcomes]\n"
+        let availableProse = criticalBlock.isEmpty
+            ? maximumSummaryCharacters
+            : max(0, maximumSummaryCharacters - criticalBlock.count - criticalHeader.count)
         let normalBlock = normalLines.joined(separator: "\n")
         let trimmedNormal = normalBlock.count <= availableProse ? normalBlock : String(normalBlock.suffix(availableProse))
 
+        let result: String
         if criticalBlock.isEmpty {
-            return trimmedNormal
+            result = trimmedNormal
         } else if trimmedNormal.isEmpty {
-            return criticalBlock
+            result = criticalBlock
         } else {
-            return "\(trimmedNormal)\n\n[Authoritative Tool Outcomes]\n\(criticalBlock)"
+            result = "\(trimmedNormal)\(criticalHeader)\(criticalBlock)"
         }
+        return result.count <= maximumSummaryCharacters ? result : String(result.suffix(maximumSummaryCharacters))
     }
 
     private func shortenedToolOutput(_ output: String, maximumBytes: Int) -> String {

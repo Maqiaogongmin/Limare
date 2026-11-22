@@ -208,4 +208,76 @@ final class NativeProtocolTests: XCTestCase {
         let omittedBody = try JSONSerialization.jsonObject(with: omitted.httpBody!) as! [String: Any]
         XCTAssertNil(omittedBody["cache_control"])
     }
+
+    func testDynamicPromptBoundaryAnthropicAndGemini() throws {
+        let marker = NativeWireCodec.dynamicPromptBoundaryMarker
+        let systemRows: [[String: Any]] = [
+            ["role": "system", "content": "Static base prompt\n\n\(marker)\n\nDynamic workspace tail"],
+            ["role": "user", "content": "Read the project"]
+        ]
+        let systemMessages = try JSONSerialization.data(withJSONObject: systemRows)
+
+        // 1. Anthropic with cache control enabled: two system blocks, cache_control only on first block
+        let anthropic = try NativeWireCodec.request(
+            protocol: .anthropicMessages,
+            baseURL: "https://api.anthropic.com/v1",
+            appendV1: true,
+            apiKey: "fixture",
+            modelID: "claude-opus-4-8",
+            messagesJSON: systemMessages,
+            toolsJSON: tools,
+            maxTokens: 4096,
+            thinking: "off",
+            supportsReasoning: false,
+            effortValues: nil
+        )
+        let anthropicBody = try JSONSerialization.jsonObject(with: anthropic.httpBody!) as! [String: Any]
+        let anthropicBlocks = try XCTUnwrap(anthropicBody["system"] as? [[String: Any]])
+        XCTAssertEqual(anthropicBlocks.count, 2)
+        XCTAssertEqual(anthropicBlocks[0]["text"] as? String, "Static base prompt")
+        XCTAssertEqual((anthropicBlocks[0]["cache_control"] as? [String: String])?["type"], "ephemeral")
+        XCTAssertEqual(anthropicBlocks[1]["text"] as? String, "Dynamic workspace tail")
+        XCTAssertNil(anthropicBlocks[1]["cache_control"])
+
+        // 2. Kimi Code profile: plain string system with boundary stripped and no cache_control
+        let kimi = try NativeWireCodec.request(
+            protocol: .anthropicMessages,
+            baseURL: "https://api.kimi.com/coding",
+            appendV1: true,
+            apiKey: "fixture",
+            modelID: "kimi-for-coding",
+            messagesJSON: systemMessages,
+            toolsJSON: tools,
+            maxTokens: 4096,
+            thinking: "off",
+            supportsReasoning: false,
+            effortValues: nil,
+            kimiCodeProfile: true
+        )
+        let kimiBody = try JSONSerialization.jsonObject(with: kimi.httpBody!) as! [String: Any]
+        let kimiSystem = try XCTUnwrap(kimiBody["system"] as? String)
+        XCTAssertFalse(kimiSystem.contains(marker))
+        XCTAssertEqual(kimiSystem, "Static base prompt\n\nDynamic workspace tail")
+        XCTAssertNil(kimiBody["cache_control"])
+
+        // 3. Gemini Native: marker stripped cleanly without leaving marker text
+        let gemini = try NativeWireCodec.request(
+            protocol: .geminiNative,
+            baseURL: "https://generativelanguage.googleapis.com/v1beta",
+            appendV1: false,
+            apiKey: "fixture",
+            modelID: "gemini-3-flash-preview",
+            messagesJSON: systemMessages,
+            toolsJSON: tools,
+            maxTokens: 4096,
+            thinking: "minimal",
+            supportsReasoning: true,
+            effortValues: ["minimal"]
+        )
+        let geminiBody = try JSONSerialization.jsonObject(with: gemini.httpBody!) as! [String: Any]
+        let sysParts = (geminiBody["systemInstruction"] as? [String: Any])?["parts"] as? [[String: Any]]
+        let geminiText = try XCTUnwrap(sysParts?.first?["text"] as? String)
+        XCTAssertFalse(geminiText.contains(marker))
+        XCTAssertEqual(geminiText, "Static base prompt\n\nDynamic workspace tail")
+    }
 }

@@ -118,13 +118,18 @@ enum OpenAIChatRequestBuilder {
             if let content = msg.content {
                 switch content {
                 case .text(let text):
-                    msgDict["content"] = text
+                    msgDict["content"] = msg.role == "system"
+                        ? RuntimeCapabilityManifest.strippingDynamicBoundary(text)
+                        : text
                 case .parts(let parts):
                     var partsJSON: [[String: Any]] = []
                     for part in parts {
                         switch part {
                         case .text(let text):
-                            partsJSON.append(["type": "text", "text": text])
+                            let cleaned = msg.role == "system"
+                                ? RuntimeCapabilityManifest.strippingDynamicBoundary(text)
+                                : text
+                            partsJSON.append(["type": "text", "text": cleaned])
                         case .imageUrl(let url):
                             partsJSON.append(["type": "image_url", "image_url": ["url": url]])
                         case .imageAttachment(let att):
@@ -154,10 +159,12 @@ enum OpenAIChatRequestBuilder {
                 let allowEcho: Bool
                 if options.model?.supportsReasoning == false || echoTiming == .never {
                     allowEcho = false
-                } else if echoTiming == .afterToolUseOnly {
-                    allowEcho = (msg.toolCalls != nil && !msg.toolCalls!.isEmpty)
-                } else {
+                } else if echoTiming == .always {
                     allowEcho = true
+                } else {
+                    // .afterToolUseOnly and nil (default for OpenAI-compatible gateways):
+                    // only echo reasoning_content on tool-call turns, never on finished text-only turns.
+                    allowEcho = (msg.toolCalls != nil && !msg.toolCalls!.isEmpty)
                 }
 
                 if allowEcho, let reasoning = msg.reasoningContent {

@@ -31,8 +31,7 @@ enum ModelChoiceCatalog {
     static func visibleModelEntries(providers: [ProviderConfiguration], current: ConversationModelSource?) -> [ModelPickerEntry] {
         providers.flatMap { provider in
             provider.models.compactMap { model in
-                let entryID = ModelGroup.makeEntryId(providerID: provider.id, modelID: model.id)
-                guard ModelGroupStore.evaluateMemberEligibility(entryId: entryID, providers: providers).isChatEligible else { return nil }
+                guard ModelGroupStore.evaluateMemberEligibility(provider: provider, model: model).isChatEligible else { return nil }
                 if model.isHidden || model.discovery.isAbsent {
                     guard case .direct(let providerID, let modelID) = current, providerID == provider.id, modelID == model.id else { return nil }
                 }

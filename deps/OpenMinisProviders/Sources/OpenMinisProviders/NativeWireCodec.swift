@@ -37,6 +37,23 @@ public enum NativeDecodedEvent: Sendable {
 
 /// Pure protocol projection. Provider configuration, credential acquisition and transport belong to the host.
 public enum NativeWireCodec {
+    public static let dynamicPromptBoundaryMarker = "<!-- LIMARE_PROMPT_DYNAMIC_BOUNDARY -->"
+
+    private static func splitSystemPrompt(_ system: String) -> (staticPrefix: String, dynamicTail: String?) {
+        guard let range = system.range(of: dynamicPromptBoundaryMarker) else {
+            return (system.trimmingCharacters(in: .whitespacesAndNewlines), nil)
+        }
+        let prefix = system[..<range.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
+        let tail = system[range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+        return (prefix, tail.isEmpty ? nil : tail)
+    }
+
+    private static func strippingDynamicPromptBoundary(_ system: String) -> String {
+        let (prefix, tail) = splitSystemPrompt(system)
+        if prefix.isEmpty { return tail ?? "" }
+        guard let tail else { return prefix }
+        return prefix + "\n\n" + tail
+    }
     /// Shared by request projection and host UI distinct-control checks.
     public static func thinkingControlJSON(protocol wire: NativeWireProtocol, modelID: String,
         maxTokens: Int, thinking: String, supportsReasoning: Bool?, effortValues: [String]?,
@@ -97,12 +114,30 @@ public enum NativeWireCodec {
             let host = URLComponents(string: baseURL)?.host ?? ""
             let projection = AnthropicAgentProvider(provider: AnthropicProvider(model: model, isOfficialAnthropicEndpoint: host == "api.anthropic.com"))
             let parameter = MessageParameter(model: .other(modelID), messages: projection.convertMessages(messages),
-                                             maxTokens: maxTokens, system: system.isEmpty ? nil : .text(system), stream: true)
+                                             maxTokens: maxTokens, system: nil, stream: true)
             let encoder = JSONEncoder()
             encoder.keyEncodingStrategy = .convertToSnakeCase
             body = try JSONSerialization.jsonObject(with: encoder.encode(parameter)) as! [String: Any]
+            let (staticSystem, dynamicSystem) = splitSystemPrompt(system)
             if includePromptCacheControl && !kimiCodeProfile {
                 body["cache_control"] = ["type": "ephemeral"]
+                if let dynamicSystem, !staticSystem.isEmpty {
+                    body["system"] = [
+                        ["type": "text", "text": staticSystem, "cache_control": ["type": "ephemeral"]],
+                        ["type": "text", "text": dynamicSystem]
+                    ]
+                } else if !staticSystem.isEmpty {
+                    body["system"] = [
+                        ["type": "text", "text": staticSystem, "cache_control": ["type": "ephemeral"]]
+                    ]
+                } else if let dynamicSystem {
+                    body["system"] = dynamicSystem
+                }
+            } else {
+                let plain = strippingDynamicPromptBoundary(system)
+                if !plain.isEmpty {
+                    body["system"] = plain
+                }
             }
             if !tools.isEmpty {
                 body["tools"] = tools.map { tool -> [String: Any] in
@@ -140,7 +175,8 @@ public enum NativeWireCodec {
             }
             let contents = projection.convertMessages(messages)
             body = ["contents": contents]
-            if !system.isEmpty { body["systemInstruction"] = ["parts": [["text": system]]] }
+            let strippedSystem = strippingDynamicPromptBoundary(system)
+            if !strippedSystem.isEmpty { body["systemInstruction"] = ["parts": [["text": strippedSystem]]] }
             var generation: [String: Any] = ["maxOutputTokens": maxTokens]
             generation.merge(control) { _, new in new }
             body["generationConfig"] = generation

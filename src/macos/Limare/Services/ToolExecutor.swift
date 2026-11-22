@@ -946,16 +946,34 @@ final class ToolExecutor {
             throw ShellRunnerError.spawnFailed("Shell stream ended without a result.")
         }
 
+        let sanitizedStdout = sanitizedShellText(result.stdout, masking: secretValues)
+        let sanitizedStderr = sanitizedShellText(result.stderr, masking: secretValues)
+        let inlineStdoutLimit = 16_384
+        let inlineStderrLimit = 8_192
+        let stdoutExceedsInline = sanitizedStdout.utf8.count > inlineStdoutLimit
+        let stderrExceedsInline = sanitizedStderr.utf8.count > inlineStderrLimit
+        var fullOutputPath: String? = nil
+        if stdoutExceedsInline || stderrExceedsInline {
+            fullOutputPath = writeSanitizedShellOverflowLog(
+                callID: call.id,
+                stdout: sanitizedStdout,
+                stderr: sanitizedStderr
+            )
+        }
+
         var payloadObject: [String: Any] = [
-            "stdout": bounded(sanitizedShellText(result.stdout, masking: secretValues), maximumBytes: 65_536),
-            "stderr": bounded(sanitizedShellText(result.stderr, masking: secretValues), maximumBytes: 65_536),
+            "stdout": bounded(sanitizedStdout, maximumBytes: inlineStdoutLimit, fullOutputPath: fullOutputPath),
+            "stderr": bounded(sanitizedStderr, maximumBytes: inlineStderrLimit, fullOutputPath: fullOutputPath),
             "stdout_original_bytes": result.stdoutOriginalByteCount,
             "stderr_original_bytes": result.stderrOriginalByteCount,
             "duration_ms": result.durationMilliseconds,
             "timed_out": result.timedOut,
             "cancelled": result.cancelled,
-            "truncated": result.truncated,
+            "truncated": result.truncated || stdoutExceedsInline || stderrExceedsInline,
         ]
+        if let fullOutputPath {
+            payloadObject["full_output_path"] = fullOutputPath
+        }
         payloadObject["exit_code"] = result.exitCode.map(Int.init) ?? NSNull()
         if let silence = result.silentMillisecondsAtTimeout { payloadObject["silent_ms_at_timeout"] = silence }
         if let elapsed = result.elapsedMillisecondsAtTimeout { payloadObject["elapsed_ms_at_timeout"] = elapsed }
@@ -996,7 +1014,7 @@ final class ToolExecutor {
         let context = try fileContext(path: arguments.path, mustExist: true)
         let approval = await authorize(
             context.request(toolName: call.function.name, action: "Read"),
-            allowedReadDirectories: allowedReadDirectories(),
+            allowedReadDirectories: allowedReadDirectories() + [Self.shellOverflowDirectoryURL],
             onUpdate: onUpdate
         )
         guard approval != .denied else { return deniedOutcome() }
@@ -2252,13 +2270,60 @@ final class ToolExecutor {
         return Int(elapsed.seconds * 1_000) + Int(elapsed.attoseconds / 1_000_000_000_000_000)
     }
 
-    private func bounded(_ text: String, maximumBytes: Int) -> String {
+    private func bounded(_ text: String, maximumBytes: Int, fullOutputPath: String? = nil) -> String {
         let data = Data(text.utf8)
         guard data.count > maximumBytes else { return text }
-        let half = maximumBytes / 2
+        let notice: String
+        if let fullOutputPath {
+            notice = "\n… output truncated; full sanitized output saved to \(fullOutputPath); inspect with file_read(offset, limit) …\n"
+        } else {
+            notice = "\n… output truncated for model context …\n"
+        }
+        let half = max(0, (maximumBytes - notice.utf8.count) / 2)
+        if half == 0 {
+            return String(decoding: data.prefix(maximumBytes), as: UTF8.self)
+        }
         return String(decoding: data.prefix(half), as: UTF8.self)
-            + "\n… output truncated for model context …\n"
+            + notice
             + String(decoding: data.suffix(half), as: UTF8.self)
+    }
+
+    static var shellOverflowDirectoryURL: URL {
+        FileManager.default.temporaryDirectory
+            .resolvingSymlinksInPath()
+            .appendingPathComponent("limare-shell-overflow", isDirectory: true)
+    }
+
+    private func writeSanitizedShellOverflowLog(callID: String, stdout: String, stderr: String) -> String? {
+        let dir = Self.shellOverflowDirectoryURL
+        do {
+            try FileManager.default.createDirectory(
+                at: dir,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
+            )
+        } catch {
+            return nil
+        }
+        let safeID = String(callID.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) || $0 == "-" || $0 == "_" })
+        let suffix = safeID.isEmpty ? UUID().uuidString : safeID
+        let logURL = dir.appendingPathComponent("limare-shell-\(suffix).log")
+        var sections: [String] = []
+        if !stdout.isEmpty {
+            sections.append(stderr.isEmpty ? stdout : "[stdout]\n\(stdout)")
+        }
+        if !stderr.isEmpty {
+            sections.append("[stderr]\n\(stderr)")
+        }
+        let body = sections.joined(separator: "\n\n")
+        guard FileManager.default.createFile(
+            atPath: logURL.path,
+            contents: Data(body.utf8),
+            attributes: [.posixPermissions: 0o600]
+        ) else {
+            return nil
+        }
+        return logURL.path
     }
 
     private func sanitizedShellText(_ text: String, masking secrets: [String]) -> String {

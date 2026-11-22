@@ -16,9 +16,13 @@ enum AppSpacing {
     static let sidebarSectionGap: CGFloat = 18
     /// Between the composer and the window's bottom edge.
     static let composerBottom: CGFloat = 14
-    /// Between the composer's draft and its button row; with the editor's own 6pt inset, 22pt
+    /// Between the composer's draft and its button row; with the editor's own 6pt inset, 26pt
     /// between the text and the buttons.
-    static let composerDraftToolbarGap: CGFloat = 16
+    static let composerDraftToolbarGap: CGFloat = 20
+    /// Airy outer card padding around the composer's draft and toolbar.
+    static let composerCardHorizontal: CGFloat = 18
+    static let composerCardTop: CGFloat = 18
+    static let composerCardBottom: CGFloat = 14
     /// The same in a new conversation's fuller composer.
     static let emptyStateDraftToolbarGap: CGFloat = 28
     /// A new conversation: between the greeting's line and the composer card.

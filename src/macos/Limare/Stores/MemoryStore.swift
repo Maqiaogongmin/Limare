@@ -61,10 +61,11 @@ final class MemoryStore: @unchecked Sendable {
     @ObservationIgnored private let nowProvider: @Sendable () -> Date
 
     nonisolated static let maximumSectionLines = 200
-    nonisolated static let maximumTotalBytes = 65_536
+    nonisolated static let maximumTotalBytes = 24_576
     enum RetentionDirection { case head, tail }
 
-    nonisolated static let maximumSectionBytes = 32_768 // 32 KB safety ceiling
+    nonisolated static let maximumSectionBytes = 32_768 // 32 KB safety ceiling for long-term capacity warning
+    nonisolated static let maximumDailySectionBytes = 8_192 // 8 KB ceiling for auto-projected daily note
     nonisolated static let truncationMarker = "[... remaining memory truncated for context budget ...]"
 
     init(
@@ -197,9 +198,9 @@ final class MemoryStore: @unchecked Sendable {
                 logs.error("Memory", "Could not resolve project memory: \(error.localizedDescription)")
             }
         }
-        let globalSection = Self.boundedSection(global) ?? "(empty)"
+        let globalSection = Self.boundedSection(global, byteLimit: min(Self.maximumTotalBytes, Self.maximumSectionBytes)) ?? "(empty)"
         var sections = ["### GLOBAL.md\n\(globalSection)"]
-        var remaining = Self.maximumTotalBytes - (global.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0 : globalSection.utf8.count)
+        var remaining = max(0, Self.maximumTotalBytes - (global.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0 : globalSection.utf8.count))
         if let project, remaining >= 1024 {
             do {
                 let raw = try String(contentsOf: project.longTerm, encoding: .utf8)
@@ -238,14 +239,14 @@ final class MemoryStore: @unchecked Sendable {
         }.sorted { $0.lastPathComponent > $1.lastPathComponent }
         var dailyCount = 0
         for url in candidates {
-            guard dailyCount < 3, remaining >= 1024 else { break }
+            guard dailyCount < 1, remaining >= 1024 else { break }
             if let project, (WorkspacePathResolver.canonicalPath(project.daily) != project.daily.standardizedFileURL.path || !WorkspacePathResolver.isInsideWorkspace(url, workspaceURL: project.daily)) {
                 logs.error("Memory", "Skipping project daily note outside its directory: \(url.lastPathComponent)")
                 continue
             }
             do {
                 let raw = try String(contentsOf: url, encoding: .utf8)
-                guard let content = Self.boundedSection(raw, direction: .tail, byteLimit: min(remaining, Self.maximumSectionBytes)) else { continue }
+                guard let content = Self.boundedSection(raw, direction: .tail, byteLimit: min(remaining, Self.maximumDailySectionBytes)) else { continue }
                 sections.append("### daily/\(url.lastPathComponent)\n\(content)")
                 remaining -= content.utf8.count
                 dailyCount += 1

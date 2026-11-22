@@ -90,7 +90,9 @@ enum OpenAIResponsesRequestBuilder {
         // 1. Extract System Messages -> instructions
         let systemMessages = messages.filter { $0.role == "system" }
         if !systemMessages.isEmpty {
-            let systemTexts = systemMessages.compactMap { $0.content?.textValue }
+            let systemTexts = systemMessages.compactMap {
+                $0.content?.textValue.map(RuntimeCapabilityManifest.strippingDynamicBoundary)
+            }
             if !systemTexts.isEmpty {
                 payload["instructions"] = systemTexts.joined(separator: "\n\n")
             }

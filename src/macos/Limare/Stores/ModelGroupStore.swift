@@ -352,17 +352,33 @@ final class ModelGroupStore {
             )
         }
 
+        return evaluateMemberEligibility(
+            entryId: entryId,
+            provider: provider,
+            model: model,
+            requireImageInput: requireImageInput
+        )
+    }
+
+    public static func evaluateMemberEligibility(
+        entryId: String? = nil,
+        provider: ProviderConfiguration,
+        model: ProviderModel,
+        requireImageInput: Bool = false
+    ) -> GroupMemberEligibility {
+        let resolvedEntryId = entryId ?? ModelGroup.makeEntryId(providerID: provider.id, modelID: model.id)
+
         if model.discovery.isRemoved {
-            return GroupMemberEligibility(entryId: entryId, parsedProviderId: parsed.providerID,
-                parsedModelId: parsed.modelID, provider: provider, model: model,
+            return GroupMemberEligibility(entryId: resolvedEntryId, parsedProviderId: provider.id,
+                parsedModelId: model.id, provider: provider, model: model,
                 isChatEligible: false, unavailability: .removedByProvider)
         }
 
         if provider.authenticationMode != .none && !provider.hasStoredSecret {
             return GroupMemberEligibility(
-                entryId: entryId,
-                parsedProviderId: parsed.providerID,
-                parsedModelId: parsed.modelID,
+                entryId: resolvedEntryId,
+                parsedProviderId: provider.id,
+                parsedModelId: model.id,
                 provider: provider,
                 model: model,
                 isChatEligible: false,
@@ -373,9 +389,9 @@ final class ModelGroupStore {
         if let modality = model.modality {
             guard modality.contains(.textInput) && modality.contains(.textOutput) else {
                 return GroupMemberEligibility(
-                    entryId: entryId,
-                    parsedProviderId: parsed.providerID,
-                    parsedModelId: parsed.modelID,
+                    entryId: resolvedEntryId,
+                    parsedProviderId: provider.id,
+                    parsedModelId: model.id,
                     provider: provider,
                     model: model,
                     isChatEligible: false,
@@ -387,9 +403,9 @@ final class ModelGroupStore {
         if requireImageInput {
             guard model.modality?.contains(.imageInput) == true else {
                 return GroupMemberEligibility(
-                    entryId: entryId,
-                    parsedProviderId: parsed.providerID,
-                    parsedModelId: parsed.modelID,
+                    entryId: resolvedEntryId,
+                    parsedProviderId: provider.id,
+                    parsedModelId: model.id,
                     provider: provider,
                     model: model,
                     isChatEligible: false,
@@ -399,9 +415,9 @@ final class ModelGroupStore {
         }
 
         return GroupMemberEligibility(
-            entryId: entryId,
-            parsedProviderId: parsed.providerID,
-            parsedModelId: parsed.modelID,
+            entryId: resolvedEntryId,
+            parsedProviderId: provider.id,
+            parsedModelId: model.id,
             provider: provider,
             model: model,
             isChatEligible: true,

@@ -93,7 +93,7 @@ public enum BrowserDOMScripts {
         raw = clone.innerText || clone.textContent || '';
     }
 
-    const max = (typeof maxChars !== 'undefined' && maxChars) ? maxChars : 40000;
+    const max = (typeof maxChars !== 'undefined' && maxChars) ? maxChars : 16000;
     const truncated = raw.length > max;
     const content = truncated ? raw.substring(0, max) : raw;
 
@@ -168,7 +168,7 @@ public enum BrowserDOMScripts {
     }
 
     const raw = (clone.innerText || clone.textContent || '').replace(/\\s+/g, ' ').trim();
-    const max = (typeof maxChars !== 'undefined' && maxChars) ? maxChars : 40000;
+    const max = (typeof maxChars !== 'undefined' && maxChars) ? maxChars : 16000;
     const truncated = raw.length > max;
     const content = truncated ? raw.substring(0, max) : raw;
 

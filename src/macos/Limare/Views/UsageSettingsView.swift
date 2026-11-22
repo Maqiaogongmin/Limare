@@ -1,5 +1,4 @@
 import SwiftUI
-import Charts
 
 private enum UsagePeriod: String, CaseIterable, Identifiable {
     case today, week, month, all
@@ -45,12 +44,16 @@ struct UsageSettingsView: View {
     @State private var queryError: String?
     @State private var loading = false
     @State private var refreshID = 0
-    @State private var hoveredDay: Date?
     @State private var expandedGroups: Set<String> = []
     @State private var groupSort: UsageGroupSort = .tokens
 
-    private static let inputColor = Color(red: 0.22, green: 0.47, blue: 0.94)
-    private static let outputColor = Color(red: 0.16, green: 0.70, blue: 0.50)
+    @State private var highlightedSeries: UsageTokenSeries?
+    @State private var overviewComposition = UsageTokenComposition(totals: UsageTotals())
+    @State private var trendBuckets: [UsageTrendBucket] = []
+    @State private var trendIsWeekly = false
+    @State private var activeTrendSeries: [UsageTokenSeries] = []
+    @State private var sortedGroups: [UsageGroup] = []
+    @State private var maxGroupTokens = 1
 
     var body: some View {
         SettingsPage {
@@ -81,14 +84,19 @@ struct UsageSettingsView: View {
                 } else {
                     overview(report)
                     if period != .today {
-                        trend(report)
+                        trend()
                     }
-                    groups(report)
+                    groups()
                 }
             }
         }
         .task(id: "\(period.rawValue)|\(kind?.rawValue ?? "all")|\(appState.usageProviderFilter?.uuidString ?? "all")|\(refreshID)") {
             await load()
+        }
+        .onChange(of: groupSort) { _, _ in
+            if let report {
+                recomputeGroups(for: report)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .usageRecorded)) { _ in refreshID += 1 }
     }
@@ -182,37 +190,69 @@ struct UsageSettingsView: View {
             title: "Overview",
             description: "Requests count model calls, including tool loops and retries that start a new call. Cache figures use requests with complete cache data."
         ) {
-            HStack(alignment: .top, spacing: 0) {
-                kpiColumn(title: String(localized: "Input tokens"), value: format(report.totals.input)) {
-                    let tags = nonZeroInputTags(report.totals)
-                    if !tags.isEmpty {
-                        WrappingTagFlow(spacing: 4) {
-                            ForEach(tags, id: \.self) { tag in
-                                subMetricTag(tag)
+            VStack(alignment: .leading, spacing: AppSpacing.medium) {
+                HStack(alignment: .top, spacing: 0) {
+                    kpiColumn(
+                        title: String(localized: "Input tokens"),
+                        value: format(report.totals.input),
+                        numericValue: report.totals.input
+                    ) {
+                        if report.totals.cacheMeasuredInput > 0 {
+                            let rate = Double(report.totals.cacheMeasuredRead) / Double(report.totals.cacheMeasuredInput)
+                            Text("Cache hit: \(rate.formatted(.percent.precision(.fractionLength(1))))")
+                                .font(AppTypography.interfaceCaption)
+                                .foregroundStyle(AppColors.textSecondary)
+                                .monospacedDigit()
+                        }
+                        let auxTags = nonZeroAuxiliaryInputTags(report.totals)
+                        if !auxTags.isEmpty {
+                            UsageWrappingFlow(spacing: AppSpacing.xxSmall) {
+                                ForEach(auxTags, id: \.self) { tag in
+                                    subMetricTag(tag)
+                                }
                             }
+                        }
+                    }
+
+                    verticalDivider
+
+                    kpiColumn(
+                        title: String(localized: "Output tokens"),
+                        value: format(report.totals.output),
+                        numericValue: report.totals.output
+                    ) {
+                        if let reasoning = report.totals.reasoning, reasoning > 0 {
+                            Text("Reasoning: \(reasoning.formatted())")
+                                .font(AppTypography.interfaceCaption)
+                                .foregroundStyle(AppColors.textSecondary)
+                                .monospacedDigit()
+                        }
+                    }
+
+                    verticalDivider
+
+                    kpiColumn(
+                        title: String(localized: "Requests"),
+                        value: report.totals.requests.formatted(),
+                        numericValue: report.totals.requests
+                    ) {
+                        let totalTokens = overviewComposition.total
+                        if totalTokens > 0 {
+                            Text("Total: \(totalTokens.formatted())")
+                                .font(AppTypography.interfaceCaption)
+                                .foregroundStyle(AppColors.textSecondary)
+                                .monospacedDigit()
                         }
                     }
                 }
 
-                verticalDivider
+                SettingsDivider()
 
-                kpiColumn(title: String(localized: "Output tokens"), value: format(report.totals.output)) {
-                    if let reasoning = report.totals.reasoning, reasoning > 0 {
-                        subMetricTag(String(localized: "Reasoning: \(reasoning.formatted())"))
-                    }
-                }
-
-                verticalDivider
-
-                kpiColumn(title: String(localized: "Requests"), value: report.totals.requests.formatted()) {
-                    let totalTokens = (report.totals.input ?? 0) + (report.totals.output ?? 0)
-                    if totalTokens > 0 {
-                        Text("Total: \(totalTokens.formatted())")
-                            .font(AppTypography.interfaceCaption)
-                            .foregroundStyle(AppColors.textSecondary)
-                            .monospacedDigit()
-                    }
-                }
+                UsageCompositionBar(
+                    composition: overviewComposition,
+                    totals: report.totals,
+                    activeSeries: $highlightedSeries
+                )
             }
         }
     }
@@ -220,6 +260,7 @@ struct UsageSettingsView: View {
     private func kpiColumn<Detail: View>(
         title: String,
         value: String,
+        numericValue: Int?,
         @ViewBuilder detail: () -> Detail
     ) -> some View {
         VStack(alignment: .leading, spacing: AppSpacing.xSmall) {
@@ -232,6 +273,8 @@ struct UsageSettingsView: View {
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
+                .contentTransition(.numericText(value: Double(numericValue ?? 0)))
+                .animation(AppMotion.resolved(AppMotion.layout), value: numericValue)
             detail()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -241,7 +284,7 @@ struct UsageSettingsView: View {
         Rectangle()
             .fill(Color.primary.opacity(0.06))
             .frame(width: 1)
-            .padding(.vertical, 2)
+            .padding(.vertical, AppSpacing.xxxSmall)
             .padding(.horizontal, AppSpacing.standard)
             .accessibilityHidden(true)
     }
@@ -251,18 +294,13 @@ struct UsageSettingsView: View {
             .font(AppTypography.interfaceCaption2)
             .foregroundStyle(AppColors.textSecondary)
             .monospacedDigit()
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
+            .padding(.horizontal, AppSpacing.xSmall)
+            .padding(.vertical, AppSpacing.xxxSmall)
             .background(Capsule().fill(Color.primary.opacity(0.05)))
     }
 
-    private func nonZeroInputTags(_ totals: UsageTotals) -> [String] {
+    private func nonZeroAuxiliaryInputTags(_ totals: UsageTotals) -> [String] {
         var tags: [String] = []
-        if totals.cacheMeasuredInput > 0 {
-            let rate = Double(totals.cacheMeasuredRead) / Double(totals.cacheMeasuredInput)
-            tags.append(String(localized: "Cache hit: \(totals.cacheMeasuredRead.formatted()) (\(rate.formatted(.percent.precision(.fractionLength(1)))))"))
-            tags.append(String(localized: "Cache miss: \((totals.cacheMeasuredInput - totals.cacheMeasuredRead).formatted())"))
-        }
         if let cacheWrite = totals.cacheWrite, cacheWrite > 0 {
             tags.append(String(localized: "Cache write: \(cacheWrite.formatted())"))
         }
@@ -274,100 +312,24 @@ struct UsageSettingsView: View {
 
     // MARK: - Daily Trend
 
-    private func trend(_ report: UsageReport) -> some View {
-        let days = filledDays(for: report)
-        let strideCount = max(1, days.count > 10 ? days.count / 6 : 1)
-        return SettingsSection(
+    private func trend() -> some View {
+        SettingsSection(
             title: "Daily trend",
-            description: "Input and output tokens by local calendar day.",
-            trailing: { chartLegend }
-        ) {
-            Chart(days) { day in
-                BarMark(
-                    x: .value("Date", day.date, unit: .day),
-                    y: .value("Tokens", day.totals.input ?? 0)
-                )
-                .foregroundStyle(Self.inputColor)
-                .cornerRadius(3)
-
-                BarMark(
-                    x: .value("Date", day.date, unit: .day),
-                    y: .value("Tokens", day.totals.output ?? 0)
-                )
-                .foregroundStyle(Self.outputColor)
-                .cornerRadius(3)
-                if let hoveredDay, Calendar.current.isDate(day.date, inSameDayAs: hoveredDay) {
-                    RuleMark(x: .value("Date", day.date, unit: .day))
-                        .foregroundStyle(Color.secondary.opacity(0.4))
-                        .annotation(position: .top, overflowResolution: .init(x: .fit, y: .fit)) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(day.date, format: .dateTime.month().day())
-                                Text("Input: \(format(day.totals.input))")
-                                Text("Output: \(format(day.totals.output))")
-                            }
-                            .font(AppTypography.interfaceCaption)
-                            .padding(8)
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
-                        }
-                }
-            }
-            .chartOverlay { proxy in
-                GeometryReader { geometry in
-                    Rectangle().fill(.clear).contentShape(Rectangle())
-                        .onContinuousHover { phase in
-                            switch phase {
-                            case .active(let point):
-                                guard let plot = proxy.plotFrame else { hoveredDay = nil; return }
-                                let frame = geometry[plot]
-                                guard frame.contains(point), let date: Date = proxy.value(atX: point.x - frame.origin.x) else {
-                                    hoveredDay = nil; return
-                                }
-                                hoveredDay = Calendar.current.startOfDay(for: date)
-                            case .ended: hoveredDay = nil
-                            }
-                        }
-                }
-            }
-            .chartLegend(.hidden)
-            .chartXAxis {
-                AxisMarks(values: .stride(by: .day, count: strideCount)) { _ in
-                    AxisValueLabel(
-                        format: .dateTime.month(.defaultDigits).day(.defaultDigits),
-                        centered: true
-                    )
-                }
-            }
-            .chartYAxis {
-                AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
-                        .foregroundStyle(Color.primary.opacity(0.08))
-                    AxisValueLabel {
-                        if let count = value.as(Int.self) {
-                            Text(count, format: .number.notation(.compactName))
-                                .monospacedDigit()
-                        }
+            description: trendIsWeekly
+                ? LocalizedStringKey("Token breakdown grouped by week.")
+                : LocalizedStringKey("Token breakdown by local calendar day."),
+            trailing: {
+                HStack(spacing: AppSpacing.small) {
+                    if trendIsWeekly {
+                        SettingsBadge("By week")
+                    }
+                    if !activeTrendSeries.isEmpty {
+                        UsageSeriesLegend(series: activeTrendSeries, activeSeries: $highlightedSeries)
                     }
                 }
             }
-            .frame(height: 175)
-        }
-    }
-
-    private var chartLegend: some View {
-        HStack(spacing: AppSpacing.medium) {
-            legendItem(color: Self.inputColor, title: "Input")
-            legendItem(color: Self.outputColor, title: "Output")
-        }
-        .font(AppTypography.interfaceCaption)
-        .foregroundStyle(AppColors.textSecondary)
-    }
-
-    private func legendItem(color: Color, title: LocalizedStringKey) -> some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(color)
-                .frame(width: 7, height: 7)
-            Text(title)
+        ) {
+            UsageDailyTrendChart(buckets: trendBuckets, highlightedSeries: $highlightedSeries)
         }
     }
 
@@ -406,15 +368,8 @@ struct UsageSettingsView: View {
 
     // MARK: - Providers & Models
 
-    private func groups(_ report: UsageReport) -> some View {
-        let sorted = report.groups.sorted { lhs, rhs in
-            switch groupSort {
-            case .tokens: return (groupTotalTokens(lhs.totals) ?? -1) > (groupTotalTokens(rhs.totals) ?? -1)
-            case .requests: return lhs.totals.requests > rhs.totals.requests
-            case .name: return (lhs.provider + lhs.model).localizedStandardCompare(rhs.provider + rhs.model) == .orderedAscending
-            }
-        }
-        return SettingsSection(
+    private func groups() -> some View {
+        SettingsSection(
             title: "Providers and models",
             description: "Names are saved at the time of each request.",
             trailing: {
@@ -433,21 +388,47 @@ struct UsageSettingsView: View {
             }
             .font(AppTypography.interfaceCaption)
             .foregroundStyle(AppColors.textSecondary)
-            .padding(.leading, 20)
-            ForEach(sorted) { group in
+            .padding(.leading, AppSpacing.large)
+
+            ForEach(sortedGroups) { group in
+                let isExpanded = expandedGroups.contains(group.id)
+                let tokens = groupTotalTokens(group.totals)
+                let ratio = tokens.map { CGFloat($0) / CGFloat(max(1, maxGroupTokens)) } ?? 0
+
                 SettingsDivider()
                 VStack(alignment: .leading, spacing: AppSpacing.xSmall) {
                     Button {
-                        if !expandedGroups.insert(group.id).inserted { expandedGroups.remove(group.id) }
+                        withAnimation(AppMotion.resolved(AppMotion.standard)) {
+                            if !expandedGroups.insert(group.id).inserted { expandedGroups.remove(group.id) }
+                        }
                     } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: expandedGroups.contains(group.id) ? "chevron.down" : "chevron.right")
-                                .font(.system(size: 10, weight: .semibold)).frame(width: 14)
-                            VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: AppSpacing.xSmall) {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .semibold))
+                                .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                                .frame(width: 14)
+
+                            VStack(alignment: .leading, spacing: AppSpacing.xxxSmall) {
                                 Text(group.model).font(AppTypography.interfaceMedium).lineLimit(1)
                                 Text(group.provider).font(AppTypography.interfaceCaption).foregroundStyle(AppColors.textSecondary).lineLimit(1)
-                            }.frame(maxWidth: .infinity, alignment: .leading)
-                            Text(format(groupTotalTokens(group.totals))).frame(width: 125, alignment: .trailing)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                            Text(format(tokens))
+                                .padding(.horizontal, AppSpacing.xSmall)
+                                .padding(.vertical, AppSpacing.xxxSmall)
+                                .frame(width: 125, alignment: .trailing)
+                                .background(alignment: .trailing) {
+                                    if ratio > 0 {
+                                        GeometryReader { geo in
+                                            RoundedRectangle(cornerRadius: AppRadius.small, style: .continuous)
+                                                .fill(UsageTokenSeries.rowBarTint)
+                                                .frame(width: max(4, geo.size.width * ratio))
+                                                .frame(maxWidth: .infinity, alignment: .trailing)
+                                        }
+                                    }
+                                }
+
                             Text(group.totals.requests.formatted()).frame(width: 75, alignment: .trailing)
                             Text(cacheRate(group.totals)).frame(width: 100, alignment: .trailing)
                         }
@@ -455,16 +436,18 @@ struct UsageSettingsView: View {
                     }
                     .buttonStyle(.plain)
                     .monospacedDigit()
-                    if expandedGroups.contains(group.id) {
+
+                    if isExpanded {
                         Text(groupDetailLine(group.totals))
                             .font(AppTypography.interfaceCaption)
                             .foregroundStyle(AppColors.textSecondary)
                             .monospacedDigit()
-                            .padding(.leading, 20)
+                            .padding(.leading, AppSpacing.large)
                             .textSelection(.enabled)
+                            .transition(.opacity)
                     }
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, AppSpacing.xxSmall)
             }
         }
     }
@@ -505,66 +488,56 @@ struct UsageSettingsView: View {
 
     private func format(_ value: Int?) -> String { value.map { $0.formatted() } ?? "—" }
 
+    private func recomputeDerivedState(for report: UsageReport) {
+        overviewComposition = UsageTokenComposition(totals: report.totals)
+        let days = filledDays(for: report)
+        let (buckets, isWeekly) = UsageTrendBucket.buckets(from: days)
+        trendBuckets = buckets
+        trendIsWeekly = isWeekly
+        activeTrendSeries = UsageTokenSeries.allCases.filter { series in
+            buckets.contains { $0.composition.value(for: series) > 0 }
+        }
+        if let active = highlightedSeries, overviewComposition.value(for: active) == 0 {
+            highlightedSeries = nil
+        }
+        recomputeGroups(for: report)
+    }
+
+    private func recomputeGroups(for report: UsageReport) {
+        let sorted = report.groups.sorted { lhs, rhs in
+            switch groupSort {
+            case .tokens: return (groupTotalTokens(lhs.totals) ?? -1) > (groupTotalTokens(rhs.totals) ?? -1)
+            case .requests: return lhs.totals.requests > rhs.totals.requests
+            case .name: return (lhs.provider + lhs.model).localizedStandardCompare(rhs.provider + rhs.model) == .orderedAscending
+            }
+        }
+        sortedGroups = sorted
+        maxGroupTokens = max(1, sorted.compactMap { groupTotalTokens($0.totals) }.max() ?? 1)
+    }
+
     @MainActor private func load() async {
-        guard let recorder = appState.usageRecorder else { report = nil; return }
+        guard let recorder = appState.usageRecorder else {
+            report = nil
+            overviewComposition = UsageTokenComposition(totals: UsageTotals())
+            trendBuckets = []
+            trendIsWeekly = false
+            activeTrendSeries = []
+            sortedGroups = []
+            maxGroupTokens = 1
+            return
+        }
         loading = true
         queryError = nil
         do {
             let value = try await recorder.report(since: period.start, kind: kind, providerID: appState.usageProviderFilter)
             guard !Task.isCancelled else { return }
             report = value
+            recomputeDerivedState(for: value)
         } catch {
             guard !Task.isCancelled else { return }
             report = nil
             queryError = error.localizedDescription
         }
         loading = false
-    }
-}
-
-/// Arranges compact metric tags horizontally, wrapping cleanly onto new rows within narrow KPI columns.
-private struct WrappingTagFlow: Layout {
-    var spacing: CGFloat = 4
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        var rowWidth: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        var totalHeight: CGFloat = 0
-        var maxRowWidth: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if rowWidth > 0 && rowWidth + spacing + size.width > maxWidth {
-                totalHeight += rowHeight + spacing
-                maxRowWidth = max(maxRowWidth, rowWidth)
-                rowWidth = size.width
-                rowHeight = size.height
-            } else {
-                rowWidth += (rowWidth > 0 ? spacing : 0) + size.width
-                rowHeight = max(rowHeight, size.height)
-            }
-        }
-        maxRowWidth = max(maxRowWidth, rowWidth)
-        totalHeight += rowHeight
-        return CGSize(width: proposal.width ?? maxRowWidth, height: totalHeight)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX
-        var y = bounds.minY
-        var rowHeight: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > bounds.minX && x + size.width > bounds.maxX {
-                x = bounds.minX
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
     }
 }

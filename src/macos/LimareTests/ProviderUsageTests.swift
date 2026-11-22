@@ -1,5 +1,6 @@
 import XCTest
 import SQLite3
+import OpenMinisProviders
 @testable import Limare
 
 private final class UsageMockState: @unchecked Sendable {
@@ -221,16 +222,37 @@ final class ProviderUsageTests: XCTestCase {
     }
 
     func testDeferredToolNamesRecoverOnlySuccessfulResults() throws {
+        // Legacy multi-line JSON format remains recoverable for existing persisted transcripts.
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let tool = HarnessToolDefinitions.browserUseDefinition
         let schema = String(decoding: try encoder.encode(tool), as: UTF8.self)
-        let loaded = ToolCallRecord(providerCallID: "one", name: "tool_search", input: "{}", state: .completed,
-                                    output: "Loaded 1 tool(s):\n" + schema)
-        let failed = ToolCallRecord(providerCallID: "two", name: "tool_search", input: "{}", state: .failed,
-                                    output: "Loaded 1 tool(s):\n" + schema)
-        XCTAssertEqual(ConversationRunCoordinator.loadedDeferredToolNames(in: [ChatMessage(role: .assistant, content: "", toolCalls: [loaded])]), [tool.function.name])
-        XCTAssertTrue(ConversationRunCoordinator.loadedDeferredToolNames(in: [ChatMessage(role: .assistant, content: "", toolCalls: [failed])]).isEmpty)
+        let legacyLoaded = ToolCallRecord(providerCallID: "one", name: "tool_search", input: "{}", state: .completed,
+                                          output: "Loaded 1 tool(s):\n" + schema)
+        let legacyFailed = ToolCallRecord(providerCallID: "two", name: "tool_search", input: "{}", state: .failed,
+                                          output: "Loaded 1 tool(s):\n" + schema)
+        XCTAssertEqual(ConversationRunCoordinator.loadedDeferredToolNames(in: [ChatMessage(role: .assistant, content: "", toolCalls: [legacyLoaded])]), [tool.function.name])
+        XCTAssertTrue(ConversationRunCoordinator.loadedDeferredToolNames(in: [ChatMessage(role: .assistant, content: "", toolCalls: [legacyFailed])]).isEmpty)
+
+        // New compact text format recovers tool names without duplicating JSON schemas in history.
+        let compactLoaded = ToolCallRecord(
+            providerCallID: "three",
+            name: "tool_search",
+            input: "{}",
+            state: .completed,
+            output: "Loaded 2 tool(s); they are available in your tool list from your next step: mcp__github__list_issues, mcp__github__get_issue"
+        )
+        let compactFailed = ToolCallRecord(
+            providerCallID: "four",
+            name: "tool_search",
+            input: "{}",
+            state: .failed,
+            output: "Loaded 1 tool(s); they are available in your tool list from your next step: mcp__github__create_issue"
+        )
+        XCTAssertEqual(
+            ConversationRunCoordinator.loadedDeferredToolNames(in: [ChatMessage(role: .assistant, content: "", toolCalls: [compactLoaded, compactFailed])]),
+            ["mcp__github__list_issues", "mcp__github__get_issue"]
+        )
     }
 
     func testDeepSeekWorkingSetKeepsEarlierReasoning() {
@@ -1461,6 +1483,135 @@ final class ProviderUsageTests: XCTestCase {
                 return XCTFail("Expected permanentProviderRejection for \(code)")
             }
         }
+    }
+
+    @MainActor
+    func testDynamicBoundaryStrippedOnOpenAIAndStaticPrefixMatchesAcrossWorkspaces() throws {
+        XCTAssertLessThanOrEqual(GenerativeUIPrompt.text.utf8.count, 1_600)
+
+        let root = self.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let wsA = root.appendingPathComponent("wsA", isDirectory: true)
+        let wsB = root.appendingPathComponent("wsB", isDirectory: true)
+        try FileManager.default.createDirectory(at: wsA, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: wsB, withIntermediateDirectories: true)
+
+        let app = AppState(storageRootURL: root)
+        let conv = app.conversations.newConversation(workspace: nil)
+        let manifestA = app.conversationRuns.buildRuntimeCapabilityManifest(conversationID: conv.id, workspaceURL: wsA)
+        let manifestB = app.conversationRuns.buildRuntimeCapabilityManifest(conversationID: conv.id, workspaceURL: wsB)
+
+        let marker = RuntimeCapabilityManifest.dynamicBoundaryMarker
+        let rangeA = try XCTUnwrap(manifestA.systemPrompt.range(of: marker))
+        let rangeB = try XCTUnwrap(manifestB.systemPrompt.range(of: marker))
+        XCTAssertEqual(String(manifestA.systemPrompt[..<rangeA.lowerBound]), String(manifestB.systemPrompt[..<rangeB.lowerBound]))
+        XCTAssertNotEqual(String(manifestA.systemPrompt[rangeA.upperBound...]), String(manifestB.systemPrompt[rangeB.upperBound...]))
+
+        // Verify marker matches OpenMinisProviders NativeWireCodec constant
+        XCTAssertEqual(marker, NativeWireCodec.dynamicPromptBoundaryMarker)
+
+        // Verify Chat Completions & Responses strip marker cleanly on the wire
+        let provider = ProviderConfiguration(name: "Test", baseURL: "https://api.openai.com/v1")
+        let wireMsgs = [
+            ChatRequestMessage(role: "system", content: manifestA.systemPrompt),
+            ChatRequestMessage(role: "user", content: "Hi")
+        ]
+        let chatPayload = try OpenAIChatRequestBuilder.buildPayload(
+            provider: provider, modelID: "gpt-4o", messages: wireMsgs
+        )
+        let chatSystem = ((chatPayload["messages"] as? [[String: Any]])?.first)?["content"] as? String
+        XCTAssertFalse(try XCTUnwrap(chatSystem).contains(marker))
+
+        let respPayload = try OpenAIResponsesRequestBuilder.buildPayload(
+            provider: provider, modelID: "gpt-4o", messages: wireMsgs
+        )
+        let respInstructions = try XCTUnwrap(respPayload["instructions"] as? String)
+        XCTAssertFalse(respInstructions.contains(marker))
+    }
+
+    @MainActor
+    func testShellOverflowInlineTruncatedFlagAndAllowedReadInRequestApproval() async throws {
+        let root = self.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ws = root.appendingPathComponent("ws", isDirectory: true)
+        try FileManager.default.createDirectory(at: ws, withIntermediateDirectories: true)
+
+        let app = AppState(storageRootURL: root)
+        try app.workspace.setWorkspace(ws)
+        app.permissions.mode = .requestApproval
+        app.permissions.isUnattendedRun = { _ in true }
+
+        let executor = ToolExecutor(
+            workspace: app.workspace,
+            permissions: app.permissions,
+            logs: app.logs,
+            hookExecutionScope: (conversationID: UUID(), runID: UUID(), conversationTitle: nil)
+        )
+        // 24 KB stdout exceeds the 16 KB inline cap (F1) while staying well below the 1 MB ShellRunner cap.
+        let shellCall = ProviderToolCall(
+            id: "f1f2-shell-\(UUID().uuidString.prefix(8))",
+            function: .init(
+                name: "shell_execute",
+                arguments: #"{"command":"python3 -c 'print(\"X\" * 24576)'"}"#
+            )
+        )
+        let shellOutcome = await executor.execute(shellCall) { _ in }
+        XCTAssertFalse(shellOutcome.isError)
+        let jsonData = try XCTUnwrap(shellOutcome.content.data(using: .utf8))
+        let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: jsonData) as? [String: Any])
+        XCTAssertEqual(payload["truncated"] as? Bool, true)
+        let fullOutputPath = try XCTUnwrap(payload["full_output_path"] as? String)
+        defer { try? FileManager.default.removeItem(atPath: fullOutputPath) }
+        XCTAssertTrue(fullOutputPath.hasPrefix(ToolExecutor.shellOverflowDirectoryURL.path + "/"))
+        let inlineStdout = try XCTUnwrap(payload["stdout"] as? String)
+        XCTAssertTrue(inlineStdout.contains("inspect with file_read(offset, limit)"))
+
+        // Reading full_output_path in .requestApproval + unattended mode succeeds without approval (F2).
+        let readArgs = String(decoding: try JSONSerialization.data(withJSONObject: ["path": fullOutputPath, "limit": 200]), as: UTF8.self)
+        let readOutcome = await executor.execute(
+            ProviderToolCall(id: "f2-read", function: .init(name: "file_read", arguments: readArgs))
+        ) { _ in }
+        XCTAssertFalse(readOutcome.isError)
+        XCTAssertTrue(readOutcome.content.contains(String(repeating: "X", count: 100)))
+
+        // Arbitrary outside-workspace temp file remains gated/denied in .requestApproval + unattended mode.
+        let outsideFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("limare-outside-\(UUID().uuidString).txt")
+        try "secret".write(to: outsideFile, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: outsideFile) }
+        let deniedArgs = String(decoding: try JSONSerialization.data(withJSONObject: ["path": outsideFile.path]), as: UTF8.self)
+        let deniedOutcome = await executor.execute(
+            ProviderToolCall(id: "f2-denied", function: .init(name: "file_read", arguments: deniedArgs))
+        ) { _ in }
+        XCTAssertEqual(deniedOutcome.approvalState, .denied)
+    }
+
+    @MainActor
+    func testSoulPrecedesSkillsAndResearchSubagentToolSearchGate() throws {
+        let root = self.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ws = root.appendingPathComponent("ws", isDirectory: true)
+        let skillDir = ws.appendingPathComponent(".agents/skills/f4-skill", isDirectory: true)
+        try FileManager.default.createDirectory(at: skillDir, withIntermediateDirectories: true)
+        try """
+        ---
+        name: f4-skill
+        description: Sentinel skill for cache prefix ordering test
+        ---
+        Skill body instructions.
+        """.write(to: skillDir.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+
+        let app = AppState(storageRootURL: root)
+        app.soul.body = "SENTINEL_SOUL_F4"
+        app.skills.rescan(workspaceURL: ws)
+        let conv = app.conversations.newConversation(workspace: nil)
+        let manifest = app.conversationRuns.buildRuntimeCapabilityManifest(conversationID: conv.id, workspaceURL: ws)
+
+        let soulRange = try XCTUnwrap(manifest.systemPrompt.range(of: "SENTINEL_SOUL_F4"))
+        let skillRange = try XCTUnwrap(manifest.systemPrompt.range(of: "f4-skill"))
+        XCTAssertLessThan(soulRange.lowerBound, skillRange.lowerBound)
+        XCTAssertTrue(manifest.systemPrompt.contains("# DEFERRED TOOLS"))
+        XCTAssertFalse(SubagentCoordinator.allows("tool_search", role: .research, allowWeb: false))
     }
 }
 

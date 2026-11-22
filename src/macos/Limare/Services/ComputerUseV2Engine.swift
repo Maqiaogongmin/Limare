@@ -104,18 +104,98 @@ public final class ComputerUseV2Engine: @unchecked Sendable {
         return role as? String
     }
 
-    private static func observationPayload(_ observation: ComputerUseObservation, refs: [ComputerUseElementRef]) -> [String: Any] {
-        let tree = ComputerUseElementRegistry.modelTreeMarkdown(observation, refs: refs) ?? ""
+    public nonisolated static let maxTreeMarkdownBytes = 24_576
+
+    nonisolated static func boundedTreeMarkdown(_ tree: String, maxBytes: Int = maxTreeMarkdownBytes) -> (markdown: String, didTruncate: Bool) {
+        guard tree.utf8.count > maxBytes else { return (tree, false) }
+        let lines = tree.split(separator: "\n", omittingEmptySubsequences: false)
+        let footer = "\n… [tree_markdown truncated at \(maxBytes) bytes (\(lines.count) lines total)]"
+        let budget = max(0, maxBytes - footer.utf8.count)
+        var kept: [Substring] = []
+        var usedBytes = 0
+        for line in lines {
+            let lineBytes = line.utf8.count + (kept.isEmpty ? 0 : 1)
+            if usedBytes + lineBytes <= budget {
+                kept.append(line)
+                usedBytes += lineBytes
+            } else {
+                break
+            }
+        }
+        var result = kept.joined(separator: "\n")
+        if result.isEmpty && budget > 0 {
+            result = utf8SafePrefix(tree, maxBytes: budget)
+        }
+        let bounded = result + footer
+        if bounded.utf8.count <= maxBytes {
+            return (bounded, true)
+        }
+        return (utf8SafePrefix(bounded, maxBytes: maxBytes), true)
+    }
+
+    private nonisolated static func utf8SafePrefix(_ text: String, maxBytes: Int) -> String {
+        guard maxBytes > 0 else { return "" }
+        var used = 0
+        var end = text.startIndex
+        for idx in text.indices {
+            let next = text.index(after: idx)
+            let bytes = text[idx..<next].utf8.count
+            if used + bytes > maxBytes { break }
+            used += bytes
+            end = next
+        }
+        return String(text[..<end])
+    }
+
+    public nonisolated static let maxFallbackElementsCount = 200
+
+    nonisolated static func boundedElementsPayload(
+        _ refs: [ComputerUseElementRef],
+        maxElements: Int = maxFallbackElementsCount,
+        maxBytes: Int = maxTreeMarkdownBytes
+    ) -> (elements: [[String: Any]], didTruncate: Bool) {
+        var kept: [[String: Any]] = []
+        var usedBytes = 2 // "[]"
+        for ref in refs {
+            if kept.count >= maxElements {
+                return (kept, true)
+            }
+            let entry: [String: Any] = ["ref": ref.refID, "role": ref.role, "label": ref.label as Any]
+            let entryBytes = (try? JSONSerialization.data(withJSONObject: entry).count) ?? 128
+            let separatorBytes = kept.isEmpty ? 0 : 1
+            if !kept.isEmpty && usedBytes + separatorBytes + entryBytes > maxBytes {
+                return (kept, true)
+            }
+            kept.append(entry)
+            usedBytes += separatorBytes + entryBytes
+        }
+        return (kept, false)
+    }
+
+    static func observationPayload(_ observation: ComputerUseObservation, refs: [ComputerUseElementRef]) -> [String: Any] {
+        let rawTree = ComputerUseElementRegistry.modelTreeMarkdown(observation, refs: refs) ?? ""
+        let (tree, didTruncateTree) = Self.boundedTreeMarkdown(rawTree)
         var payload: [String: Any] = [:]
+        var didTruncateElements = false
         if refs.isEmpty || refs.contains(where: { tree.contains("[\($0.refID)]") }) {
             payload["tree_markdown"] = tree
         } else {
-            payload["elements"] = refs.map { ["ref": $0.refID, "role": $0.role, "label": $0.label as Any] }
+            let (boundedElements, truncatedElements) = Self.boundedElementsPayload(refs)
+            payload["elements"] = boundedElements
+            didTruncateElements = truncatedElements
         }
-        if observation.truncated {
+        if observation.truncated || didTruncateTree || didTruncateElements {
             payload["truncated"] = true
             let guidance = "Use capture with query to find a control, or request a screenshot."
-            payload["truncation_hint"] = observation.truncationHint.map { "\($0) \(guidance)" } ?? "The tree is truncated. \(guidance)"
+            if let hint = observation.truncationHint {
+                payload["truncation_hint"] = "\(hint) \(guidance)"
+            } else if didTruncateElements {
+                payload["truncation_hint"] = "The element list was truncated at \(Self.maxFallbackElementsCount) items / \(Self.maxTreeMarkdownBytes) bytes. \(guidance)"
+            } else if didTruncateTree {
+                payload["truncation_hint"] = "The AX tree exceeded \(Self.maxTreeMarkdownBytes) bytes and was truncated. \(guidance)"
+            } else {
+                payload["truncation_hint"] = "The tree is truncated. \(guidance)"
+            }
         }
         if let reason = observation.truncationReason { payload["truncation_reason"] = reason }
         if let reason = observation.degradedReason { payload["degraded_reason"] = reason }

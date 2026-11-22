@@ -26,8 +26,7 @@ struct SkillScanner {
             home.appendingPathComponent(".claude/skills", isDirectory: true),
             home.appendingPathComponent(".config/skills", isDirectory: true),
             home.appendingPathComponent(".limare/skills", isDirectory: true),
-            home.appendingPathComponent("Library/Application Support/Limare/skills", isDirectory: true),
-            home.appendingPathComponent(".gemini/antigravity/builtin/skills", isDirectory: true)
+            home.appendingPathComponent("Library/Application Support/Limare/skills", isDirectory: true)
         ]
     }
 
