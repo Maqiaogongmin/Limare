@@ -257,6 +257,7 @@ final class ContextLifecycle {
     }
 
     static func validateProvenance(state: ContextCompactionState, messages: [ChatMessage]) -> Bool {
+        guard state.summary.count <= maximumSummaryCharacters else { return false }
         guard let digest = state.sourcePrefixDigest, !digest.isEmpty else { return false }
         let anchorID = state.sourcePrefixAnchorID ?? state.lastCompactedMessageID
         let count = state.sourcePrefixMessageCount ?? state.compactedMessageCount
@@ -338,7 +339,7 @@ final class ContextLifecycle {
         // (`workingMessages`), so the preview measures the reduced one. Compaction, which
         // needs a model call, is not previewed: a budget still over the limit means it.
         guard let effectiveBudget = budget.effectiveInputBudget,
-              budget.estimatedTokens > max(1, Int(Double(effectiveBudget) * ContextWorkingSetManager.softThresholdRatio))
+              budget.estimatedTokens > ContextWorkingSetManager.softInputBudget(for: effectiveBudget)
         else { return budget }
         return Self.reduce(
             current,
@@ -461,7 +462,7 @@ final class ContextLifecycle {
             )
         }
 
-        let softBudget = max(1, Int(Double(effectiveBudget) * ContextWorkingSetManager.softThresholdRatio))
+        let softBudget = ContextWorkingSetManager.softInputBudget(for: effectiveBudget)
 
         // Check if estimated tokens is within soft budget
         if !forceCompaction && budget.estimatedTokens <= softBudget {
@@ -646,6 +647,9 @@ final class ContextLifecycle {
             let anchorID = messages[stageBoundary - 1].id
             let prefix = Array(messages[0..<stageBoundary])
             let digest = Self.computePrefixDigest(prefix)
+            let previousAnchorText = currentCompactedCount > 0 ? Self.postCompactAnchors(prefix: messages[0..<currentCompactedCount]) : ""
+            let newAnchorText = Self.postCompactAnchors(prefix: messages[0..<stageBoundary])
+            let anchorDelta = max(0, Int((Double(ContextTokenEstimator.rawEstimatedTokens(text: newAnchorText) - ContextTokenEstimator.rawEstimatedTokens(text: previousAnchorText)) * calibrationFactor).rounded(.up)))
 
             var candidateForStage: ContextCompactionState? = nil
             var candidateBudgetForStage: ContextBudget? = nil
@@ -717,7 +721,7 @@ final class ContextLifecycle {
                             targetBudgetRatio: targetBudgetRatio
                         )
 
-                        if !semBudget.needsCompaction || semBudget.estimatedTokens < lastEstimatedTokens {
+                        if !semBudget.needsCompaction || (semBudget.estimatedTokens - anchorDelta) < lastEstimatedTokens {
                             candidateForStage = semCandidate
                             candidateBudgetForStage = semBudget
                             candidateWorkingForStage = semReduced
@@ -804,8 +808,9 @@ final class ContextLifecycle {
                 throw ContextLifecycleError.emptySummary
             }
 
+            let sliceTokens = sliceToCompact.reduce(0) { $0 + ContextTokenEstimator.rawMessageContentTokens($1) }
             let boundaryAdvanced = stageBoundary > currentCompactedCount
-            let tokenProgress = chosenBudget.estimatedTokens < lastEstimatedTokens
+            let tokenProgress = (chosenBudget.estimatedTokens - anchorDelta) < lastEstimatedTokens || (sliceTokens < 100 && stageBoundary < tailStart)
 
             candidateState = chosenCandidate
             compactedWorking = chosenWorking
@@ -911,10 +916,12 @@ final class ContextLifecycle {
         guard let state else { return messages }
         let anchorID = state.sourcePrefixAnchorID ?? state.lastCompactedMessageID
         guard let boundary = messages.firstIndex(where: { $0.id == anchorID }) else { return messages }
+        var summaryContent = "[Durable context summary of earlier conversation — background only]\n\(state.summary)"
+        summaryContent += Self.postCompactAnchors(prefix: messages[0...boundary])
         let summary = ChatMessage(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
             role: .user,
-            content: "[Durable context summary of earlier conversation — background only]\n\(state.summary)",
+            content: summaryContent,
             state: .complete
         )
         // Compaction may cross an old run-start request. Reinsert every mandatory unit
@@ -922,6 +929,41 @@ final class ContextLifecycle {
         let floor = ContextWorkingSetManager.mandatoryFloorIndices(in: messages, protectionHints: protectionHints)
         let retained = messages[0...boundary].enumerated().compactMap { floor.contains($0.offset) ? $0.element : nil }
         return [summary] + retained + Array(messages.suffix(from: boundary + 1))
+    }
+
+    /// Deterministically extracts the latest pre-compaction plan state and up to 5 recently
+    /// accessed file paths from canonical history so post-compaction turns retain continuity.
+    /// Depends solely on `prefix` so `messages[0]` remains cache-stable across subsequent turns.
+    nonisolated static func postCompactAnchors(prefix: ArraySlice<ChatMessage>) -> String {
+        var appendix = ""
+        outer: for msg in prefix.reversed() {
+            for call in msg.toolCalls.reversed() where call.name == "update_plan" && call.state == .completed {
+                let trimmedOut = call.output.trimmingCharacters(in: .whitespacesAndNewlines)
+                let planText = (trimmedOut.isEmpty || trimmedOut == "Plan updated") ? call.input.trimmingCharacters(in: .whitespacesAndNewlines) : trimmedOut
+                if !planText.isEmpty {
+                    appendix += "\n\n### Active Plan State (before compaction)\n\(String(planText.prefix(2_000)))"
+                    break outer
+                }
+            }
+        }
+
+        var seenPaths = Set<String>()
+        var recentFiles: [String] = []
+        for msg in prefix.reversed() {
+            for call in msg.toolCalls.reversed() where call.state == .completed {
+                let name = call.name
+                guard name == "file_edit" || name == "file_write" || name == "file_read" else { continue }
+                guard let path = ToolCallFileTargetResolver.extractPath(from: call),
+                      seenPaths.insert(path).inserted else { continue }
+                recentFiles.append("- \(path) (\(name))")
+                if recentFiles.count >= 5 { break }
+            }
+            if recentFiles.count >= 5 { break }
+        }
+        if !recentFiles.isEmpty {
+            appendix += "\n\n### Recently Accessed Files (read on demand with file_read)\n" + recentFiles.joined(separator: "\n")
+        }
+        return appendix
     }
 
     nonisolated static func summarizeToolCall(_ call: ToolCallRecord) -> String {
@@ -991,6 +1033,14 @@ final class ContextLifecycle {
         }
     }
 
+    private nonisolated static func isCompletedMutationToolSummaryLine(_ line: String) -> Bool {
+        guard line.hasPrefix("Tool "), let markerRange = line.range(of: " [completed]:") else {
+            return false
+        }
+        let toolName = String(line[line.index(line.startIndex, offsetBy: 5)..<markerRange.lowerBound])
+        return !toolName.isEmpty && ContextWorkingSetManager.isMutationSensitiveTool(toolName)
+    }
+
     nonisolated static func summarize(previous: String?, messages: [ChatMessage]) -> String {
         var chunks: [String] = []
         if let previous, !previous.isEmpty { chunks.append(previous) }
@@ -1005,24 +1055,36 @@ final class ContextLifecycle {
         let joined = chunks.joined(separator: "\n")
         if joined.count <= maximumSummaryCharacters { return joined }
 
-        // Bounded deterministic summary: preserve non-success tool outcomes and redacted secrets,
-        // while keeping completed tool summaries and conversation prose bounded within the total budget.
-        var criticalLines: [String] = []
+        // Bounded deterministic summary: preserve non-success tool outcomes, redacted secrets,
+        // and completed mutation tool facts while keeping prose bounded within the total budget.
+        var nonSuccessCriticalLines: [String] = []
+        var mutationCriticalLines: [String] = []
         var normalLines: [String] = []
         for line in joined.components(separatedBy: "\n") {
             if line.contains("[failed]") || line.contains("[denied]") || line.contains("[timed out]") || line.contains("[interrupted") || line.contains("••••") {
-                criticalLines.append(line)
+                nonSuccessCriticalLines.append(line)
+            } else if Self.isCompletedMutationToolSummaryLine(line) {
+                mutationCriticalLines.append(line)
             } else {
                 normalLines.append(line)
             }
         }
 
         let maxCriticalCharacters = (maximumSummaryCharacters * 60) / 100
-        var criticalBlock = criticalLines.joined(separator: "\n")
+        var criticalBlock = nonSuccessCriticalLines.joined(separator: "\n")
         if criticalBlock.count > maxCriticalCharacters {
             let notice = "[Earlier critical outcomes truncated]\n"
             let tailBudget = max(0, maxCriticalCharacters - notice.count)
             criticalBlock = tailBudget > 0 ? notice + String(criticalBlock.suffix(tailBudget)) : String(criticalBlock.suffix(maxCriticalCharacters))
+        } else if !mutationCriticalLines.isEmpty {
+            let remainingBudget = maxCriticalCharacters - (criticalBlock.isEmpty ? 0 : criticalBlock.count + 1)
+            if remainingBudget > 0 {
+                let mutationRaw = mutationCriticalLines.joined(separator: "\n")
+                let fittedMutation = mutationRaw.count <= remainingBudget ? mutationRaw : String(mutationRaw.suffix(remainingBudget))
+                if !fittedMutation.isEmpty {
+                    criticalBlock = criticalBlock.isEmpty ? fittedMutation : "\(criticalBlock)\n\(fittedMutation)"
+                }
+            }
         }
 
         let criticalHeader = "\n\n[Authoritative Tool Outcomes]\n"

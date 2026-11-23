@@ -291,8 +291,18 @@ final class AppState {
             activeConversationID: { [weak conversations] in
                 conversations?.activeConversationID
             },
-            modelSources: { [weak conversations] in
-                (sub: conversations?.activeConversation?.subModelSource, primary: conversations?.activeConversation?.modelSource)
+            modelSources: { [weak conversations, weak modelGroups, weak providers] in
+                let active = conversations?.activeConversation
+                let sub: ConversationModelSource?
+                if let active, let rawSub = active.subModelSource, let modelGroups, let providers {
+                    let hasCandidates = !SubModelResolver(modelGroups: modelGroups, providers: providers)
+                        .candidates(for: rawSub, conversationID: active.id)
+                        .isEmpty
+                    sub = hasCandidates ? rawSub : nil
+                } else {
+                    sub = active?.subModelSource
+                }
+                return (sub: sub, primary: active?.modelSource)
             }
         )
         toolExecutor.setExtensionUsageHandler { [weak skills] event in

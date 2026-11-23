@@ -557,12 +557,44 @@ public enum ModelsDevAPI {
 
         public func lookup(modelId: String) -> ResolvedCrossProviderFallback? {
             let key = ModelsDevAPI.normalizedModelKey(modelId)
-            return fallbacks[key]
+            return lookup(normalizedKey: key)
         }
 
         public func lookup(normalizedKey: String) -> ResolvedCrossProviderFallback? {
+            if let direct = fallbacks[normalizedKey], direct.hasAnyFallback {
+                return direct
+            }
+            if normalizedKey == "deepseek-flash",
+               let familyFallback = fallbacks["deepseek-v4-flash"],
+               familyFallback.hasAnyFallback {
+                return familyFallback
+            }
             return fallbacks[normalizedKey]
         }
+    }
+
+    /// Maps decimal vs binary representations of the same physical capacity tier (e.g. 1M vs 1,048,576;
+    /// 256K vs 262,144) to a conservative canonical value so cross-provider votes do not split.
+    public static func canonicalCapacityTier(_ value: Int) -> Int {
+        switch value {
+        case 1_000_000...1_050_000: return 1_000_000
+        case 500_000...524_288: return 500_000
+        case 256_000...262_144: return 256_000
+        case 200_000...205_000: return 200_000
+        case 128_000...131_072: return 128_000
+        case 64_000...65_536: return 64_000
+        case 32_000...32_768: return 32_000
+        default: return value
+        }
+    }
+
+    /// Exact integer consensus first; falls back to capacity-tier consensus only when providers
+    /// split votes across decimal vs binary spellings of the same window/output tier.
+    public static func resolveCapacityConsensus(from values: [Int]) -> Int? {
+        if let exact = resolveConsensus(from: values) {
+            return exact
+        }
+        return resolveConsensus(from: values.map(canonicalCapacityTier))
     }
 
     /// Within a single provider, resolves whether all declared non-nil alias values agree.
@@ -648,13 +680,15 @@ public enum ModelsDevAPI {
 
                 // 2. Context Window
                 let declaredContexts = providerModels.compactMap { $0.limit?.context }.filter { $0 > 0 }
-                if let v = uniqueConsensusWithinProvider(from: declaredContexts) {
+                if let v = uniqueConsensusWithinProvider(from: declaredContexts)
+                    ?? uniqueConsensusWithinProvider(from: declaredContexts.map(canonicalCapacityTier)) {
                     contextVotes.append(v)
                 }
 
                 // 3. Max Output Tokens
                 let declaredOutputs = providerModels.compactMap { $0.limit?.output }.filter { $0 > 0 }
-                if let v = uniqueConsensusWithinProvider(from: declaredOutputs) {
+                if let v = uniqueConsensusWithinProvider(from: declaredOutputs)
+                    ?? uniqueConsensusWithinProvider(from: declaredOutputs.map(canonicalCapacityTier)) {
                     outputVotes.append(v)
                 }
 
@@ -693,8 +727,8 @@ public enum ModelsDevAPI {
             }
 
             let resModality = resolveConsensus(from: modalityVotes)
-            let resContext = resolveConsensus(from: contextVotes)
-            let resOutput = resolveConsensus(from: outputVotes)
+            let resContext = resolveCapacityConsensus(from: contextVotes)
+            let resOutput = resolveCapacityConsensus(from: outputVotes)
             let resReasoning = resolveConsensus(from: reasoningVotes)
             let resEffort = resolveConsensus(from: effortVotes)
             let resNoEffort: Bool? = {

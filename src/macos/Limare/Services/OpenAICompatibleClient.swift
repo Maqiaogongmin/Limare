@@ -302,7 +302,8 @@ struct OpenAICompatibleClient: ProviderClient {
                 let modelName = provider.models.first(where: { $0.id == modelID })?.displayName
                     ?? (options.model?.id == modelID ? options.model?.displayName : nil) ?? modelID
                 var record = UsageRequestRecord(providerID: provider.id, providerName: provider.name,
-                    modelID: modelID, modelName: modelName, format: provider.apiFormat, kind: options.usageKind)
+                    modelID: modelID, modelName: modelName, format: provider.apiFormat, kind: options.usageKind,
+                    conversationID: options.conversationID)
                 var omitUsageOption = streamUsageCompatibility.isRejected(provider)
                 var omitPromptCacheKey = parameterCompatibility.isRejected(provider, param: "prompt_cache_key")
                 var omitCacheControl = parameterCompatibility.isRejected(provider, param: "cache_control")
@@ -813,6 +814,9 @@ struct OpenAICompatibleClient: ProviderClient {
         if status == 429 {
             let lower = message.lowercased()
             return !["insufficient_quota", "enforced_spend_limit", "billing", "monthly", "余额", "额度耗尽"].contains { lower.contains($0) }
+        }
+        if ProviderModelNotFoundRecognizer.code(status: status, message: message) != nil {
+            return false
         }
         return status == 408 || (500...599).contains(status)
     }

@@ -1302,7 +1302,7 @@ final class ConversationRunCoordinator {
         }
 
         let modelSources = (
-            sub: convRecord?.subModelSource,
+            sub: usableSubModelSource(convRecord?.subModelSource, conversationID: conversationID),
             primary: convRecord?.modelSource ?? modelSource
         )
         let allowSkills: Bool
@@ -1541,7 +1541,7 @@ final class ConversationRunCoordinator {
         let config = SemanticCompactorConfiguration(timeoutSeconds: 300, summaryOutputBudget: 4000, maxStages: 1)
         let compactor = ContextSemanticCompactor(
             config: config,
-            transport: DefaultSemanticCompactionTransport(client: client, provider: provider),
+            transport: DefaultSemanticCompactionTransport(client: client, provider: provider, conversationID: conversationID),
             logs: logs
         )
         let result = try await contextLifecycle.workingMessages(
@@ -2117,6 +2117,7 @@ final class ConversationRunCoordinator {
         var recordedOptions = options
         recordedOptions.usageKind = subagentRuns[runID] != nil ? .subagent : (scheduledRunLookup?(runID) == true ? .scheduled : .chat)
         recordedOptions.promptCacheKey = conversationID.uuidString
+        recordedOptions.conversationID = conversationID
         do { loopResult = try await loopEngine.run(
             provider: provider,
             apiKey: apiKey,
@@ -2177,7 +2178,7 @@ final class ConversationRunCoordinator {
                 }
 
                 let compactor = ContextSemanticCompactor(
-                    transport: DefaultSemanticCompactionTransport(client: self.client, provider: provider),
+                    transport: DefaultSemanticCompactionTransport(client: self.client, provider: provider, conversationID: conversationID),
                     logs: self.logs
                 )
 
@@ -2454,8 +2455,17 @@ final class ConversationRunCoordinator {
                         metadata: ["tool": call.function.name, "toolCallID": call.id])
                     outcome = ToolExecutionOutcome(content: "delegation.disabledForConversation: Subagent is disabled for this conversation, so new delegated work (delegate_task or delegation_control continue) was not offered to this turn. Nothing was executed; handle the task directly.", isError: true, approvalState: .notRequired, durationMilliseconds: 0)
                 } else if notOffered {
-                    outcome = ToolExecutionOutcome(content: "Model tried to call unavailable tool '\(call.function.name)'. Available tools: \(offeredNames.sorted().joined(separator: ", ")).\(offeredNames.contains("tool_search") ? " A deferred tool must be loaded with tool_search before it can be called." : "")",
-                                                   isError: true, approvalState: .notRequired, durationMilliseconds: 0)
+                    let deferredNames = Set((self.runDeferredCandidates[runID] ?? []).map(\.function.name))
+                    outcome = ToolExecutionOutcome(
+                        content: Self.unavailableToolErrorMessage(
+                            calledName: call.function.name,
+                            offeredNames: offeredNames,
+                            deferredNames: deferredNames
+                        ),
+                        isError: true,
+                        approvalState: .notRequired,
+                        durationMilliseconds: 0
+                    )
                 } else if call.function.name == "tool_search" {
                     outcome = self.runToolSearch(call, runID: runID)
                 } else {
@@ -2655,6 +2665,65 @@ final class ConversationRunCoordinator {
         if let client = error as? ProviderClientError, case .http(let status, let message) = client {
             providers.recordModelRejection(providerID: providerID, modelID: modelID, status: status, message: message)
         }
+    }
+
+    func usableSubModelSource(_ sub: ConversationModelSource?, conversationID: UUID) -> ConversationModelSource? {
+        guard let sub else { return nil }
+        switch sub {
+        case .direct(let providerID, let modelID):
+            guard let provider = providers.providers.first(where: { $0.id == providerID }),
+                  let model = provider.models.first(where: { $0.id == modelID }),
+                  SubModelResolver.isTextTaskEligible(model) else { return nil }
+            return sub
+        case .group:
+            guard let modelGroups else { return sub }
+            let candidates = SubModelResolver(modelGroups: modelGroups, providers: providers)
+                .candidates(for: sub, conversationID: conversationID)
+            return candidates.isEmpty ? nil : sub
+        }
+    }
+
+    static func unavailableToolErrorMessage(
+        calledName: String,
+        offeredNames: Set<String>,
+        deferredNames: Set<String>
+    ) -> String {
+        let availableList = offeredNames.sorted().joined(separator: ", ")
+        if deferredNames.contains(calledName), offeredNames.contains("tool_search") {
+            return "Model tried to call unavailable tool '\(calledName)'. Available tools: \(availableList). A deferred tool must be loaded with tool_search before it can be called."
+        }
+        let aliasMap: [String: String] = [
+            "edit_plan": "update_plan",
+            "plan_update": "update_plan",
+            "write_plan": "update_plan",
+            "read": "file_read",
+            "read_file": "file_read",
+            "view_file": "file_read",
+            "write": "file_write",
+            "write_file": "file_write",
+            "create_file": "file_write",
+            "edit": "file_edit",
+            "edit_file": "file_edit",
+            "file_apply_patch": "file_edit",
+            "apply_patch": "file_edit",
+            "shell": "shell_execute",
+            "bash": "shell_execute",
+            "shell_command": "shell_execute",
+            "shell_exec_command": "shell_execute",
+            "execute": "shell_execute",
+            "file_execute": "shell_execute",
+            "list": "file_list",
+            "list_dir": "file_list",
+            "list_files": "file_list",
+            "search": "file_search",
+            "grep": "file_search",
+            "find_files": "file_search"
+        ]
+        let normalized = calledName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if let target = aliasMap[normalized], offeredNames.contains(target) {
+            return "Model tried to call unavailable tool '\(calledName)'. '\(calledName)' does not exist; use '\(target)' instead. Available tools: \(availableList)."
+        }
+        return "Model tried to call unavailable tool '\(calledName)'. '\(calledName)' is not an available or deferred tool. Available tools: \(availableList)."
     }
 
     private func recordFailure(conversationID: UUID, runID: UUID, error: Error, provider: String? = nil, modelID: String? = nil, recoverable: String? = nil, decision: String? = nil) {
@@ -3733,12 +3802,12 @@ No tools, shell, browser, or file system access are available for this turn. Res
         }
 
         // Global SOUL.md precedes workspace-scoped Skills so cross-workspace prefixes stay cache-stable.
-        if let soulFragment = soul?.promptFragment(), !soulFragment.isEmpty {
+        if subagentBinding == nil, let soulFragment = soul?.promptFragment(), !soulFragment.isEmpty {
             staticSections.append(soulFragment)
         }
 
         // Skill projection (STRICT: only from validated captured contributions, zero legacy fallback)
-        if !validationFailed {
+        if !validationFailed, (subagentBinding == nil || subagentBinding?.role == .coding) {
             let skillPrompt = ExtensionContribution.projectSkillPrompt(from: validatedContributions.filter { $0.identity.kind == .skill })
             if let skillPrompt, !skillPrompt.isEmpty {
                 staticSections.append(skillPrompt)
@@ -3779,7 +3848,7 @@ No tools, shell, browser, or file system access are available for this turn. Res
             }
         }
 
-        let includeWriteInstructions = toolNames.contains("file_write") || toolNames.contains("file_edit")
+        let includeWriteInstructions = subagentBinding == nil && (toolNames.contains("file_write") || toolNames.contains("file_edit"))
         // A captured nil/failure is also stable for this run. Previews read current disk state.
         let memorySnapshot = runID.flatMap { runMemorySnapshots[$0] }
         let shouldProject = conversationStore?.shouldProjectMemory(for: conversationID) ?? true

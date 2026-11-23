@@ -112,6 +112,9 @@ struct ModelRoutingClassifier {
                 if status == 429 {
                     return .providerRateLimit(reason: msg)
                 }
+                if ProviderModelNotFoundRecognizer.code(status: status, message: message) != nil {
+                    return .permanentProviderRejection(reason: msg, statusCode: status)
+                }
                 if (500...599).contains(status) || status == 408 {
                     return .providerInvocation(reason: msg, isTransient: true, statusCode: status)
                 }

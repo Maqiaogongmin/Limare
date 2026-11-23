@@ -94,13 +94,15 @@ enum ThinkingRuleResolver {
         }
 
         // DeepSeek V4 vendor-native sibling shape.
-        rules.append(ThinkingRule(
-            kind: .officialVendor,
-            scope: .modelPattern("*deepseek-v4*"),
-            wireFormat: .deepSeekSibling,
-            reasoningEcho: ReasoningEchoPolicy(fieldName: "reasoning_content", timing: .afterToolUseOnly),
-            label: "deepseek-v4-official"
-        ))
+        for pattern in ["*deepseek-v4*", "*deepseek-flash*"] {
+            rules.append(ThinkingRule(
+                kind: .officialVendor,
+                scope: .modelPattern(pattern),
+                wireFormat: .deepSeekSibling,
+                reasoningEcho: ReasoningEchoPolicy(fieldName: "reasoning_content", timing: .afterToolUseOnly),
+                label: "deepseek-v4-official"
+            ))
+        }
 
         // Fallback for providerType: generic root reasoning_effort with .allModels scope.
         rules.append(ThinkingRule(

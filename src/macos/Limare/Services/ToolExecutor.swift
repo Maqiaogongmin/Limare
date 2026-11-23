@@ -961,9 +961,11 @@ final class ToolExecutor {
             )
         }
 
+        let shellFailed = result.timedOut || result.cancelled || result.exitCode != 0
+        let truncationTailFraction = shellFailed ? 0.8 : 0.5
         var payloadObject: [String: Any] = [
-            "stdout": bounded(sanitizedStdout, maximumBytes: inlineStdoutLimit, fullOutputPath: fullOutputPath),
-            "stderr": bounded(sanitizedStderr, maximumBytes: inlineStderrLimit, fullOutputPath: fullOutputPath),
+            "stdout": bounded(sanitizedStdout, maximumBytes: inlineStdoutLimit, fullOutputPath: fullOutputPath, tailFraction: truncationTailFraction),
+            "stderr": bounded(sanitizedStderr, maximumBytes: inlineStderrLimit, fullOutputPath: fullOutputPath, tailFraction: truncationTailFraction),
             "stdout_original_bytes": result.stdoutOriginalByteCount,
             "stderr_original_bytes": result.stderrOriginalByteCount,
             "duration_ms": result.durationMilliseconds,
@@ -1429,7 +1431,7 @@ final class ToolExecutor {
         if isSkillFile?(context.url, workspace.url) == true {
             onSkillDirectoryModified?(workspace.url)
         }
-        let output = "Wrote \(count) bytes to \(context.url.path)." + memoryCapacityFeedback(for: context.url)
+        let output = "Wrote \(count) bytes to \(context.url.path). (file state is current in your context — no need to file_read it back to verify)" + memoryCapacityFeedback(for: context.url)
         onUpdate(.init(state: .completed, approvalState: approval, output: output))
         logs.info("Tool", output)
         return .init(content: output, isError: false, approvalState: approval, durationMilliseconds: milliseconds(since: startedAt))
@@ -1454,7 +1456,7 @@ final class ToolExecutor {
             onSkillDirectoryModified?(workspace.url)
         }
         let count = updated.utf8.count
-        let output = "Edited \(context.url.path); resulting file is \(count) bytes." + memoryCapacityFeedback(for: context.url)
+        let output = "Edited \(context.url.path); resulting file is \(count) bytes. (file state is current in your context — no need to file_read it back to verify)" + memoryCapacityFeedback(for: context.url)
         onUpdate(.init(state: .completed, approvalState: approval, output: output))
         logs.info("Tool", output)
         return .init(content: output, isError: false, approvalState: approval, durationMilliseconds: milliseconds(since: startedAt))
@@ -2270,7 +2272,7 @@ final class ToolExecutor {
         return Int(elapsed.seconds * 1_000) + Int(elapsed.attoseconds / 1_000_000_000_000_000)
     }
 
-    private func bounded(_ text: String, maximumBytes: Int, fullOutputPath: String? = nil) -> String {
+    private func bounded(_ text: String, maximumBytes: Int, fullOutputPath: String? = nil, tailFraction: Double = 0.5) -> String {
         let data = Data(text.utf8)
         guard data.count > maximumBytes else { return text }
         let notice: String
@@ -2279,13 +2281,16 @@ final class ToolExecutor {
         } else {
             notice = "\n… output truncated for model context …\n"
         }
-        let half = max(0, (maximumBytes - notice.utf8.count) / 2)
-        if half == 0 {
+        let available = max(0, maximumBytes - notice.utf8.count)
+        if available == 0 {
             return String(decoding: data.prefix(maximumBytes), as: UTF8.self)
         }
-        return String(decoding: data.prefix(half), as: UTF8.self)
+        let clampedTail = min(1.0, max(0.0, tailFraction))
+        let tailBytes = Int((Double(available) * clampedTail).rounded())
+        let headBytes = available - tailBytes
+        return String(decoding: data.prefix(headBytes), as: UTF8.self)
             + notice
-            + String(decoding: data.suffix(half), as: UTF8.self)
+            + String(decoding: data.suffix(tailBytes), as: UTF8.self)
     }
 
     static var shellOverflowDirectoryURL: URL {

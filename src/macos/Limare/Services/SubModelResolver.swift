@@ -21,6 +21,7 @@ final class SubModelResolver {
     }
 
     static func isTextTaskEligible(_ model: ProviderModel) -> Bool {
+        guard !model.discovery.isRemoved, model.discovery.providerRejection == nil else { return false }
         guard let modality = model.modality else { return true }
         return modality.contains(.textInput) && modality.contains(.textOutput)
     }

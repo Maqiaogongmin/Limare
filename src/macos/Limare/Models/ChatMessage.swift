@@ -793,7 +793,7 @@ enum HarnessToolDefinitions {
 
     static let fileReadDefinition = definition(
         name: "file_read",
-        description: "Read bounded UTF-8 text from a local file or limare:// attachment. A local image file (PNG, JPEG, HEIC…) is returned as the image itself; other binary attachments return metadata only. Large files: read them in parts with offset and limit; a cut-off result says where to continue.",
+        description: "Read bounded UTF-8 text from a local file or limare:// attachment. A local image file (PNG, JPEG, HEIC…) is returned as the image itself; other binary attachments return metadata only. Large files: read them in parts with offset and limit; a cut-off result says where to continue. Do not re-read a file you just wrote or edited to verify — file_write and file_edit fail with an error if the change did not apply.",
         properties: [
             "path": .init(type: "string", description: "Absolute path, relative path, or limare://attachments/<filename>."),
             "offset": .init(type: "number", description: "Optional. 1-based line to start reading at."),

@@ -94,10 +94,26 @@ enum ContextWorkingSetManager {
     static let softThresholdRatio: Double = 0.85
     /// Configurable target headroom ratio when reduction is executed (75% of effective input budget).
     static let defaultTargetBudgetRatio: Double = 0.75
+    /// Cap proactive working-set reduction trigger on 1M-window models to prevent Context Rot
+    /// while keeping PinnedReductionSet cache-stable across ~60K-token bands.
+    static let maximumSoftInputBudgetCeiling: Int = 180_000
+    static let maximumTargetInputBudgetCeiling: Int = 120_000
+    static let minimumIncrementalSoftBatchTokens: Int = 20_000
     static let ordinaryTailTokenCeiling = 20_000
     static let ordinaryTailBudgetFraction = 0.40
     /// Minimum original tokens required to consider a tool result for offloading.
     static let minimumToolResultTokensForOffload: Int = 50
+
+    static func softInputBudget(for effectiveInputBudget: Int) -> Int {
+        min(maximumSoftInputBudgetCeiling, max(1, Int(Double(effectiveInputBudget) * softThresholdRatio)))
+    }
+
+    static func targetInputBudget(
+        for effectiveInputBudget: Int,
+        targetBudgetRatio: Double = defaultTargetBudgetRatio
+    ) -> Int {
+        min(maximumTargetInputBudgetCeiling, max(1, Int(Double(effectiveInputBudget) * min(softThresholdRatio, targetBudgetRatio))))
+    }
 
     // MARK: - Mutation Tools Recognition
 
@@ -297,8 +313,8 @@ enum ContextWorkingSetManager {
         protectionHints: ContextProtectionHints = ContextProtectionHints(),
         pinnedReduction: PinnedReductionSet = PinnedReductionSet()
     ) -> (workingMessages: [ChatMessage], report: ContextReductionReport) {
-        let softInputBudget = max(1, Int(Double(effectiveInputBudget) * softThresholdRatio))
-        let targetInputBudget = max(1, Int(Double(effectiveInputBudget) * min(softThresholdRatio, targetBudgetRatio)))
+        let softInputBudget = Self.softInputBudget(for: effectiveInputBudget)
+        let targetInputBudget = Self.targetInputBudget(for: effectiveInputBudget, targetBudgetRatio: targetBudgetRatio)
         let hardInputBudget = effectiveInputBudget
 
         func evaluateEstimate(_ currentMsgs: [ChatMessage]) -> (estimate: TokenEstimate, tokens: Int) {
@@ -540,6 +556,21 @@ enum ContextWorkingSetManager {
             return (working, makeReport(currEstimate: currentEstimate))
         }
 
+        // On 1M+ models capped at 180K, avoid thrashing prompt cache every turn when irreducible
+        // context exceeds 180K; wait until at least 20K incremental tokens can be batched cleanly.
+        let enforceMinimumSoftBatch = !pinnedReduction.isEmpty
+            && currentTokens <= hardInputBudget
+            && softInputBudget == Self.maximumSoftInputBudgetCeiling
+        let pinnedOnlyWorking = working
+        let pinnedOnlyEstimate = currentEstimate
+        let pinnedOnlyTokens = currentTokens
+        let pinnedOnlyReasoningCount = reasoningCount
+        let pinnedOnlyAttachmentsCount = attachmentsCount
+        let pinnedOnlyToolResultsCount = toolResultsCount
+        let pinnedOnlyStrippedReasoning = strippedReasoningMessageIDs
+        let pinnedOnlyStrippedAttachments = strippedAttachmentMessageIDs
+        let pinnedOnlyStubbedTools = stubbedToolCallIDs
+
         // Level 1: Reasoning & transient metadata reduction in reducible region.
         // Reasoning inside the current run is the model's interleaved thinking between tool
         // calls; providers require it back intact (DeepSeek returns 400 without it, Anthropic
@@ -603,6 +634,19 @@ enum ContextWorkingSetManager {
             if currentTokens <= targetInputBudget {
                 break
             }
+        }
+
+        if enforceMinimumSoftBatch,
+           currentTokens > targetInputBudget,
+           (pinnedOnlyTokens - currentTokens) < Self.minimumIncrementalSoftBatchTokens {
+            working = pinnedOnlyWorking
+            reasoningCount = pinnedOnlyReasoningCount
+            attachmentsCount = pinnedOnlyAttachmentsCount
+            toolResultsCount = pinnedOnlyToolResultsCount
+            strippedReasoningMessageIDs = pinnedOnlyStrippedReasoning
+            strippedAttachmentMessageIDs = pinnedOnlyStrippedAttachments
+            stubbedToolCallIDs = pinnedOnlyStubbedTools
+            return (pinnedOnlyWorking, makeReport(currEstimate: pinnedOnlyEstimate))
         }
 
         return (working, makeReport(currEstimate: currentEstimate))

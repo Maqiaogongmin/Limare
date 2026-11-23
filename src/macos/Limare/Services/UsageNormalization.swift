@@ -66,12 +66,14 @@ struct UsageRequestRecord: Sendable {
     var attemptCount = 0
     var attemptsWithoutUsage = 0
     var usage = NormalizedUsage()
+    var conversationID: UUID? = nil
     private var incompleteAttempts = 0
     private var attemptsWithUsage = 0
 
-    init(providerID: UUID, providerName: String, modelID: String, modelName: String, format: ProviderAPIFormat, kind: UsageKind) {
+    init(providerID: UUID, providerName: String, modelID: String, modelName: String, format: ProviderAPIFormat, kind: UsageKind, conversationID: UUID? = nil) {
         self.providerID = providerID; self.providerName = providerName
         self.modelID = modelID; self.modelName = modelName; self.format = format; self.kind = kind
+        self.conversationID = conversationID
     }
 
     mutating func addAttempt(_ telemetry: ProviderUsageTelemetry?, finished: Bool, excluded: Bool) {

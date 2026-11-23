@@ -31,6 +31,7 @@ struct ChatInferenceOptions: Sendable, Equatable {
     var adapterDisabledNativeVision: Bool
     var usageKind: UsageKind
     var promptCacheKey: String? = nil
+    var conversationID: UUID? = nil
 
     init(
         thinkingLevel: ThinkingLevel = .off,

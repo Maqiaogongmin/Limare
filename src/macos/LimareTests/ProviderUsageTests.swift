@@ -693,6 +693,54 @@ final class ProviderUsageTests: XCTestCase {
         XCTAssertEqual(String(cString: sqlite3_column_text(statement, 1)), "unknown")
     }
 
+    func testLegacyUsageSchemaMigrationAndConversationIDAttribution() async throws {
+        let directory = root(); defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let dbPath = directory.appendingPathComponent("usage.sqlite3").path
+        var legacyDB: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(dbPath, &legacyDB), SQLITE_OK)
+        let legacyCreate = """
+            CREATE TABLE usage_request (
+                id TEXT PRIMARY KEY, provider_id TEXT NOT NULL, provider_name_snapshot TEXT NOT NULL,
+                model_id TEXT NOT NULL, model_name_snapshot TEXT NOT NULL, protocol TEXT NOT NULL,
+                usage_kind TEXT NOT NULL, started_at REAL NOT NULL, ended_at REAL NOT NULL,
+                outcome TEXT NOT NULL, attempt_count INTEGER NOT NULL, attempts_without_usage INTEGER NOT NULL,
+                input_total INTEGER, output_total INTEGER, cache_read INTEGER, cache_write INTEGER,
+                reasoning INTEGER, tool_use_prompt INTEGER, provider_total INTEGER, usage_status TEXT NOT NULL
+            );
+            """
+        XCTAssertEqual(sqlite3_exec(legacyDB, legacyCreate, nil, nil, nil), SQLITE_OK)
+        sqlite3_close(legacyDB)
+
+        let status = UsageRecordingStatus()
+        let recorder = try UsageRecorder(storageRootURL: directory, status: status)
+        let convID = UUID()
+        var row = UsageRequestRecord(
+            providerID: UUID(),
+            providerName: "P",
+            modelID: "deepseek-flash",
+            modelName: "DeepSeek Flash",
+            format: .chatCompletions,
+            kind: .compaction,
+            conversationID: convID
+        )
+        row.attemptCount = 1
+        row.addAttempt(ProviderUsageTelemetry(inputTokens: 100, outputTokens: 20, reasoningTokens: 0), finished: true, excluded: false)
+        await recorder.append(row)
+        XCTAssertNil(status.failure)
+
+        var checkDB: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(dbPath, &checkDB), SQLITE_OK)
+        defer { sqlite3_close(checkDB) }
+        var stmt: OpaquePointer?
+        XCTAssertEqual(sqlite3_prepare_v2(checkDB, "SELECT conversation_id FROM usage_request WHERE id = ?", -1, &stmt, nil), SQLITE_OK)
+        defer { sqlite3_finalize(stmt) }
+        let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        sqlite3_bind_text(stmt, 1, row.id.uuidString, -1, transient)
+        XCTAssertEqual(sqlite3_step(stmt), SQLITE_ROW)
+        XCTAssertEqual(String(cString: sqlite3_column_text(stmt, 0)), convID.uuidString)
+    }
+
     func testQuotaConcurrentRefreshAndInvalidation() async throws {
         let directory = root(); defer { try? FileManager.default.removeItem(at: directory) }
         let store = ProviderStore(storageRootURL: directory, logs: DebugLogStore(storageRootURL: directory))
@@ -1612,6 +1660,178 @@ final class ProviderUsageTests: XCTestCase {
         XCTAssertLessThan(soulRange.lowerBound, skillRange.lowerBound)
         XCTAssertTrue(manifest.systemPrompt.contains("# DEFERRED TOOLS"))
         XCTAssertFalse(SubagentCoordinator.allows("tool_search", role: .research, allowWeb: false))
+    }
+
+    @MainActor
+    func testHookSessionStartReusedAcrossRunsAndInvalidatedOnSessionEnd() async throws {
+        let root = self.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let counterFile = root.appendingPathComponent("session_start_count.txt")
+        let package = root.appendingPathComponent("package/hooks", isDirectory: true)
+        try FileManager.default.createDirectory(at: package, withIntermediateDirectories: true)
+        let cmd = "printf x >> '\(counterFile.path)'; echo '{\"additionalContext\":\"[SESSION_CTX]\"}'"
+        let configObj: [String: Any] = [
+            "hooks": [
+                "SessionStart": [
+                    ["hooks": [["type": "command", "command": cmd]]]
+                ]
+            ]
+        ]
+        let configData = try JSONSerialization.data(withJSONObject: configObj)
+        try configData.write(to: package.appendingPathComponent("hooks.json"))
+
+        let logs = DebugLogStore()
+        let trust = HookTrustStore(storageDirectory: root.appendingPathComponent("trust"))
+        let store = HookStore(trustStore: trust, logs: logs, storageDirectory: root.appendingPathComponent("store"))
+        let source = try store.importPackage(from: package.deletingLastPathComponent())
+        store.trustAndEnable(sourceID: source.id)
+        let workspace = WorkspaceStore(storageRootURL: root.appendingPathComponent("workspace-store"), logs: logs)
+        try workspace.setWorkspace(root)
+        let hooks = HookSessionCoordinator(hookStore: store, workspace: workspace, logs: logs)
+
+        let conv = UUID()
+        let res1 = await hooks.beginRun(conversationID: conv, runID: UUID(), workspaceURL: root)
+        let res2 = await hooks.beginRun(conversationID: conv, runID: UUID(), workspaceURL: root)
+        XCTAssertEqual(res1?.additionalContext, "[SESSION_CTX]")
+        XCTAssertEqual(res2?.additionalContext, "[SESSION_CTX]")
+        XCTAssertEqual(try String(contentsOf: counterFile, encoding: .utf8), "x")
+
+        await hooks.onSessionEnd(conversationID: conv, reason: "other", workspaceURL: root)
+        let res3 = await hooks.beginRun(conversationID: conv, runID: UUID(), workspaceURL: root)
+        XCTAssertEqual(res3?.additionalContext, "[SESSION_CTX]")
+        XCTAssertEqual(try String(contentsOf: counterFile, encoding: .utf8), "xx")
+    }
+
+    @MainActor
+    func testModelNotFound503RecognitionAndHelperFallback() throws {
+        XCTAssertEqual(
+            ProviderModelNotFoundRecognizer.code(status: 503, message: "[model_not_found] 分组 default 下模型 step-3.7-flash 无可用渠道"),
+            "model_not_found"
+        )
+        XCTAssertNil(ProviderModelNotFoundRecognizer.code(status: 503, message: "Service Unavailable"))
+        XCTAssertNil(ProviderModelNotFoundRecognizer.code(status: 500, message: "model does not exist"))
+
+        let root = self.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let app = AppState(storageRootURL: root)
+        let deadModel = ProviderModel(id: "dead-m", displayName: "Dead")
+        let okModel = ProviderModel(id: "ok-m", displayName: "OK")
+        let prov = ProviderConfiguration(
+            name: "Relay",
+            baseURL: "https://relay.example/v1",
+            authenticationMode: .none,
+            models: [deadModel, okModel],
+            selectedModelID: okModel.id
+        )
+        try app.providers.save(prov, apiKey: nil)
+        let helperGroup = ModelGroup(
+            name: "subagents",
+            memberEntryIds: [
+                ModelGroup.makeEntryId(providerID: prov.id, modelID: deadModel.id),
+                ModelGroup.makeEntryId(providerID: prov.id, modelID: okModel.id)
+            ],
+            strategy: .fallback,
+            fallbackStrategy: .limited
+        )
+        app.modelGroups.addGroup(helperGroup)
+        let conv = app.conversations.newConversation(workspace: nil)
+        let helperSource = ConversationModelSource.group(groupID: helperGroup.id)
+        let resolver = SubModelResolver(modelGroups: app.modelGroups, providers: app.providers)
+
+        app.providers.recordModelRejection(providerID: prov.id, modelID: deadModel.id, status: 503, message: "[model_not_found]")
+        let afterFirstReject = resolver.candidates(for: helperSource, conversationID: conv.id)
+        XCTAssertEqual(afterFirstReject.map(\.model.id), [okModel.id])
+        XCTAssertEqual(app.conversationRuns.usableSubModelSource(helperSource, conversationID: conv.id), helperSource)
+
+        app.providers.recordModelRejection(providerID: prov.id, modelID: okModel.id, status: 503, message: "[model_not_found]")
+        XCTAssertTrue(resolver.candidates(for: helperSource, conversationID: conv.id).isEmpty)
+        XCTAssertNil(app.conversationRuns.usableSubModelSource(helperSource, conversationID: conv.id))
+    }
+
+    func testUnavailableToolErrorDistinguishesDeferredFromHallucinatedAliases() {
+        let offered: Set<String> = ["file_read", "update_plan", "tool_search"]
+        let deferred: Set<String> = ["mcp__github__search"]
+
+        let deferredMsg = ConversationRunCoordinator.unavailableToolErrorMessage(
+            calledName: "mcp__github__search",
+            offeredNames: offered,
+            deferredNames: deferred
+        )
+        XCTAssertTrue(deferredMsg.contains("A deferred tool must be loaded with tool_search"))
+
+        let aliasMsg = ConversationRunCoordinator.unavailableToolErrorMessage(
+            calledName: "edit_plan",
+            offeredNames: offered,
+            deferredNames: deferred
+        )
+        XCTAssertTrue(aliasMsg.contains("use 'update_plan' instead"))
+        XCTAssertFalse(aliasMsg.contains("A deferred tool must be loaded with tool_search"))
+
+        let unknownMsg = ConversationRunCoordinator.unavailableToolErrorMessage(
+            calledName: "nonexistent_xyz",
+            offeredNames: offered,
+            deferredNames: deferred
+        )
+        XCTAssertTrue(unknownMsg.contains("is not an available or deferred tool"))
+        XCTAssertFalse(unknownMsg.contains("A deferred tool must be loaded with tool_search"))
+    }
+
+    @MainActor
+    func testAutoPermissionReviewerDisablesThinking() async {
+        let capture = ReviewerOptionsCaptureClient()
+        let model = ProviderModel(id: "gpt-6.1-sol", displayName: "GPT 6.1 Sol")
+        let provider = ProviderConfiguration(
+            name: "Relay",
+            baseURL: "https://relay.example/v1",
+            authenticationMode: .none,
+            models: [model],
+            selectedModelID: model.id
+        )
+        let context = PermissionReviewContext(provider: provider, apiKey: "test-key", modelID: model.id)
+        let reviewer = AutoPermissionReviewer(context: context, client: capture, logs: DebugLogStore())
+        let req = ToolPermissionRequest(toolName: "shell_execute", summary: "Run pwd", workspaceURL: nil, command: "pwd", requestsNetwork: false, isHighRisk: false)
+        let decision = await reviewer.review(request: req, reason: "test")
+        guard case .approve = decision else {
+            return XCTFail("Expected approve decision, got \(decision)")
+        }
+        XCTAssertEqual(capture.lastOptions?.thinkingLevel, .off)
+        XCTAssertEqual(capture.lastOptions?.maxOutputTokens, 256)
+        XCTAssertEqual(capture.lastOptions?.usageKind, .permissionReview)
+        XCTAssertEqual(capture.lastOptions?.model?.id, model.id)
+    }
+}
+
+private final class ReviewerOptionsCaptureClient: ProviderClient, @unchecked Sendable {
+    private let lock = NSLock()
+    private var capturedOptions: ChatInferenceOptions?
+    var lastOptions: ChatInferenceOptions? { lock.withLock { capturedOptions } }
+
+    func fetchModelDiscovery(provider: ProviderConfiguration, apiKey: String?) async throws -> ModelDiscoveryResult {
+        ModelDiscoveryResult(models: provider.models, completeness: .complete, fetchedAt: Date())
+    }
+
+    func streamChat(
+        provider: ProviderConfiguration,
+        apiKey: String?,
+        modelID: String,
+        messages: [ChatRequestMessage],
+        tools: [ChatToolDefinition],
+        options: ChatInferenceOptions,
+        attachmentResolver: (@Sendable (ChatAttachment) throws -> Data)?,
+        artifactResolver: (@Sendable (UUID) throws -> (data: Data, mimeType: String))?,
+        cancellationHandle: ProviderStreamCancellationHandle?,
+        onDiagnostics: (@Sendable (ProviderStreamDiagnostics) -> Void)?,
+        onRequestToolNames: (@Sendable ([String]) async -> Void)?,
+        onAttemptStarted: (@Sendable (Int) async -> Void)?,
+        onRetry: (@Sendable (Int, String) async -> Void)?,
+        onTransportFailure: (@Sendable (String) async -> Void)?
+    ) -> AsyncThrowingStream<AgentStreamEvent, Error> {
+        lock.withLock { capturedOptions = options }
+        return AsyncThrowingStream { continuation in
+            continuation.yield(.textDelta(#"{"decision":"approve","rationale":"safe"}"#))
+            continuation.yield(.completed())
+            continuation.finish()
+        }
     }
 }
 

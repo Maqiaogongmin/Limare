@@ -105,11 +105,29 @@ actor UsageRecorder {
                     usage_kind TEXT NOT NULL, started_at REAL NOT NULL, ended_at REAL NOT NULL,
                     outcome TEXT NOT NULL, attempt_count INTEGER NOT NULL, attempts_without_usage INTEGER NOT NULL,
                     input_total INTEGER, output_total INTEGER, cache_read INTEGER, cache_write INTEGER,
-                    reasoning INTEGER, tool_use_prompt INTEGER, provider_total INTEGER, usage_status TEXT NOT NULL
+                    reasoning INTEGER, tool_use_prompt INTEGER, provider_total INTEGER, usage_status TEXT NOT NULL,
+                    conversation_id TEXT
                 );
                 CREATE INDEX IF NOT EXISTS usage_request_started ON usage_request(started_at);
                 CREATE INDEX IF NOT EXISTS usage_request_provider_model ON usage_request(provider_id, model_id);
                 """)
+            var hasConversationColumn = false
+            var infoStmt: OpaquePointer?
+            if sqlite3_prepare_v2(connection, "PRAGMA table_info(usage_request);", -1, &infoStmt, nil) == SQLITE_OK,
+               let infoStmt {
+                defer { sqlite3_finalize(infoStmt) }
+                while sqlite3_step(infoStmt) == SQLITE_ROW {
+                    if let cname = sqlite3_column_text(infoStmt, 1),
+                       String(cString: cname) == "conversation_id" {
+                        hasConversationColumn = true
+                        break
+                    }
+                }
+            }
+            if !hasConversationColumn {
+                try Self.execute(connection, "ALTER TABLE usage_request ADD COLUMN conversation_id TEXT;")
+            }
+            try Self.execute(connection, "CREATE INDEX IF NOT EXISTS usage_request_conversation ON usage_request(conversation_id);")
         } catch {
             sqlite3_close(connection)
             throw error
@@ -149,12 +167,23 @@ actor UsageRecorder {
 
     private func insert(_ record: UsageRequestRecord) throws {
         var statement: OpaquePointer?
-        let sql = "INSERT INTO usage_request VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+        let sql = """
+            INSERT INTO usage_request (
+                id, provider_id, provider_name_snapshot, model_id, model_name_snapshot,
+                protocol, usage_kind, started_at, ended_at, outcome, attempt_count,
+                attempts_without_usage, input_total, output_total, cache_read, cache_write,
+                reasoning, tool_use_prompt, provider_total, usage_status, conversation_id
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
             throw UsageDatabaseError(message: String(cString: sqlite3_errmsg(db)))
         }
         defer { sqlite3_finalize(statement) }
         func text(_ index: Int32, _ value: String) { sqlite3_bind_text(statement, index, value, -1, Self.transient) }
+        func optionalText(_ index: Int32, _ value: String?) {
+            if let value { sqlite3_bind_text(statement, index, value, -1, Self.transient) }
+            else { sqlite3_bind_null(statement, index) }
+        }
         func integer(_ index: Int32, _ value: Int?) {
             if let value { sqlite3_bind_int64(statement, index, sqlite3_int64(value)) }
             else { sqlite3_bind_null(statement, index) }
@@ -167,6 +196,7 @@ actor UsageRecorder {
         integer(13, record.usage.input); integer(14, record.usage.output); integer(15, record.usage.cacheRead)
         integer(16, record.usage.cacheWrite); integer(17, record.usage.reasoning); integer(18, record.usage.toolUsePrompt)
         integer(19, record.usage.providerTotal); text(20, record.usage.status.rawValue)
+        optionalText(21, record.conversationID?.uuidString)
         guard sqlite3_step(statement) == SQLITE_DONE else { throw UsageDatabaseError(message: String(cString: sqlite3_errmsg(db))) }
     }
 

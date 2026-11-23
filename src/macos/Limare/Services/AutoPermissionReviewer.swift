@@ -112,13 +112,20 @@ final class AutoPermissionReviewer: PermissionReviewing {
             return try await withThrowingTaskGroup(of: AutoReviewDecision.self) { group in
                 group.addTask {
                     var fullResponse = ""
+                    let targetModel = provider.models.first(where: { $0.id == modelID })
                     let stream = client.streamChat(
                         provider: provider,
                         apiKey: apiKey,
                         modelID: modelID,
                         messages: messages,
                         tools: [],
-                        options: ChatInferenceOptions(usageKind: .permissionReview)
+                        options: ChatInferenceOptions(
+                            thinkingLevel: .off,
+                            maxOutputTokens: 256,
+                            provider: provider,
+                            model: targetModel,
+                            usageKind: .permissionReview
+                        )
                     )
                     for try await event in stream {
                         if case .textDelta(let delta) = event {

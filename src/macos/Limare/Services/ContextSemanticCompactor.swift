@@ -1,8 +1,8 @@
 import Foundation
 
 struct SemanticCompactorConfiguration: Sendable, Equatable {
-    var timeoutSeconds: TimeInterval = 30.0
-    var summaryOutputBudget: Int = 1000
+    var timeoutSeconds: TimeInterval = 120.0
+    var summaryOutputBudget: Int = 4000
     var maxStages: Int = 3
     var localCharacterCeiling: Int = 12000
 }
@@ -195,8 +195,9 @@ final class ContextSemanticCompactor: ContextSemanticCompacting {
             throw SemanticCompactionError.toolCallEmitted
         }
 
-        // 3. Post-output credential redaction
-        let redactedSummary = SecretMasker.redactCredentials(rawResponse.text, secrets: allSecrets)
+        // 3. Strip optional <analysis> scratchpad and redact credentials post-output
+        let strippedResponse = Self.stripAnalysisScratchpad(rawResponse.text)
+        let redactedSummary = SecretMasker.redactCredentials(strippedResponse, secrets: allSecrets)
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !redactedSummary.isEmpty else {
@@ -207,44 +208,50 @@ final class ContextSemanticCompactor: ContextSemanticCompacting {
             throw SemanticCompactionError.outputCeilingExceeded
         }
 
-        // 4. Semantic Epistemic Tool Outcome Validation
+        func containsAny(_ text: String, _ needles: [String]) -> Bool {
+            needles.contains { text.localizedCaseInsensitiveContains($0) }
+        }
+
+        // 4. Semantic Epistemic Tool Outcome Validation (bilingual)
         let requiredMarkers = ContextCompactionSourceBuilder.requiredEpistemicMarkers(in: messages, previousSummary: previousSummary)
         for marker in requiredMarkers {
             if marker == "[failed]" {
-                if !redactedSummary.localizedCaseInsensitiveContains("[failed]") &&
-                   !redactedSummary.localizedCaseInsensitiveContains("failed") {
+                if !containsAny(redactedSummary, ["[failed]", "failed", "失败", "报错"]) {
                     throw SemanticCompactionError.epistemicValidationFailed("[failed]")
                 }
             } else if marker == "[denied]" {
-                if !redactedSummary.localizedCaseInsensitiveContains("[denied]") &&
-                   !redactedSummary.localizedCaseInsensitiveContains("denied") {
+                if !containsAny(redactedSummary, ["[denied]", "denied", "拒绝", "未获批"]) {
                     throw SemanticCompactionError.epistemicValidationFailed("[denied]")
                 }
             } else if marker == "[timed out]" {
-                if !redactedSummary.localizedCaseInsensitiveContains("[timed out]") &&
-                   !redactedSummary.localizedCaseInsensitiveContains("timed out") {
+                if !containsAny(redactedSummary, ["[timed out]", "timed out", "超时"]) {
                     throw SemanticCompactionError.epistemicValidationFailed("[timed out]")
                 }
             } else if marker == "[interrupted" {
-                if !redactedSummary.localizedCaseInsensitiveContains("[interrupted") &&
-                   !redactedSummary.localizedCaseInsensitiveContains("outcome unknown") &&
-                   !redactedSummary.localizedCaseInsensitiveContains("interrupted") {
+                if !containsAny(redactedSummary, ["[interrupted", "outcome unknown", "interrupted", "中断", "结果未知"]) {
                     throw SemanticCompactionError.epistemicValidationFailed("[interrupted / outcome unknown]")
                 }
             }
         }
 
-        // 5. Semantic Completed Mutation Tool Validation (CTX-I10)
+        // 5. Semantic Completed Mutation Tool Validation (CTX-I10, bilingual)
         let requiredMutationTools = ContextCompactionSourceBuilder.requiredCompletedMutationTools(in: messages, previousSummary: previousSummary)
         for toolName in requiredMutationTools {
+            var targetBasenames: [String] = []
+            for message in messages {
+                for call in message.toolCalls where call.name == toolName && call.state == .completed {
+                    if let path = ToolCallFileTargetResolver.extractPath(from: call) {
+                        let base = (path as NSString).lastPathComponent
+                        if !base.isEmpty { targetBasenames.append(base) }
+                    }
+                }
+            }
             let hasToolName = redactedSummary.localizedCaseInsensitiveContains(toolName)
-            let hasCompletedMarker = redactedSummary.localizedCaseInsensitiveContains("[completed]") ||
-                                     redactedSummary.localizedCaseInsensitiveContains("completed") ||
-                                     redactedSummary.localizedCaseInsensitiveContains("success") ||
-                                     redactedSummary.localizedCaseInsensitiveContains("modified") ||
-                                     redactedSummary.localizedCaseInsensitiveContains("wrote") ||
-                                     redactedSummary.localizedCaseInsensitiveContains("created") ||
-                                     redactedSummary.localizedCaseInsensitiveContains("saved")
+                || targetBasenames.contains { redactedSummary.localizedCaseInsensitiveContains($0) }
+            let hasCompletedMarker = containsAny(redactedSummary, [
+                "[completed]", "completed", "success", "modified", "wrote", "created", "saved",
+                "已完成", "已修改", "修改了", "已写入", "写入了", "已创建", "创建了", "已编辑", "已保存"
+            ])
             if !hasToolName || !hasCompletedMarker {
                 throw SemanticCompactionError.epistemicValidationFailed("Completed mutation tool fact missing for: \(toolName)")
             }
@@ -252,19 +259,36 @@ final class ContextSemanticCompactor: ContextSemanticCompacting {
 
         return redactedSummary
     }
+
+    /// Strips optional `<analysis>...</analysis>` scratchpad blocks while preserving inner content
+    /// if a model places the entire response inside `<analysis>`.
+    nonisolated static func stripAnalysisScratchpad(_ text: String) -> String {
+        let stripped = text
+            .replacingOccurrences(of: #"<analysis>[\s\S]*?</analysis>"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !stripped.isEmpty {
+            return stripped
+        }
+        return text
+            .replacingOccurrences(of: #"</?analysis>"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
 
 final class DefaultSemanticCompactionTransport: ContextSemanticCompactionTransport {
     private let client: any ProviderClient
     private let provider: ProviderConfiguration?
+    private let conversationID: UUID?
     private let requestAdmission: (@MainActor @Sendable (UUID, String) async throws -> Void)?
     private let requestReturned: (@MainActor @Sendable () throws -> Void)?
 
     init(client: any ProviderClient, provider: ProviderConfiguration? = nil,
+         conversationID: UUID? = nil,
          requestAdmission: (@MainActor @Sendable (UUID, String) async throws -> Void)? = nil,
          requestReturned: (@MainActor @Sendable () throws -> Void)? = nil) {
         self.client = client
         self.provider = provider
+        self.conversationID = conversationID
         self.requestAdmission = requestAdmission
         self.requestReturned = requestReturned
     }
@@ -278,14 +302,17 @@ final class DefaultSemanticCompactionTransport: ContextSemanticCompactionTranspo
             ChatRequestMessage(role: "user", content: request.userPrompt)
         ]
 
-        let options = ChatInferenceOptions(
+        let resolvedModel = self.provider?.models.first(where: { $0.id == request.modelID })
+            ?? ProviderModel(id: request.modelID, displayName: request.modelID, baseContextWindow: nil, baseMaxOutputTokens: request.maxOutputTokens)
+        var options = ChatInferenceOptions(
             thinkingLevel: .off,
             maxOutputTokens: request.maxOutputTokens,
-            model: ProviderModel(id: request.modelID, displayName: request.modelID, baseContextWindow: nil, baseMaxOutputTokens: request.maxOutputTokens),
+            model: resolvedModel,
             providerID: UUID(uuidString: request.providerID),
             apiFormat: request.apiFormat,
             usageKind: .compaction
         )
+        options.conversationID = self.conversationID
 
         var activeProvider = self.provider ?? ProviderConfiguration(
             id: UUID(uuidString: request.providerID) ?? UUID(),
@@ -318,7 +345,9 @@ final class DefaultSemanticCompactionTransport: ContextSemanticCompactionTranspo
             switch event {
             case .textDelta(let text):
                 accumulatedText += text
-                if accumulatedText.count > request.localCharacterCeiling {
+                // Allow headroom for <analysis> scratchpad tokens during streaming;
+                // post-strip validation in compact() still enforces localCharacterCeiling.
+                if accumulatedText.count > request.localCharacterCeiling * 2 {
                     cancellationHandle?.cancel()
                     throw SemanticCompactionError.outputCeilingExceeded
                 }

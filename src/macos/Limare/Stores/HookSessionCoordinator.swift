@@ -15,6 +15,8 @@ final class HookSessionCoordinator {
         var pendingExecutions: [HookExecutionSummary] = []
         var workspaceURL: URL?
         var stopSent = false
+        var sessionSourceFingerprint: String?
+        var sessionStartResult: HookAggregatedResult?
     }
     private var runStates: [UUID: RunState] = [:]
     /// Claimed Stop Hooks that have not finished, per conversation. A Stop Hook runs after its
@@ -101,7 +103,39 @@ final class HookSessionCoordinator {
         }
     }
 
+    private func sessionSourceFingerprint(workspaceURL: URL?) -> String {
+        let workspacePart = workspaceURL?.path ?? ""
+        let sourceParts = hookStore.sources
+            .filter { $0.isEnabled && hookStore.isTrusted(source: $0) }
+            .sorted { $0.id.uuidString < $1.id.uuidString }
+            .map { source -> String in
+                let disabled = source.disabledHandlerIDs.sorted().joined(separator: ",")
+                let handlers = (source.config.hooks[HookEventName.sessionStart.rawValue] ?? [])
+                    .flatMap(\.hooks)
+                    .map { "\($0.id)=\($0.command ?? "")" }
+                    .joined(separator: ",")
+                return "\(source.id.uuidString):\(source.definitionHash):[\(disabled)]:[\(handlers)]"
+            }
+            .joined(separator: "|")
+        return "\(workspacePart)#\(sourceParts)"
+    }
+
     func beginRun(conversationID: UUID, runID: UUID, workspaceURL: URL?, model: String? = nil) async -> HookAggregatedResult? {
+        let fingerprint = sessionSourceFingerprint(workspaceURL: workspaceURL)
+        if let existing = runStates[conversationID],
+           existing.sessionSourceFingerprint == fingerprint,
+           let cachedResult = existing.sessionStartResult {
+            runStates[conversationID] = RunState(
+                runID: runID,
+                sessionContext: existing.sessionContext,
+                sessionExecutions: existing.sessionExecutions,
+                workspaceURL: workspaceURL,
+                sessionSourceFingerprint: fingerprint,
+                sessionStartResult: cachedResult
+            )
+            return cachedResult
+        }
+
         runStates[conversationID] = RunState(runID: runID, workspaceURL: workspaceURL)
         var payload = scopedPayload(event: .sessionStart, conversationID: conversationID, state: runStates[conversationID]!, model: model)
         payload["source"] = "run"
@@ -110,6 +144,8 @@ final class HookSessionCoordinator {
         guard runStates[conversationID]?.runID == runID else { return nil }
         runStates[conversationID]?.sessionContext = result.additionalContext
         runStates[conversationID]?.sessionExecutions = result.executions
+        runStates[conversationID]?.sessionSourceFingerprint = fingerprint
+        runStates[conversationID]?.sessionStartResult = result
         return result
     }
 
@@ -433,6 +469,10 @@ final class HookSessionCoordinator {
         self.sessionHookContext = nil
         self.turnHookContext = nil
         self.pendingToolHookContext = nil
+        if source == "clear" {
+            runStates[conversationID]?.sessionSourceFingerprint = nil
+            runStates[conversationID]?.sessionStartResult = nil
+        }
 
         var payload = commonPayload(eventName: HookEventName.sessionStart.rawValue, model: model, sessionID: conversationID, workspaceURL: workspaceURL)
         payload["source"] = source
@@ -472,6 +512,8 @@ final class HookSessionCoordinator {
         )
 
         hookStore.recordExecutions(result.executions)
+        runStates[conversationID]?.sessionSourceFingerprint = nil
+        runStates[conversationID]?.sessionStartResult = nil
         if self.currentSessionID == conversationID {
             self.sessionHookContext = nil
             self.turnHookContext = nil
