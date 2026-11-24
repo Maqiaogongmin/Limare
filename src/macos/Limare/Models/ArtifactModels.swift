@@ -15,6 +15,8 @@ public enum ArtifactRetentionClass: String, Codable, Sendable, Equatable {
 public enum ArtifactSemanticRole: String, Codable, Sendable, Equatable {
     case screenshot
     case generatedImage
+    case generatedVideo
+    case generatedAudio
     case extractedFrame
     case documentPage
     case deliverable
@@ -26,6 +28,8 @@ public enum ArtifactSemanticRole: String, Codable, Sendable, Equatable {
 public enum ArtifactProducerProvenance: String, Codable, Sendable, Equatable {
     case browserScreenshot = "browser_screenshot"
     case generatedImage = "generated_image"
+    case generatedVideo = "generated_video"
+    case generatedAudio = "generated_audio"
     case mcpResource = "mcp_resource"
     case shellGenerated = "shell_generated"
     case hostAcquisition = "host_acquisition"

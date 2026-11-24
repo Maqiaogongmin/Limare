@@ -30,6 +30,7 @@ enum FileToolError: LocalizedError {
     case matchNotUnique(count: Int)
     case readRequired(String)
     case changedSinceRead(String)
+    case hunkFailed(index: Int, reason: String)
 
     var errorDescription: String? {
         switch self {
@@ -38,9 +39,10 @@ enum FileToolError: LocalizedError {
         case .invalidUTF8: "The file is not valid UTF-8 text."
         case .emptyMatch: "file_edit requires a non-empty old_text value."
         case .matchNotFound: "old_text was not found in the file."
-        case .matchNotUnique(let count): "old_text matched \(count) locations; provide a unique match."
+        case .matchNotUnique(let count): "old_text matched \(count) locations; provide a unique match or set replace_all: true."
         case .readRequired(let path): "Read \(path) with file_read before modifying it."
         case .changedSinceRead(let path): "\(path) changed since it was read. Read it again before modifying it."
+        case .hunkFailed(let index, let reason): "Edit hunk #\(index) failed: \(reason)"
         }
     }
 }
@@ -91,19 +93,48 @@ struct FileToolService: Sendable {
     }
 
     func editContent(url: URL, oldText: String, newText: String, writingTo location: AnchoredPath? = nil) throws -> String {
-        guard !oldText.isEmpty else { throw FileToolError.emptyMatch }
-        let original = try read(url: url)
-        let matches = original.ranges(of: oldText)
-        guard !matches.isEmpty else { throw FileToolError.matchNotFound }
-        guard matches.count == 1 else { throw FileToolError.matchNotUnique(count: matches.count) }
-        let updated = original.replacingCharacters(in: matches[0], with: newText)
-        let data = Data(updated.utf8)
+        try editContent(url: url, hunks: [(oldText: oldText, newText: newText, replaceAll: false)], writingTo: location).content
+    }
+
+    /// Validates and applies one or more edits in memory before writing the file atomically once.
+    func editContent(
+        url: URL,
+        hunks: [(oldText: String, newText: String, replaceAll: Bool)],
+        writingTo location: AnchoredPath? = nil
+    ) throws -> (content: String, replacements: Int) {
+        var working = try read(url: url)
+        var totalReplacements = 0
+        let isBatch = hunks.count > 1
+
+        for (index, hunk) in hunks.enumerated() {
+            do {
+                guard !hunk.oldText.isEmpty else { throw FileToolError.emptyMatch }
+                let matches = working.ranges(of: hunk.oldText)
+                guard !matches.isEmpty else { throw FileToolError.matchNotFound }
+                if !hunk.replaceAll && matches.count > 1 {
+                    throw FileToolError.matchNotUnique(count: matches.count)
+                }
+                if hunk.replaceAll {
+                    for range in matches.reversed() {
+                        working.replaceSubrange(range, with: hunk.newText)
+                    }
+                    totalReplacements += matches.count
+                } else {
+                    working.replaceSubrange(matches[0], with: hunk.newText)
+                    totalReplacements += 1
+                }
+            } catch let error as FileToolError where isBatch {
+                throw FileToolError.hunkFailed(index: index + 1, reason: error.localizedDescription)
+            }
+        }
+
+        let data = Data(working.utf8)
         if let location {
             try AnchoredFileSystem.write(data, to: location)
         } else {
             try data.write(to: url, options: .atomic)
         }
-        return updated
+        return (working, totalReplacements)
     }
 }
 

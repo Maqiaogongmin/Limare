@@ -13,7 +13,7 @@ enum TurnDeliverables {
             for call in message.toolCalls where call.state == .completed {
                 let registers = call.name == "artifact_register"
                 for case let .artifact(id, role, _) in call.resultParts ?? []
-                where registers || role == .deliverable || role == .generatedImage {
+                where registers || role == .deliverable || role == .generatedImage || role == .generatedVideo || role == .generatedAudio {
                     if seen.insert(id).inserted { ids.append(id) }
                 }
             }

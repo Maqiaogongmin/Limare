@@ -34,15 +34,49 @@ struct ShellArguments: Decodable {
 struct ReadArguments: Decodable { let path: String; let offset: Double?; let limit: Double? }
 struct WriteArguments: Decodable { let path: String; let content: String }
 
-struct EditArguments: Decodable {
-    let path: String
+struct EditHunk: Decodable, Sendable {
     let oldText: String
     let newText: String
+    let replaceAll: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case oldText = "old_text"
+        case newText = "new_text"
+        case replaceAll = "replace_all"
+    }
+}
+
+struct EditArguments: Decodable, Sendable {
+    let path: String
+    let oldText: String?
+    let newText: String?
+    let replaceAll: Bool?
+    let edits: [EditHunk]?
+
+    var hasPartialTopLevelPair: Bool {
+        (oldText == nil) != (newText == nil)
+    }
+
+    var resolvedHunks: [EditHunk] {
+        guard !hasPartialTopLevelPair else { return [] }
+        var result: [EditHunk] = []
+        if let oldText, let newText {
+            result.append(EditHunk(oldText: oldText, newText: newText, replaceAll: replaceAll))
+        }
+        if let edits {
+            result.append(contentsOf: edits.map {
+                EditHunk(oldText: $0.oldText, newText: $0.newText, replaceAll: $0.replaceAll ?? replaceAll)
+            })
+        }
+        return result
+    }
 
     enum CodingKeys: String, CodingKey {
         case path
         case oldText = "old_text"
         case newText = "new_text"
+        case replaceAll = "replace_all"
+        case edits
     }
 }
 

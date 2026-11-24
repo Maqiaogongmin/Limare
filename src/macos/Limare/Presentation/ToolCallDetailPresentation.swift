@@ -62,7 +62,16 @@ enum ToolCallDetail: Equatable, Sendable {
             return .fileContent(path: arguments.path, text: arguments.content)
         case .edit:
             guard let arguments: EditArguments = decode(record.input) else { return .raw }
-            return .diff(path: arguments.path, lines: diffLines(old: arguments.oldText, new: arguments.newText))
+            let hunks = arguments.resolvedHunks
+            guard !hunks.isEmpty else { return .raw }
+            var combined: [DiffLine] = []
+            for (index, hunk) in hunks.enumerated() {
+                if index > 0 {
+                    combined.append(DiffLine(kind: .unchanged, text: "⋯"))
+                }
+                combined.append(contentsOf: diffLines(old: hunk.oldText, new: hunk.newText))
+            }
+            return .diff(path: arguments.path, lines: combined)
         case .list:
             guard let arguments: FileListArguments = decode(record.input),
                   let output: FileListOutput = decode(record.output) else { return .raw }

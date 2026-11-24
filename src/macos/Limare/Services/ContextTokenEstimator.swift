@@ -50,11 +50,26 @@ enum ContextTokenEstimator {
         rawEstimatedTokens(bytes: standardImageAttachmentByteCount) + 12
     }
 
+    /// Projected wire output for completed `update_plan` calls, preserving any trailing
+    /// PostToolUse `<system-reminder>` hook suffix while keeping the base result compact.
+    static func projectedCompletedUpdatePlanOutput(_ output: String) -> String {
+        if let hookRange = output.range(of: "\n\n<system-reminder>\n", options: .backwards) {
+            return "Plan updated" + String(output[hookRange.lowerBound...])
+        }
+        return "Plan updated"
+    }
+
     static func rawMessageContentTokens(_ message: ChatMessage) -> Int {
         var bytes = message.content.lengthOfBytes(using: .utf8)
         bytes += (message.reasoningContent ?? "").lengthOfBytes(using: .utf8)
         for call in message.toolCalls {
-            bytes += call.name.utf8.count + call.input.utf8.count + call.output.utf8.count
+            let outputBytes: Int
+            if call.name == "update_plan", call.state == .completed, !call.output.hasPrefix("[TOOL RESULT OFFLOADED]") {
+                outputBytes = Self.projectedCompletedUpdatePlanOutput(call.output).utf8.count
+            } else {
+                outputBytes = call.output.utf8.count
+            }
+            bytes += call.name.utf8.count + call.input.utf8.count + outputBytes
         }
         if let echo = message.responsesReasoningEcho {
             // `encryptedContent` is opaque server-side base64 ciphertext whose byte length

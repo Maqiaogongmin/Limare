@@ -81,4 +81,21 @@ final class ConversationPresentationTests: XCTestCase {
         let remote = ToolCallRecord(providerCallID: "mcp", name: "mcp__example__update_plan", input: "{}", state: .completed)
         XCTAssertFalse(TranscriptTurnGrouping.isPlanTool(remote))
     }
+
+    func testToolCallDetailRendersMultiHunkFileEditDiff() {
+        let record = ToolCallRecord(
+            providerCallID: "edit-batch",
+            name: "file_edit",
+            input: #"{"path":"Demo.swift","edits":[{"old_text":"let a = 1","new_text":"let a = 2"},{"old_text":"let b = 3","new_text":"let b = 4"}]}"#,
+            state: .completed,
+            output: "Edited"
+        )
+        guard case .diff(let path, let lines) = ToolCallDetail.resolve(record) else {
+            return XCTFail("Expected diff detail for multi-hunk file_edit")
+        }
+        XCTAssertEqual(path, "Demo.swift")
+        XCTAssertTrue(lines.contains(ToolCallDetail.DiffLine(kind: .unchanged, text: "⋯")))
+        XCTAssertTrue(lines.contains(ToolCallDetail.DiffLine(kind: .removed, text: "let a = 1")))
+        XCTAssertTrue(lines.contains(ToolCallDetail.DiffLine(kind: .added, text: "let b = 4")))
+    }
 }

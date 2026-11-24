@@ -24,7 +24,7 @@ struct ProviderQuotaSection: View {
     }
 
     var body: some View {
-        SettingsSection(title: "Balance and limits", description: "Provider account balances and key usage can include activity from other apps and devices.", trailing: {
+        SettingsSection(title: "Balance and limits", trailing: {
             if !state.unsupported {
                 Button { Task { await appState.providerQuota.refresh(provider, force: true) } } label: {
                     if state.loading { ProgressView().controlSize(.small) }

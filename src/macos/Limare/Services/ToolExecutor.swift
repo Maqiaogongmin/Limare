@@ -127,6 +127,7 @@ final class ToolExecutor {
     private let runtimeModelRegistry: RuntimeModelRegistry?
     private let runtimeModelUseService: RuntimeModelUseService?
     private let runtimeImageGenerationService: RuntimeImageGenerationService?
+    private let runtimeMediaGenerationService: RuntimeMediaGenerationService?
     private let browserSessionStore: BrowserSessionStore
     /// Nil for legacy foreground callers. Conversation-run scoped executors set
     /// this so cancelling one run cannot tear down another queued browser action.
@@ -185,6 +186,7 @@ final class ToolExecutor {
         runtimeModelRegistry: RuntimeModelRegistry? = nil,
         runtimeModelUseService: RuntimeModelUseService? = nil,
         runtimeImageGenerationService: RuntimeImageGenerationService? = nil,
+        runtimeMediaGenerationService: RuntimeMediaGenerationService? = nil,
         browserSessionStore: BrowserSessionStore? = nil,
         browserActionConversationID: UUID? = nil,
         hookExecutionScope: (conversationID: UUID, runID: UUID, conversationTitle: String?)? = nil,
@@ -213,6 +215,7 @@ final class ToolExecutor {
         self.runtimeModelRegistry = runtimeModelRegistry
         self.runtimeModelUseService = runtimeModelUseService
         self.runtimeImageGenerationService = runtimeImageGenerationService
+        self.runtimeMediaGenerationService = runtimeMediaGenerationService
         self.browserSessionStore = browserSessionStore ?? BrowserSessionStore(attachmentStore: attachmentStore, artifactStore: artifactStore, logs: logs)
         self.browserActionConversationID = browserActionConversationID
         self.hookExecutionScope = hookExecutionScope.map {
@@ -303,6 +306,7 @@ final class ToolExecutor {
             runtimeModelRegistry: runtimeModelRegistry,
             runtimeModelUseService: runtimeModelUseService,
             runtimeImageGenerationService: runtimeImageGenerationService,
+            runtimeMediaGenerationService: runtimeMediaGenerationService,
             browserSessionStore: browserSessionStore,
             browserActionConversationID: conversationID,
             hookExecutionScope: (conversationID: conversationID, runID: runID, conversationTitle: conversationTitle),
@@ -726,8 +730,145 @@ final class ToolExecutor {
                 attachments: result.attachments,
                 resultParts: resultParts
             )
+        case "generate_video":
+            guard let service = runtimeMediaGenerationService,
+                  let entryID = arguments.entryID,
+                  let prompt = arguments.prompt else {
+                throw ToolExecutorError.invalidArguments("entry_id and prompt are required for generate_video.")
+            }
+            guard let entry = registry.resolveAllowed(entryID: entryID) else {
+                throw RuntimeModelUseError.unavailable
+            }
+            guard RuntimeModelRegistry.isVideoGeneratable(entry.model) else {
+                throw RuntimeModelUseError.unsupported
+            }
+            let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedPrompt.isEmpty else { throw RuntimeModelUseError.emptyPrompt }
+            guard prompt.count <= 50_000 else { throw RuntimeModelUseError.promptTooLarge }
+            let permission = ToolPermissionRequest(
+                toolName: "model_use",
+                summary: String(localized: "Generate a video with \(entry.provider.name) / \(entry.model.displayName)"),
+                workspaceURL: nil,
+                affectedURLs: [],
+                requestsNetwork: true,
+                isHighRisk: false
+            )
+            let approval = await authorize(permission, onUpdate: onUpdate)
+            guard approval != .denied else { return deniedOutcome() }
+            try Task.checkCancellation()
+            onUpdate(.init(state: .running, approvalState: approval, output: "Generating video with \(entry.provider.name) / \(entry.model.displayName)..."))
+            let startedAt = ContinuousClock.now
+            let convID = hookExecutionScope?.conversationID ?? activeConversationIDProvider?() ?? browserActionConversationID
+            let result: RuntimeMediaGenerationResult
+            do {
+                result = try await service.generateVideo(
+                    entryID: entryID,
+                    prompt: prompt,
+                    aspectRatio: arguments.aspectRatio,
+                    durationSeconds: arguments.durationSeconds,
+                    conversationID: convID
+                )
+            } catch {
+                let duration = milliseconds(since: startedAt)
+                let errorOutput = "Failed to generate video: \(error.localizedDescription)"
+                onUpdate(.init(state: .failed, approvalState: approval, output: errorOutput))
+                return .init(content: errorOutput, isError: true, approvalState: approval, durationMilliseconds: duration)
+            }
+            let duration = milliseconds(since: startedAt)
+            let desc = result.artifactDescriptor
+            var videoItem: [String: Any] = [
+                "artifact_id": desc.artifactID.uuidString,
+                "artifact_uri": "limare://artifacts/\(desc.artifactID.uuidString)",
+                "path": result.fileURL.path,
+                "filename": desc.filename,
+                "mime_type": desc.mimeType,
+                "byte_count": desc.byteCount,
+            ]
+            if let note = result.text { videoItem["text"] = note }
+            let payload = jsonString([
+                "status": "generated",
+                "provider": result.providerName,
+                "model": result.modelName,
+                "videos": [videoItem],
+            ])
+            onUpdate(.init(state: .completed, approvalState: approval, output: payload))
+            return .init(
+                content: payload,
+                isError: false,
+                approvalState: approval,
+                durationMilliseconds: duration,
+                resultParts: [.text(payload), .artifact(id: desc.artifactID, semanticRole: .generatedVideo, mimeType: desc.mimeType)]
+            )
+        case "generate_audio":
+            guard let service = runtimeMediaGenerationService,
+                  let entryID = arguments.entryID,
+                  let prompt = arguments.prompt else {
+                throw ToolExecutorError.invalidArguments("entry_id and prompt are required for generate_audio.")
+            }
+            guard let entry = registry.resolveAllowed(entryID: entryID) else {
+                throw RuntimeModelUseError.unavailable
+            }
+            guard RuntimeModelRegistry.isAudioGeneratable(entry.model) else {
+                throw RuntimeModelUseError.unsupported
+            }
+            let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedPrompt.isEmpty else { throw RuntimeModelUseError.emptyPrompt }
+            guard prompt.count <= 50_000 else { throw RuntimeModelUseError.promptTooLarge }
+            let permission = ToolPermissionRequest(
+                toolName: "model_use",
+                summary: String(localized: "Generate audio with \(entry.provider.name) / \(entry.model.displayName)"),
+                workspaceURL: nil,
+                affectedURLs: [],
+                requestsNetwork: true,
+                isHighRisk: false
+            )
+            let approval = await authorize(permission, onUpdate: onUpdate)
+            guard approval != .denied else { return deniedOutcome() }
+            try Task.checkCancellation()
+            onUpdate(.init(state: .running, approvalState: approval, output: "Generating audio with \(entry.provider.name) / \(entry.model.displayName)..."))
+            let startedAt = ContinuousClock.now
+            let convID = hookExecutionScope?.conversationID ?? activeConversationIDProvider?() ?? browserActionConversationID
+            let result: RuntimeMediaGenerationResult
+            do {
+                result = try await service.generateAudio(
+                    entryID: entryID,
+                    prompt: prompt,
+                    voice: arguments.voice,
+                    conversationID: convID
+                )
+            } catch {
+                let duration = milliseconds(since: startedAt)
+                let errorOutput = "Failed to generate audio: \(error.localizedDescription)"
+                onUpdate(.init(state: .failed, approvalState: approval, output: errorOutput))
+                return .init(content: errorOutput, isError: true, approvalState: approval, durationMilliseconds: duration)
+            }
+            let duration = milliseconds(since: startedAt)
+            let desc = result.artifactDescriptor
+            var audioItem: [String: Any] = [
+                "artifact_id": desc.artifactID.uuidString,
+                "artifact_uri": "limare://artifacts/\(desc.artifactID.uuidString)",
+                "path": result.fileURL.path,
+                "filename": desc.filename,
+                "mime_type": desc.mimeType,
+                "byte_count": desc.byteCount,
+            ]
+            if let note = result.text { audioItem["text"] = note }
+            let payload = jsonString([
+                "status": "generated",
+                "provider": result.providerName,
+                "model": result.modelName,
+                "audios": [audioItem],
+            ])
+            onUpdate(.init(state: .completed, approvalState: approval, output: payload))
+            return .init(
+                content: payload,
+                isError: false,
+                approvalState: approval,
+                durationMilliseconds: duration,
+                resultParts: [.text(payload), .artifact(id: desc.artifactID, semanticRole: .generatedAudio, mimeType: desc.mimeType)]
+            )
         default:
-            throw ToolExecutorError.invalidArguments("action must be list, search, run, or generate_image.")
+            throw ToolExecutorError.invalidArguments("action must be list, search, run, generate_image, generate_video, or generate_audio.")
         }
     }
 
@@ -952,8 +1093,11 @@ final class ToolExecutor {
         let inlineStderrLimit = 8_192
         let stdoutExceedsInline = sanitizedStdout.utf8.count > inlineStdoutLimit
         let stderrExceedsInline = sanitizedStderr.utf8.count > inlineStderrLimit
+        let rawSanitizedDisplay = sanitizedShellText(rawDisplayOutput, masking: secretValues)
+        let terminalDisplayLimit = inlineStdoutLimit + (sanitizedStderr.isEmpty ? 0 : inlineStderrLimit)
+        let displayExceedsInline = rawSanitizedDisplay.utf8.count > terminalDisplayLimit
         var fullOutputPath: String? = nil
-        if stdoutExceedsInline || stderrExceedsInline {
+        if stdoutExceedsInline || stderrExceedsInline || displayExceedsInline {
             fullOutputPath = writeSanitizedShellOverflowLog(
                 callID: call.id,
                 stdout: sanitizedStdout,
@@ -993,7 +1137,12 @@ final class ToolExecutor {
         } else {
             terminalState = .completed
         }
-        let displayOutput = sanitizedShellText(rawDisplayOutput, masking: secretValues)
+        let displayOutput = bounded(
+            rawSanitizedDisplay,
+            maximumBytes: terminalDisplayLimit,
+            fullOutputPath: fullOutputPath,
+            tailFraction: truncationTailFraction
+        )
         onUpdate(.init(state: terminalState, approvalState: approval, output: displayOutput))
         logs.info("Tool", "shell_execute finished with exit code \(result.exitCode.map(String.init) ?? "none").")
         return .init(
@@ -1011,7 +1160,7 @@ final class ToolExecutor {
     ) async throws -> ToolExecutionOutcome {
         let arguments: ReadArguments = try decode(call)
         if arguments.path.hasPrefix("limare://attachments/") {
-            return try executeAttachmentFileRead(path: arguments.path, onUpdate: onUpdate)
+            return try await executeAttachmentFileRead(arguments: arguments, onUpdate: onUpdate)
         }
         let context = try fileContext(path: arguments.path, mustExist: true)
         let approval = await authorize(
@@ -1025,9 +1174,16 @@ final class ToolExecutor {
         if UTType(filenameExtension: context.url.pathExtension)?.conforms(to: .image) == true {
             return try readImageFile(context.url, approval: approval, startedAt: startedAt, onUpdate: onUpdate)
         }
-        let content = try files.read(url: context.url)
+        let fileTools = files
+        let fileURL = context.url
+        let content = try await Self.runOffMainActor {
+            try fileTools.read(url: fileURL)
+        }
+        let readByteCap = arguments.limit != nil
+            ? Self.maximumExplicitFileReadBytes
+            : Self.defaultUnboundedFileReadBytes
         let boundedContent: String
-        switch FileReadWindow.apply(content, offset: arguments.offset, limit: arguments.limit, maximumBytes: 65_536) {
+        switch FileReadWindow.apply(content, offset: arguments.offset, limit: arguments.limit, maximumBytes: readByteCap) {
         case .success(let window): boundedContent = window
         case .failure(let failure): throw ToolExecutorError.invalidArguments(failure.message)
         }
@@ -1083,7 +1239,11 @@ final class ToolExecutor {
         )
     }
 
-    private func executeAttachmentFileRead(path: String, onUpdate: @escaping UpdateHandler) throws -> ToolExecutionOutcome {
+    private func executeAttachmentFileRead(
+        arguments: ReadArguments,
+        onUpdate: @escaping UpdateHandler
+    ) async throws -> ToolExecutionOutcome {
+        let path = arguments.path
         let startedAt = ContinuousClock.now
         let url = try attachmentStore.fileURL(forAttachmentURI: path)
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -1103,15 +1263,44 @@ final class ToolExecutor {
         onUpdate(.init(state: .running, approvalState: .notRequired, output: ""))
         let output: String
         if classification.kind == .text {
-            let handle = try FileHandle(forReadingFrom: url)
-            defer { try? handle.close() }
-            let data = try handle.read(upToCount: 65_537) ?? Data()
-            guard let decoded = String(data: data.prefix(65_536), encoding: .utf8) else {
+            let readByteCap = arguments.limit != nil
+                ? Self.maximumExplicitFileReadBytes
+                : Self.defaultUnboundedFileReadBytes
+            let maxAttachmentReadBytes = files.maximumReadBytes
+            let attachmentURL = url
+            let readResult: (text: String?, clipped: Bool) = try await Self.runOffMainActor {
+                let handle = try FileHandle(forReadingFrom: attachmentURL)
+                defer { try? handle.close() }
+                let data = try handle.read(upToCount: maxAttachmentReadBytes + 1) ?? Data()
+                let clipped = data.count > maxAttachmentReadBytes
+                let raw = clipped ? Data(data.prefix(maxAttachmentReadBytes)) : data
+                if let direct = String(data: raw, encoding: .utf8) {
+                    return (direct, clipped)
+                }
+                if clipped {
+                    for trim in 1...min(3, raw.count) {
+                        if let valid = String(data: raw.dropLast(trim), encoding: .utf8) {
+                            return (valid, true)
+                        }
+                    }
+                }
+                return (nil, clipped)
+            }
+            guard let decoded = readResult.text else {
                 output = AttachmentReferenceFormatter.unsupportedInspection(for: attachment)
                 onUpdate(.init(state: .completed, approvalState: .notRequired, output: output))
                 return .init(content: output, isError: false, approvalState: .notRequired, durationMilliseconds: milliseconds(since: startedAt))
             }
-            output = decoded + (data.count > 65_536 ? "\n… output truncated for model context …" : "")
+            let window: String
+            switch FileReadWindow.apply(decoded, offset: arguments.offset, limit: arguments.limit, maximumBytes: readByteCap) {
+            case .success(let applied): window = applied
+            case .failure(let failure): throw ToolExecutorError.invalidArguments(failure.message)
+            }
+            if readResult.clipped && !window.hasSuffix(" …") {
+                output = window + "\n… output truncated for model context …"
+            } else {
+                output = window
+            }
         } else {
             output = AttachmentReferenceFormatter.unsupportedInspection(for: attachment)
         }
@@ -1161,18 +1350,29 @@ final class ToolExecutor {
         }
 
         let startedAt = ContinuousClock.now
-        let entries = try researchFiles.listFiles(
-            in: containmentRoot,
-            subpath: containmentSubpath,
-            recursive: args.recursive ?? true,
-            maxDepth: args.max_depth ?? ResearchFileService.defaultMaxDepth,
-            maxEntries: args.max_entries ?? ResearchFileService.defaultMaxEntries
-        )
+        let research = researchFiles
+        let recursive = args.recursive ?? true
+        let maxDepth = args.max_depth ?? ResearchFileService.defaultMaxDepth
+        let maxEntries = args.max_entries ?? ResearchFileService.defaultMaxEntries
+        let payload = try await Self.runOffMainActor {
+            let result = try research.listFilesWithMetadata(
+                in: containmentRoot,
+                subpath: containmentSubpath,
+                recursive: recursive,
+                maxDepth: maxDepth,
+                maxEntries: maxEntries
+            )
+            var object: [String: Any] = [
+                "count": result.entries.count,
+                "entries": result.entries
+            ]
+            if result.truncated {
+                object["truncated"] = true
+                object["truncation_hint"] = "Showing first \(result.entries.count) entries; narrow path or max_depth for more."
+            }
+            return Self.jsonString(object)
+        }
         let duration = milliseconds(since: startedAt)
-        let payload = jsonString([
-            "count": entries.count,
-            "entries": entries
-        ])
         onUpdate(.init(state: .completed, approvalState: approval, output: payload))
         return ToolExecutionOutcome(content: payload, isError: false, approvalState: approval, durationMilliseconds: duration)
     }
@@ -1221,20 +1421,38 @@ final class ToolExecutor {
         }
 
         let startedAt = ContinuousClock.now
-        let results = try researchFiles.searchFiles(
-            in: containmentRoot,
-            query: args.query,
-            subpath: containmentSubpath,
-            mode: args.mode ?? "content",
-            isRegex: args.regex ?? false,
-            maxResults: args.max_results ?? ResearchFileService.defaultMaxSearchResults
-        )
+        let research = researchFiles
+        let query = args.query
+        let mode = args.mode ?? "content"
+        let isRegex = args.regex ?? false
+        let maxResults = args.max_results ?? ResearchFileService.defaultMaxSearchResults
+        let payload = try await Self.runOffMainActor {
+            let result = try research.searchFilesWithMetadata(
+                in: containmentRoot,
+                query: query,
+                subpath: containmentSubpath,
+                mode: mode,
+                isRegex: isRegex,
+                maxResults: maxResults
+            )
+            var object: [String: Any] = [
+                "query": query,
+                "count": result.results.count,
+                "results": result.results
+            ]
+            if result.truncated || result.perFileTruncatedFiles > 0 {
+                object["truncated"] = true
+                if result.perFileTruncatedFiles > 0 && !result.truncated {
+                    object["truncation_hint"] = "\(result.perFileTruncatedFiles) file(s) capped at \(ResearchFileService.defaultMaxMatchesPerFile) matches per file; narrow path to a single file for all matches."
+                } else if result.perFileTruncatedFiles > 0 {
+                    object["truncation_hint"] = "Showing first \(result.results.count) matches (capped at \(ResearchFileService.defaultMaxMatchesPerFile) per file); narrow path or query for more."
+                } else {
+                    object["truncation_hint"] = "Showing first \(result.results.count) matches; narrow path or query for more."
+                }
+            }
+            return Self.jsonString(object)
+        }
         let duration = milliseconds(since: startedAt)
-        let payload = jsonString([
-            "query": args.query,
-            "count": results.count,
-            "results": results
-        ])
         onUpdate(.init(state: .completed, approvalState: approval, output: payload))
         return ToolExecutionOutcome(content: payload, isError: false, approvalState: approval, durationMilliseconds: duration)
     }
@@ -1442,21 +1660,30 @@ final class ToolExecutor {
         onUpdate: @escaping UpdateHandler
     ) async throws -> ToolExecutionOutcome {
         let arguments: EditArguments = try decode(call)
+        if arguments.hasPartialTopLevelPair {
+            throw ToolExecutorError.invalidArguments("file_edit received only one of old_text or new_text; provide both old_text and new_text, or use edits.")
+        }
+        let hunks = arguments.resolvedHunks
+        guard !hunks.isEmpty else {
+            throw ToolExecutorError.invalidArguments("file_edit requires old_text and new_text, or a non-empty edits array.")
+        }
         let context = try fileContext(path: arguments.path, mustExist: true)
         let approval = await authorize(context.request(toolName: call.function.name, action: "Edit"), allowedReadDirectories: allowedReadDirectories(), onUpdate: onUpdate)
         guard approval != .denied else { return deniedOutcome() }
         onUpdate(.init(state: .running, approvalState: approval, output: ""))
         let startedAt = ContinuousClock.now
         try permissions.fileReadVersions.requireCurrent(at: context.url, conversationID: fileVersionConversationID)
-        let updated = try recordedWrite(context.url, call: call) { location in
-            try files.editContent(url: context.url, oldText: arguments.oldText, newText: arguments.newText, writingTo: location)
+        let serviceHunks = hunks.map { (oldText: $0.oldText, newText: $0.newText, replaceAll: $0.replaceAll ?? false) }
+        let result = try recordedWrite(context.url, call: call) { location in
+            try files.editContent(url: context.url, hunks: serviceHunks, writingTo: location)
         }
-        permissions.fileReadVersions.record(updated, at: context.url, conversationID: fileVersionConversationID)
+        permissions.fileReadVersions.record(result.content, at: context.url, conversationID: fileVersionConversationID)
         if isSkillFile?(context.url, workspace.url) == true {
             onSkillDirectoryModified?(workspace.url)
         }
-        let count = updated.utf8.count
-        let output = "Edited \(context.url.path); resulting file is \(count) bytes. (file state is current in your context — no need to file_read it back to verify)" + memoryCapacityFeedback(for: context.url)
+        let count = result.content.utf8.count
+        let replacementSummary = result.replacements > 1 ? " (\(result.replacements) replacements)" : ""
+        let output = "Edited \(context.url.path)\(replacementSummary); resulting file is \(count) bytes. (file state is current in your context — no need to file_read it back to verify)" + memoryCapacityFeedback(for: context.url)
         onUpdate(.init(state: .completed, approvalState: approval, output: output))
         logs.info("Tool", output)
         return .init(content: output, isError: false, approvalState: approval, durationMilliseconds: milliseconds(since: startedAt))
@@ -1660,17 +1887,69 @@ final class ToolExecutor {
 
         let state: ToolExecutionState = result.isError ? .failed : .completed
         onExtensionUsed?(.mcpTool(serverID: serverID))
-        onUpdate(.init(state: state, approvalState: approval, output: result.content))
+
+        let boundedOutcome = boundMCPToolOutcome(
+            content: result.content,
+            resultParts: result.resultParts,
+            serverID: serverID,
+            callID: call.id
+        )
+
+        onUpdate(.init(state: state, approvalState: approval, output: boundedOutcome.content))
         logs.info("MCP", "Finished tool '\(toolName)' on '\(serverID)' in \(duration)ms.")
 
         return ToolExecutionOutcome(
-            content: result.content,
+            content: boundedOutcome.content,
             isError: result.isError,
             approvalState: approval,
             durationMilliseconds: duration,
             attachments: result.attachments,
-            resultParts: result.resultParts
+            resultParts: boundedOutcome.resultParts
         )
+    }
+
+    func boundMCPToolOutcome(
+        content: String,
+        resultParts: [ToolResultPart]?,
+        serverID: String,
+        callID: String
+    ) -> (content: String, resultParts: [ToolResultPart]?) {
+        guard content.utf8.count > Self.inlineMCPResultLimit else {
+            return (content, resultParts)
+        }
+        let redactedFullContent = SecretMasker.redactCredentials(content)
+        guard redactedFullContent.utf8.count > Self.inlineMCPResultLimit else {
+            let updatedParts: [ToolResultPart]? = resultParts.map { existing in
+                let nonTextParts = existing.filter {
+                    if case .text = $0 { return false }
+                    return true
+                }
+                return [.text(redactedFullContent)] + nonTextParts
+            }
+            return (redactedFullContent, updatedParts)
+        }
+        let overflowPath = writeOverflowToolLog(
+            prefix: "limare-mcp-\(serverID)",
+            callID: callID,
+            content: redactedFullContent
+        )
+        let boundedContent = bounded(
+            redactedFullContent,
+            maximumBytes: Self.inlineMCPResultLimit,
+            fullOutputPath: overflowPath,
+            tailFraction: 0.25
+        )
+        let boundedParts: [ToolResultPart]?
+        if let existingParts = resultParts {
+            let nonTextParts = existingParts.filter {
+                if case .text = $0 { return false }
+                return true
+            }
+            boundedParts = [.text(boundedContent)] + nonTextParts
+        } else {
+            boundedParts = nil
+        }
+        return (boundedContent, boundedParts)
     }
 
     private nonisolated static func mcpServerFingerprint(_ server: MCPServerConfig) -> String? {
@@ -2283,15 +2562,45 @@ final class ToolExecutor {
         }
         let available = max(0, maximumBytes - notice.utf8.count)
         if available == 0 {
-            return String(decoding: data.prefix(maximumBytes), as: UTF8.self)
+            var capEnd = min(maximumBytes, data.count)
+            while capEnd > 0 && capEnd < data.count && (data[capEnd] & 0xC0) == 0x80 {
+                capEnd -= 1
+            }
+            return String(decoding: data[..<capEnd], as: UTF8.self)
         }
         let clampedTail = min(1.0, max(0.0, tailFraction))
         let tailBytes = Int((Double(available) * clampedTail).rounded())
         let headBytes = available - tailBytes
-        return String(decoding: data.prefix(headBytes), as: UTF8.self)
+        var headEnd = min(headBytes, data.count)
+        while headEnd > 0 && headEnd < data.count && (data[headEnd] & 0xC0) == 0x80 {
+            headEnd -= 1
+        }
+        var tailStart = max(0, data.count - tailBytes)
+        while tailStart < data.count && (data[tailStart] & 0xC0) == 0x80 {
+            tailStart += 1
+        }
+        return String(decoding: data[..<headEnd], as: UTF8.self)
             + notice
-            + String(decoding: data.suffix(tailBytes), as: UTF8.self)
+            + String(decoding: data[tailStart...], as: UTF8.self)
     }
+
+    private nonisolated static func runOffMainActor<T: Sendable>(
+        _ operation: @escaping @Sendable () throws -> T
+    ) async throws -> T {
+        let work = Task.detached(priority: .userInitiated) {
+            try Task.checkCancellation()
+            return try operation()
+        }
+        return try await withTaskCancellationHandler {
+            try await work.value
+        } onCancel: {
+            work.cancel()
+        }
+    }
+
+    static let defaultUnboundedFileReadBytes = 24_576
+    static let maximumExplicitFileReadBytes = 65_536
+    static let inlineMCPResultLimit = 24_576
 
     static var shellOverflowDirectoryURL: URL {
         FileManager.default.temporaryDirectory
@@ -2299,7 +2608,7 @@ final class ToolExecutor {
             .appendingPathComponent("limare-shell-overflow", isDirectory: true)
     }
 
-    private func writeSanitizedShellOverflowLog(callID: String, stdout: String, stderr: String) -> String? {
+    private func writeOverflowToolLog(prefix: String, callID: String, content: String) -> String? {
         let dir = Self.shellOverflowDirectoryURL
         do {
             try FileManager.default.createDirectory(
@@ -2310,9 +2619,25 @@ final class ToolExecutor {
         } catch {
             return nil
         }
-        let safeID = String(callID.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) || $0 == "-" || $0 == "_" })
+        let sanitize: (String) -> String = { raw in
+            String(raw.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) || $0 == "-" || $0 == "_" })
+        }
+        let safePrefix = sanitize(prefix)
+        let filePrefix = safePrefix.isEmpty ? "limare-tool" : safePrefix
+        let safeID = sanitize(callID)
         let suffix = safeID.isEmpty ? UUID().uuidString : safeID
-        let logURL = dir.appendingPathComponent("limare-shell-\(suffix).log")
+        let logURL = dir.appendingPathComponent("\(filePrefix)-\(suffix).log")
+        guard FileManager.default.createFile(
+            atPath: logURL.path,
+            contents: Data(content.utf8),
+            attributes: [.posixPermissions: 0o600]
+        ) else {
+            return nil
+        }
+        return logURL.path
+    }
+
+    private func writeSanitizedShellOverflowLog(callID: String, stdout: String, stderr: String) -> String? {
         var sections: [String] = []
         if !stdout.isEmpty {
             sections.append(stderr.isEmpty ? stdout : "[stdout]\n\(stdout)")
@@ -2320,15 +2645,11 @@ final class ToolExecutor {
         if !stderr.isEmpty {
             sections.append("[stderr]\n\(stderr)")
         }
-        let body = sections.joined(separator: "\n\n")
-        guard FileManager.default.createFile(
-            atPath: logURL.path,
-            contents: Data(body.utf8),
-            attributes: [.posixPermissions: 0o600]
-        ) else {
-            return nil
-        }
-        return logURL.path
+        return writeOverflowToolLog(
+            prefix: "limare-shell",
+            callID: callID,
+            content: sections.joined(separator: "\n\n")
+        )
     }
 
     private func sanitizedShellText(_ text: String, masking secrets: [String]) -> String {
@@ -3336,6 +3657,10 @@ final class ToolExecutor {
     }
 
     private func jsonString(_ object: [String: Any]) -> String {
+        Self.jsonString(object)
+    }
+
+    private nonisolated static func jsonString(_ object: [String: Any]) -> String {
         guard JSONSerialization.isValidJSONObject(object),
               let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]),
               let result = String(data: data, encoding: .utf8) else {
@@ -3403,13 +3728,18 @@ final class ToolExecutor {
         let artifactIDs: [String]?
         let size: String?
         let quality: String?
+        let aspectRatio: String?
+        let durationSeconds: Int?
+        let voice: String?
 
         enum CodingKeys: String, CodingKey {
-            case action, query, prompt, size, quality
+            case action, query, prompt, size, quality, voice
             case entryID = "entry_id"
             case systemPrompt = "system_prompt"
             case maxTokens = "max_tokens"
             case artifactIDs = "artifact_ids"
+            case aspectRatio = "aspect_ratio"
+            case durationSeconds = "duration_seconds"
         }
     }
 

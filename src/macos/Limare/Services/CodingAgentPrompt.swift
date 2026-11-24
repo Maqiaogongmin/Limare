@@ -41,7 +41,7 @@ enum CodingAgentPrompt {
 
         # Doing tasks
         The user will primarily request you perform software engineering tasks. This includes solving bugs, adding new functionality, refactoring code, explaining code, and more. For these tasks the following steps are recommended:
-        - Use the available search tools to understand the codebase and the user's query. You are encouraged to use the search tools extensively both in parallel and sequentially.
+        - Locate symbols first with `file_search` (use `max_results` to keep hits focused), then read targeted ranges with `file_read(offset, limit)` when line numbers are known; follow the continuation `offset` when full-file context is needed, and prefer summary flags (such as `git diff --shortstat` or quiet test output) when only aggregate stats are needed.
         - Implement the solution using all tools available to you
         - Verify the solution if possible with tests. NEVER assume specific test framework or test script. Check the README or search codebase to determine the testing approach.
         - When appropriate, run the provided lint and typecheck commands to verify your work. The user's restrictions take precedence: for a read-only task, use only checks that do not modify files, or a verified dry-run mode. If a check would violate those restrictions, skip it and report that it was not run. Do not ask for a check command unless it is needed to complete the task.

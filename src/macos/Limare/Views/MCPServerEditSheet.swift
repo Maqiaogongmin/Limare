@@ -146,26 +146,26 @@ struct MCPServerEditFormView: View {
     // MARK: - STDIO Sections
 
     private var stdioPrimarySection: some View {
-        SettingsSection(title: "Connection Details", description: "Executable process running locally on this Mac") {
-            FormField("Name:", caption: isEditing ? "Server name cannot be changed." : "Unique identifier for this MCP server") {
+        SettingsSection(title: "Connection Details") {
+            FormField("Name:") {
                 TextField("e.g. filesystem", text: $draft.serverID)
                     .textFieldStyle(.roundedBorder)
                     .disabled(isEditing)
             }
 
-            FormField("Command:", caption: "Command or executable binary path") {
+            FormField("Command:") {
                 TextField("e.g. npx, python3, /usr/local/bin/server", text: $draft.command)
                     .textFieldStyle(.roundedBorder)
             }
 
-            FormField("Arguments:", caption: "Command-line arguments (separated by spaces or newlines)") {
+            FormField("Arguments:") {
                 TextEditor(text: $draft.argumentsText)
                     .font(.system(.body, design: .monospaced))
                     .frame(height: 54)
                     .overlay(RoundedRectangle(cornerRadius: AppRadius.small).stroke(AppColors.borderMuted, lineWidth: 1))
             }
 
-            FormField("Note:", caption: "Optional human description") {
+            FormField("Note:") {
                 TextField("e.g. Local file system tools", text: $draft.note)
                     .textFieldStyle(.roundedBorder)
             }
@@ -175,17 +175,16 @@ struct MCPServerEditFormView: View {
     private var stdioAdvancedSection: some View {
         DisclosureSection(
             title: "Advanced",
-            summary: "Environment variables, startup timeout",
             isExpanded: $isAdvancedExpanded
         ) {
-            FormField("Environment:", caption: "KEY=VALUE per line. Sensitive values are stored in the Limare private vault.", labelWidth: nil) {
+            FormField("Environment:", labelWidth: nil) {
                 TextEditor(text: $draft.environmentText)
                     .font(.system(.body, design: .monospaced))
                     .frame(height: 72)
                     .overlay(RoundedRectangle(cornerRadius: AppRadius.small).stroke(AppColors.borderMuted, lineWidth: 1))
             }
 
-            FormField("Timeout:", caption: "Maximum seconds to wait for server initialization") {
+            FormField("Timeout:") {
                 HStack(spacing: AppSpacing.small) {
                     Stepper("\(draft.timeoutSeconds)s", value: $draft.timeoutSeconds, in: 5...300, step: 5)
                     Spacer()
@@ -197,20 +196,20 @@ struct MCPServerEditFormView: View {
     // MARK: - HTTP Sections
 
     private var httpPrimarySection: some View {
-        SettingsSection(title: "Connection Details", description: "Remote server endpoint (Streamable HTTP)") {
-            FormField("Name:", caption: isEditing ? "Server name cannot be changed." : "Unique identifier for this MCP server") {
+        SettingsSection(title: "Connection Details") {
+            FormField("Name:") {
                 TextField("e.g. remote-docs", text: $draft.serverID)
                     .textFieldStyle(.roundedBorder)
                     .disabled(isEditing)
             }
 
-            FormField("URL:", caption: profile.map { "Fixed by the \($0.contract.displayName) profile." } ?? "Server endpoint URL (HTTP/HTTPS)") {
+            FormField("URL:", caption: profile.map { "Fixed by the \($0.contract.displayName) profile." }) {
                 TextField("https://example.com/mcp", text: $draft.urlString)
                     .textFieldStyle(.roundedBorder)
                     .disabled(profile != nil)
             }
 
-            FormField("Note:", caption: "Optional human description") {
+            FormField("Note:") {
                 TextField("e.g. Documentation search endpoint", text: $draft.note)
                     .textFieldStyle(.roundedBorder)
             }
@@ -220,10 +219,9 @@ struct MCPServerEditFormView: View {
     private var httpAdvancedSection: some View {
         DisclosureSection(
             title: "Advanced",
-            summary: MCPStore.oauthAdmitted ? "Custom HTTP headers, authorization" : "Custom HTTP headers, access token",
             isExpanded: $isAdvancedExpanded
         ) {
-            FormField("Headers:", caption: "Header: Value per line, e.g. Authorization: Bearer <token>. Sensitive values are stored in Limare's private storage after you confirm.", labelWidth: nil) {
+            FormField("Headers:", labelWidth: nil) {
                 TextEditor(text: $draft.headersText)
                     .font(.system(.body, design: .monospaced))
                     .frame(height: 80)
@@ -233,12 +231,12 @@ struct MCPServerEditFormView: View {
 
             // Client setup is offered only while SDK OAuth is admitted.
             if MCPStore.oauthAdmitted {
-                FormField("OAuth Client ID:", caption: "Only for servers that cannot register Limare automatically: the client ID of an OAuth app you registered with the provider. Leave empty otherwise.", labelWidth: nil) {
+                FormField("OAuth Client ID:", labelWidth: nil) {
                     TextField("Optional", text: $draft.oauthClientID)
                         .textFieldStyle(.roundedBorder)
                 }
 
-                FormField("OAuth Client Secret:", caption: "Saved with the connection in Limare's private storage after you confirm, never in configuration. Changing the URL or client ID removes it.", labelWidth: nil) {
+                FormField("OAuth Client Secret:", labelWidth: nil) {
                     SecureField(oauthClientSecretPlaceholder, text: $draft.oauthClientSecret)
                         .textFieldStyle(.roundedBorder)
                 }
@@ -249,7 +247,7 @@ struct MCPServerEditFormView: View {
     // MARK: - Import Form
 
     private var importForm: some View {
-        SettingsSection(title: "Import JSON Configuration", description: "Paste Claude Desktop mcpServers configuration JSON below:") {
+        SettingsSection(title: "Import JSON Configuration") {
             TextEditor(text: $jsonImportText)
                 .font(.system(.body, design: .monospaced))
                 .frame(height: 180)

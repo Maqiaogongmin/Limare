@@ -37,7 +37,6 @@ struct RemoteAccessSettingsView: View {
                     }
                 }
             }
-            footnote("Use this Limare from your phone's browser while Limare runs on this Mac. Limare listens only on 127.0.0.1; Cloudflare Tunnel is the only way in, and Cloudflare Access signs in the one person allowed.")
 
             SettingsSection(title: "Cloudflare Tunnel") {
                 field("Public hostname") {
@@ -56,7 +55,6 @@ struct RemoteAccessSettingsView: View {
                     SecretField(hasStoredSecret: remote.hasTunnelToken, replacementSecret: $replacementToken, placeholder: String(localized: "Paste the tunnel token"), secretName: String(localized: "Tunnel token"))
                 }
             }
-            footnote("In Cloudflare Zero Trust, create a tunnel, add a public hostname with service http://127.0.0.1:\(portText.isEmpty ? String(RemoteAccessConfiguration.defaultPort) : portText), and turn on Protect with Access for that route. The token is kept in Limare's private secret store and passed to cloudflared only through its environment.")
 
             SettingsSection(title: "Cloudflare Access") {
                 field("Team domain") {
@@ -79,7 +77,6 @@ struct RemoteAccessSettingsView: View {
                         .settingsFieldWell()
                 }
             }
-            footnote("Every request must carry an Access token signed for this application and this email; anything else gets 403, including programs on this Mac.")
 
             // Under the last card, at its right edge: charcoal while there is something to save.
             HStack(spacing: AppSpacing.small) {
@@ -111,14 +108,6 @@ struct RemoteAccessSettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, AppSemanticSpacing.settingsRowVerticalPadding)
-    }
-
-    private func footnote(_ text: LocalizedStringKey) -> some View {
-        Text(text)
-            .font(AppTypography.interfaceCaption)
-            .foregroundStyle(AppColors.textSecondary)
-            .padding(.horizontal, AppSpacing.xxSmall)
-            .padding(.top, -AppSpacing.small)
     }
 
     private var isDirty: Bool {

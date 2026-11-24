@@ -362,7 +362,7 @@ private struct QuickTestCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             case .running:
-                Text(kind == .vision ? (effectiveProbe ? "Probing vision capability with sample image..." : "Sending test image and prompt...") : "Sending text prompt...")
+                Text(kind == .vision ? (effectiveProbe ? "Probing vision capability with sample image..." : "Sending test image and prompt...") : (kind == .liveVoice ? "Connecting GPT-Live WebSocket session..." : "Sending text prompt..."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             case .passed(_, let output):

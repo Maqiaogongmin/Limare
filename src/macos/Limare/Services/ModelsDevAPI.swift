@@ -597,6 +597,29 @@ public enum ModelsDevAPI {
         return resolveConsensus(from: values.map(canonicalCapacityTier))
     }
 
+    /// Resolves modality consensus across independent providers (`votes.count >= 2`).
+    /// Exact set consensus wins first; when providers agree on core modalities but differ on an
+    /// optional bit (e.g. `pdfInput` or `textOutput`), resolves each modality bit by strict majority.
+    public static func resolveModalityConsensus(from votes: [ModelModality]) -> ModelModality? {
+        guard votes.count >= 2 else { return nil }
+        if let exact = resolveConsensus(from: votes) {
+            return exact
+        }
+        let bits: [ModelModality] = [
+            .textInput, .textOutput,
+            .imageInput, .pdfInput, .audioInput, .videoInput,
+            .imageOutput, .audioOutput, .videoOutput
+        ]
+        var agreed: ModelModality = []
+        for bit in bits {
+            let supportCount = votes.reduce(0) { $0 + ($1.contains(bit) ? 1 : 0) }
+            if supportCount * 2 > votes.count {
+                agreed.insert(bit)
+            }
+        }
+        return agreed.isEmpty ? nil : agreed
+    }
+
     /// Within a single provider, resolves whether all declared non-nil alias values agree.
     /// If all declared values match, returns that unique value (1 vote).
     /// If there is an internal conflict between aliases, returns `nil` (the provider abstains on this field).
@@ -726,7 +749,7 @@ public enum ModelsDevAPI {
                 }
             }
 
-            let resModality = resolveConsensus(from: modalityVotes)
+            let resModality = resolveModalityConsensus(from: modalityVotes)
             let resContext = resolveCapacityConsensus(from: contextVotes)
             let resOutput = resolveCapacityConsensus(from: outputVotes)
             let resReasoning = resolveConsensus(from: reasoningVotes)

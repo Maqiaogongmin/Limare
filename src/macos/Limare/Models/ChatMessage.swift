@@ -501,17 +501,20 @@ struct ChatToolDefinition: Encodable, Sendable {
 enum HarnessToolDefinitions {
     static let modelUseDefinition: ChatToolDefinition = definition(
         name: "model_use",
-        description: "Discover user-approved runtime models (via list/search), run isolated text tasks (via run), or generate images with approved image-output models (via generate_image).",
+        description: "Discover user-approved runtime models (via list/search), run isolated text tasks (via run), or generate images, videos, or audio with approved specialist models (via generate_image, generate_video, generate_audio).",
         properties: [
-            "action": .init(type: "string", description: "One of: list, search, run, generate_image."),
-            "query": .init(type: "string", description: "Required for search. Matches model name, model ID, or Provider name."),
-            "entry_id": .init(type: "string", description: "Exact composite entry_id returned by list/search; required for run and generate_image."),
-            "prompt": .init(type: "string", description: "Explicit prompt text; required for run and generate_image."),
+            "action": .init(type: "string", description: "One of: list, search, run, generate_image, generate_video, generate_audio."),
+            "query": .init(type: "string", description: "Required for search. Matches model name, model ID, Provider name, group name, modality, or action."),
+            "entry_id": .init(type: "string", description: "Exact composite entry_id returned by list/search; required for run, generate_image, generate_video, and generate_audio."),
+            "prompt": .init(type: "string", description: "Explicit prompt text; required for run, generate_image, generate_video, and generate_audio."),
             "system_prompt": .init(type: "string", description: "Optional explicit system prompt for the isolated request (run only)."),
             "max_tokens": .init(type: "number", description: "Optional positive output limit (run only); defaults to 2048 and is capped at 8192 and the model limit."),
             "artifact_ids": .init(type: "array", description: "Optional array of UUID strings for input artifacts to attach (run only)."),
-            "size": .init(type: "string", description: "Optional image size string for generate_image (e.g. 1024x1024)."),
+            "size": .init(type: "string", description: "Optional image size or aspect ratio string for generate_image (e.g. 1024x1024 or 16:9)."),
             "quality": .init(type: "string", description: "Optional image quality string for generate_image (e.g. standard, hd)."),
+            "aspect_ratio": .init(type: "string", description: "Optional video aspect ratio for generate_video (e.g. 16:9, 9:16)."),
+            "duration_seconds": .init(type: "number", description: "Optional video duration in seconds for generate_video."),
+            "voice": .init(type: "string", description: "Optional voice name for generate_audio."),
         ],
         required: ["action"]
     )
@@ -671,7 +674,7 @@ enum HarnessToolDefinitions {
             "additionalProperties": false])))
 
     static let toolSearchDefinition = definition(name: "tool_search",
-        description: "Load deferred tools (listed by name under DEFERRED TOOLS) so you can call them. Query \"select:name1,name2\" loads those tools; other queries load the best keyword matches. Returns the loaded tools' definitions; call them from your next step.",
+        description: "Load deferred tools (listed by name under DEFERRED TOOLS) so they become callable from your next step. Query \"select:name1,name2\" batch-loads all named tools in one call; other queries load the best keyword matches.",
         properties: [
             "query": .init(type: "string", description: "\"select:<tool names, comma separated>\" or search keywords"),
             "max_results": .init(type: "number", description: "For keyword queries: how many tools to load (default 5).")
@@ -720,16 +723,35 @@ enum HarnessToolDefinitions {
             ],
             required: ["path", "content"]
         ),
-        definition(
+        ChatToolDefinition(function: .init(
             name: "file_edit",
-            description: "Replace one unique exact text occurrence in a UTF-8 file on this Mac. First read the file with file_read in this conversation; read it again if it has changed.",
-            properties: [
-                "path": .init(type: "string", description: "Absolute or relative file path."),
-                "old_text": .init(type: "string", description: "Exact existing text; it must occur once."),
-                "new_text": .init(type: "string", description: "Replacement text."),
-            ],
-            required: ["path", "old_text", "new_text"]
-        ),
+            description: "Edit an existing UTF-8 file on this Mac by replacing exact text occurrences. First read the file with file_read in this conversation; read it again if it has changed. For a single change, pass old_text and new_text (set replace_all to true to replace every occurrence). For multiple changes to the same file, batch all of them in one call via edits so they apply atomically in a single turn.",
+            rawParameters: AnyCodable.from(json: [
+                "type": "object",
+                "properties": [
+                    "path": ["type": "string", "description": "Absolute or relative file path."],
+                    "old_text": ["type": "string", "description": "Exact existing text to replace (for a single edit)."],
+                    "new_text": ["type": "string", "description": "Replacement text (for a single edit)."],
+                    "replace_all": ["type": "boolean", "description": "Optional. Replace all occurrences of old_text instead of requiring a unique match."],
+                    "edits": [
+                        "type": "array",
+                        "description": "Optional list of sequential edits to apply atomically to the same file in one call.",
+                        "items": [
+                            "type": "object",
+                            "properties": [
+                                "old_text": ["type": "string", "description": "Exact existing text to replace."],
+                                "new_text": ["type": "string", "description": "Replacement text."],
+                                "replace_all": ["type": "boolean", "description": "Optional. Replace all occurrences of old_text."]
+                            ],
+                            "required": ["old_text", "new_text"],
+                            "additionalProperties": false
+                        ]
+                    ]
+                ],
+                "required": ["path"],
+                "additionalProperties": false
+            ])
+        )),
         attachmentCopyDefinition,
         resourceConvertDefinition,
         artifactAcquireDefinition,
@@ -793,7 +815,7 @@ enum HarnessToolDefinitions {
 
     static let fileReadDefinition = definition(
         name: "file_read",
-        description: "Read bounded UTF-8 text from a local file or limare:// attachment. A local image file (PNG, JPEG, HEIC…) is returned as the image itself; other binary attachments return metadata only. Large files: read them in parts with offset and limit; a cut-off result says where to continue. Do not re-read a file you just wrote or edited to verify — file_write and file_edit fail with an error if the change did not apply.",
+        description: "Read bounded UTF-8 text from a local file or limare:// attachment. A local image file (PNG, JPEG, HEIC…) is returned as the image itself; other binary attachments return metadata only. Without limit, returns up to 24 KiB with a continuation offset; pass offset and limit to read targeted ranges (up to 64 KiB) or continue reading. Do not re-read a file you just wrote or edited to verify — file_write and file_edit fail with an error if the change did not apply.",
         properties: [
             "path": .init(type: "string", description: "Absolute path, relative path, or limare://attachments/<filename>."),
             "offset": .init(type: "number", description: "Optional. 1-based line to start reading at."),

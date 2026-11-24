@@ -4,6 +4,19 @@ struct RuntimeModelEntry: Sendable, Equatable {
     let entryID: String
     let provider: ProviderConfiguration
     let model: ProviderModel
+    let groupNames: [String]
+
+    init(
+        entryID: String,
+        provider: ProviderConfiguration,
+        model: ProviderModel,
+        groupNames: [String] = []
+    ) {
+        self.entryID = entryID
+        self.provider = provider
+        self.model = model
+        self.groupNames = groupNames
+    }
 
     var availableActions: [String] {
         var actions: [String] = []
@@ -13,6 +26,12 @@ struct RuntimeModelEntry: Sendable, Equatable {
         if RuntimeModelRegistry.isImageGeneratable(model) {
             actions.append("generate_image")
         }
+        if RuntimeModelRegistry.isVideoGeneratable(model) {
+            actions.append("generate_video")
+        }
+        if RuntimeModelRegistry.isAudioGeneratable(model) {
+            actions.append("generate_audio")
+        }
         return actions
     }
 
@@ -21,6 +40,10 @@ struct RuntimeModelEntry: Sendable, Equatable {
             return "text"
         } else if RuntimeModelRegistry.isImageGeneratable(model) {
             return "image_generation"
+        } else if RuntimeModelRegistry.isVideoGeneratable(model) {
+            return "video_generation"
+        } else if RuntimeModelRegistry.isAudioGeneratable(model) {
+            return "audio_generation"
         } else {
             return "unsupported_in_current_runtime"
         }
@@ -48,6 +71,7 @@ struct RuntimeModelEntry: Sendable, Equatable {
             "runtime": runtime,
             "available_actions": availableActions,
         ]
+        if !groupNames.isEmpty { result["groups"] = groupNames }
         result["availability"] = model.discovery.availability
         if let contextWindow = model.contextWindow { result["context_window"] = contextWindow }
         if let maxOutputTokens = model.maxOutputTokens { result["max_output_tokens"] = maxOutputTokens }
@@ -83,6 +107,17 @@ final class RuntimeModelRegistry {
     }
 
     var entries: [RuntimeModelEntry] {
+        var groupsByEntryID: [String: [String]] = [:]
+        for groupID in modelGroups.agentLoopGroupIds {
+            guard let group = modelGroups.group(for: groupID) else { continue }
+            for memberID in group.memberEntryIds {
+                var list = groupsByEntryID[memberID, default: []]
+                if !list.contains(group.name) {
+                    list.append(group.name)
+                    groupsByEntryID[memberID] = list
+                }
+            }
+        }
         var seen = Set<String>()
         return configuredEntryIDs.compactMap { entryID in
             guard seen.insert(entryID).inserted,
@@ -90,7 +125,12 @@ final class RuntimeModelRegistry {
                   let provider = providers.providers.first(where: { $0.id == parsed.providerID }),
                   let model = provider.models.first(where: { $0.id == parsed.modelID }) else { return nil }
             // Hidden affects new pickers, never an existing explicit binding.
-            return RuntimeModelEntry(entryID: entryID, provider: provider, model: model)
+            return RuntimeModelEntry(
+                entryID: entryID,
+                provider: provider,
+                model: model,
+                groupNames: groupsByEntryID[entryID] ?? []
+            )
         }
     }
 
@@ -114,11 +154,7 @@ final class RuntimeModelRegistry {
     func search(_ query: String) -> [RuntimeModelEntry] {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !needle.isEmpty else { return [] }
-        return entries.filter {
-            $0.model.displayName.localizedCaseInsensitiveContains(needle)
-                || $0.model.id.localizedCaseInsensitiveContains(needle)
-                || $0.provider.name.localizedCaseInsensitiveContains(needle)
-        }
+        return entries.filter { Self.matches($0, query: needle) }
     }
 
     /// Runtime tool projection only. Settings and validation continue to use
@@ -127,11 +163,25 @@ final class RuntimeModelRegistry {
     func searchExecutable(_ query: String) -> [RuntimeModelEntry] {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !needle.isEmpty else { return [] }
-        return executableEntries.filter {
-            $0.model.displayName.localizedCaseInsensitiveContains(needle)
-                || $0.model.id.localizedCaseInsensitiveContains(needle)
-                || $0.provider.name.localizedCaseInsensitiveContains(needle)
+        return executableEntries.filter { Self.matches($0, query: needle) }
+    }
+
+    private nonisolated static func matches(_ entry: RuntimeModelEntry, query needle: String) -> Bool {
+        if entry.model.displayName.localizedCaseInsensitiveContains(needle)
+            || entry.model.id.localizedCaseInsensitiveContains(needle)
+            || entry.provider.name.localizedCaseInsensitiveContains(needle) {
+            return true
         }
+        if entry.groupNames.contains(where: { $0.localizedCaseInsensitiveContains(needle) }) {
+            return true
+        }
+        if entry.modalityNames.contains(where: { $0.localizedCaseInsensitiveContains(needle) }) {
+            return true
+        }
+        if entry.availableActions.contains(where: { $0.localizedCaseInsensitiveContains(needle) }) {
+            return true
+        }
+        return false
     }
 
     func resolveAllowed(entryID: String) -> RuntimeModelEntry? {
@@ -139,6 +189,7 @@ final class RuntimeModelRegistry {
     }
 
     nonisolated static func isTextCallable(_ model: ProviderModel) -> Bool {
+        if OpenAIGPTLiveRouting.isGPTLiveModel(model.id) { return false }
         guard let modality = model.modality else { return true }
         return modality.contains(.textInput) && modality.contains(.textOutput)
     }
@@ -146,6 +197,16 @@ final class RuntimeModelRegistry {
     nonisolated static func isImageGeneratable(_ model: ProviderModel) -> Bool {
         guard let modality = model.modality else { return false }
         return modality.contains(.textInput) && modality.contains(.imageOutput)
+    }
+
+    nonisolated static func isVideoGeneratable(_ model: ProviderModel) -> Bool {
+        guard let modality = model.modality else { return false }
+        return modality.contains(.textInput) && modality.contains(.videoOutput)
+    }
+
+    nonisolated static func isAudioGeneratable(_ model: ProviderModel) -> Bool {
+        guard let modality = model.modality else { return false }
+        return modality.contains(.textInput) && modality.contains(.audioOutput)
     }
 
     public enum EntryReadiness: Equatable, Sendable {

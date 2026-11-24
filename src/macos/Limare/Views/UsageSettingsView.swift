@@ -186,10 +186,7 @@ struct UsageSettingsView: View {
     // MARK: - Overview
 
     private func overview(_ report: UsageReport) -> some View {
-        SettingsSection(
-            title: "Overview",
-            description: "Requests count model calls, including tool loops and retries that start a new call. Cache figures use requests with complete cache data."
-        ) {
+        SettingsSection(title: "Overview") {
             VStack(alignment: .leading, spacing: AppSpacing.medium) {
                 HStack(alignment: .top, spacing: 0) {
                     kpiColumn(

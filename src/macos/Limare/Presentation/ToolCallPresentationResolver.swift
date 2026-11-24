@@ -164,8 +164,9 @@ enum ToolCallPresentationResolver {
 
         if name == "model_use" || name.hasSuffix("model_use") {
             let action = json["action"] as? String ?? ""
-            if action == "generate_image", let prompt = json["prompt"] as? String {
-                return "generate_image: \(prompt.trimmingCharacters(in: .whitespacesAndNewlines))"
+            if (action == "generate_image" || action == "generate_video" || action == "generate_audio"),
+               let prompt = json["prompt"] as? String {
+                return "\(action): \(prompt.trimmingCharacters(in: .whitespacesAndNewlines))"
             } else if action == "run", let prompt = json["prompt"] as? String {
                 return "run: \(prompt.trimmingCharacters(in: .whitespacesAndNewlines))"
             } else if action == "search", let query = json["query"] as? String {

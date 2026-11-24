@@ -20,6 +20,16 @@ struct ChatView: View {
             let coversChat = workSurface.isPresented
                 && (workSurface.isExpanded
                     || geometry.size.width < AppLayout.chatMinimumWidth + AppLayout.workSurfaceMinimumWidth)
+            let minWS = Double(AppLayout.workSurfaceMinimumWidth)
+            let maxWS = max(minWS, Double(geometry.size.width) - Double(AppLayout.chatMinimumWidth))
+            let clampedWSWidth = min(maxWS, max(minWS, workSurfaceWidth))
+            let breadcrumbMaxWidth: CGFloat? = {
+                guard workSurface.isPresented else { return nil }
+                if coversChat { return 0 }
+                let chatWidth = geometry.size.width - CGFloat(clampedWSWidth)
+                let leadingChrome: CGFloat = geometry.frame(in: .global).minX <= 1 ? 136 : 24
+                return max(0, chatWidth - leadingChrome - AppSpacing.medium)
+            }()
             HStack(spacing: 0) {
                 if !coversChat {
                     chatColumn
@@ -30,19 +40,12 @@ struct ChatView: View {
                 // One view in every layout, so a drag on its edge carries on while the chat
                 // and the sidebar step aside.
                 if workSurface.isPresented {
-                    let minWS = Double(AppLayout.workSurfaceMinimumWidth)
-                    let maxWS = max(minWS, Double(geometry.size.width) - Double(AppLayout.chatMinimumWidth))
-                    let clampedWSWidth = min(maxWS, max(minWS, workSurfaceWidth))
-
                     // Up into the title bar, level with the sidebar's top, unless it covers a
                     // window whose sidebar is hidden: its tabs would run under the traffic lights.
                     let risesIntoTitleBar = !coversChat || geometry.frame(in: .global).minX > 1
 
                     WorkSurfaceView()
-                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { [titleBar] in
-                            titleBar.workSurfaceFrame = $0
-                        }
-                        .onDisappear { [titleBar] in titleBar.workSurfaceFrame = nil }
+                        .onDisappear { [titleBar] in titleBar.availableBreadcrumbWidth = nil }
                         // A sheet inset on the canvas: clear of the window's edges, and of the
                         // chat's edge when it covers the chat.
                         .padding(.top, risesIntoTitleBar ? AppSpacing.workSurfaceTopInset : AppSpacing.workSurfaceInset)
@@ -63,6 +66,11 @@ struct ChatView: View {
             }
             // One canvas under the chat and around the Work Surface sheet, up under the title bar.
             .background(AppColors.canvas.ignoresSafeArea())
+            .onChange(of: breadcrumbMaxWidth, initial: true) { _, next in
+                if titleBar.availableBreadcrumbWidth != next {
+                    titleBar.availableBreadcrumbWidth = next
+                }
+            }
         }
         // Links clicked in messages open in the Work Surface browser; ⌘-click opens them in the
         // default browser.
@@ -280,48 +288,35 @@ struct ChatView: View {
     }
 }
 
-/// The Work Surface sheet's frame in window coordinates, while it is shown.
+/// Maximum width the title-bar breadcrumb may take before reaching the Work Surface sheet.
 @MainActor
 @Observable
 private final class TitleBarLayout {
-    var workSurfaceFrame: CGRect?
+    var availableBreadcrumbWidth: CGFloat?
 }
 
 /// The breadcrumb in the title bar, stopping short of the Work Surface sheet where the sheet
-/// shares the title bar's height with it, hidden where the sheet covers where it starts.
+/// shares the title bar's height with it, and hidden when the sheet covers the chat.
 ///
-/// The full title, hidden, sets the toolbar item's width, and the shown title is truncated over
-/// it. The toolbar centres its item's content, so a breadcrumb that narrowed itself would move
-/// right by half of what it gave up, read less room from its new place and narrow again, never
-/// settling, and it would keep the whole window rendering.
+/// Width flows one-way from `ChatView`'s `GeometryReader` (`availableBreadcrumbWidth`) rather than
+/// measuring the breadcrumb's own frame or placing a `.hidden()` untruncated copy in the toolbar
+/// (which would cause layout feedback or let the toolbar item extend over the Work Surface tabs).
 private struct TitleBreadcrumb: View {
     let text: Text
     let titleBar: TitleBarLayout
-    @State private var frame: CGRect?
 
     var body: some View {
-        text
-            .lineLimit(1)
-            .hidden()
-            .overlay(alignment: .leading) {
-                let width = room
-                text
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .accessibilityAddTraits(.isHeader)
-                    .frame(maxWidth: width, alignment: .leading)
-                    .opacity(width == 0 ? 0 : 1)
-            }
-            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame = $0 }
-    }
-
-    /// Up to the sheet, less a margin; none when that leaves too little; unlimited when the
-    /// sheet is elsewhere.
-    private var room: CGFloat? {
-        guard let sheet = titleBar.workSurfaceFrame, let frame,
-              sheet.minY < frame.maxY, sheet.maxX > frame.minX else { return nil }
-        let room = sheet.minX - frame.minX - AppSpacing.medium
-        return room < AppSpacing.xLarge ? 0 : room
+        let maxWidth = titleBar.availableBreadcrumbWidth
+        if let maxWidth, maxWidth < AppSpacing.xLarge {
+            EmptyView()
+        } else {
+            text
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .accessibilityAddTraits(.isHeader)
+                .frame(maxWidth: maxWidth, alignment: .leading)
+                .allowsHitTesting(false)
+        }
     }
 }
 

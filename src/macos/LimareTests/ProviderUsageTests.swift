@@ -1799,6 +1799,164 @@ final class ProviderUsageTests: XCTestCase {
         XCTAssertEqual(capture.lastOptions?.usageKind, .permissionReview)
         XCTAssertEqual(capture.lastOptions?.model?.id, model.id)
     }
+
+    @MainActor
+    func testMCPResultReducerCapsContentOffloadsOverflowAndPreservesArtifacts() throws {
+        let root = self.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let logs = DebugLogStore(storageRootURL: root, osLogProjection: { _, _, _ in })
+        let workspace = WorkspaceStore(storageRootURL: root.appendingPathComponent("ws"), logs: logs)
+        let permissions = PermissionStore(logs: logs, initialMode: .fullAccess)
+        let executor = ToolExecutor(workspace: workspace, permissions: permissions, logs: logs)
+
+        let artifactID = UUID()
+        let hugeContent = String(repeating: "M", count: 32_000)
+        let bounded = executor.boundMCPToolOutcome(
+            content: hugeContent,
+            resultParts: [.text(hugeContent), .artifact(id: artifactID, semanticRole: .image, mimeType: "image/png")],
+            serverID: "srv",
+            callID: "mcp-cap-\(UUID().uuidString.prefix(8))"
+        )
+        XCTAssertLessThanOrEqual(bounded.content.utf8.count, ToolExecutor.inlineMCPResultLimit)
+        XCTAssertTrue(bounded.content.contains("limare-shell-overflow"))
+        XCTAssertTrue(bounded.content.contains("inspect with file_read(offset, limit)"))
+
+        let parts = try XCTUnwrap(bounded.resultParts)
+        XCTAssertEqual(parts.count, 2)
+        if case .text(let text) = parts[0] {
+            XCTAssertEqual(text, bounded.content)
+        } else {
+            XCTFail("Expected bounded text part first")
+        }
+        XCTAssertEqual(parts[1], .artifact(id: artifactID, semanticRole: .image, mimeType: "image/png"))
+
+        if let markerRange = bounded.content.range(of: "saved to "),
+           let endRange = bounded.content[markerRange.upperBound...].range(of: "; inspect") {
+            let path = String(bounded.content[markerRange.upperBound..<endRange.lowerBound])
+            XCTAssertTrue(FileManager.default.fileExists(atPath: path))
+            try? FileManager.default.removeItem(atPath: path)
+        } else {
+            XCTFail("Expected overflow path in bounded MCP output")
+        }
+
+        // UTF-8 safety: multi-byte CJK output must never split into U+FFFD replacement characters.
+        let cjkContent = String(repeating: "日志条目：处理完成；", count: 2_000)
+        let cjkBounded = executor.boundMCPToolOutcome(
+            content: cjkContent,
+            resultParts: [.text(cjkContent)],
+            serverID: "srv",
+            callID: "mcp-cjk-\(UUID().uuidString.prefix(8))"
+        )
+        XCTAssertLessThanOrEqual(cjkBounded.content.utf8.count, ToolExecutor.inlineMCPResultLimit)
+        XCTAssertFalse(cjkBounded.content.contains("\u{FFFD}"))
+        if let markerRange = cjkBounded.content.range(of: "saved to "),
+           let endRange = cjkBounded.content[markerRange.upperBound...].range(of: "; inspect") {
+            let path = String(cjkBounded.content[markerRange.upperBound..<endRange.lowerBound])
+            try? FileManager.default.removeItem(atPath: path)
+        }
+
+        // Redaction before overflow write: if redacting a long secret drops payload <= 24 KiB,
+        // no orphan overflow file should be created.
+        let secretBody = String(repeating: "A", count: 20_000) + "Bearer " + String(repeating: "s3cr3tToken", count: 600)
+        XCTAssertGreaterThan(secretBody.utf8.count, ToolExecutor.inlineMCPResultLimit)
+        let redactedUnderCap = executor.boundMCPToolOutcome(
+            content: secretBody,
+            resultParts: [.text(secretBody)],
+            serverID: "srv",
+            callID: "mcp-redact-\(UUID().uuidString.prefix(8))"
+        )
+        XCTAssertLessThanOrEqual(redactedUnderCap.content.utf8.count, ToolExecutor.inlineMCPResultLimit)
+        XCTAssertFalse(redactedUnderCap.content.contains("limare-shell-overflow"))
+        XCTAssertTrue(redactedUnderCap.content.contains("Bearer ••••"))
+    }
+
+    @MainActor
+    func testToolSearchUsesWordBoundariesAndFiltersStopWords() throws {
+        let root = self.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let app = AppState(storageRootURL: root)
+        let runID = UUID()
+        app.conversationRuns.runDeferredCandidates[runID] = [
+            ChatToolDefinition(function: .init(
+                name: "mcp__davinci__set_color_type",
+                description: "Adjust color grading parameters for use in resolve timeline.",
+                parameters: .init(type: "object", properties: [:], required: [], additionalProperties: false)
+            )),
+            ChatToolDefinition(function: .init(
+                name: "mcp__desktop__control_apps",
+                description: "Computer control for other apps: click, type text, and capture screenshot.",
+                parameters: .init(type: "object", properties: [:], required: [], additionalProperties: false)
+            )),
+            ChatToolDefinition(function: .init(
+                name: "mcp__github__getFileContents",
+                description: "Fetch contents from a repository path.",
+                parameters: .init(type: "object", properties: [:], required: [], additionalProperties: false)
+            )),
+            ChatToolDefinition(function: .init(
+                name: "mcp__github__createHTMLReport",
+                description: "Generate an HTML summary report.",
+                parameters: .init(type: "object", properties: [:], required: [], additionalProperties: false)
+            )),
+            ChatToolDefinition(function: .init(
+                name: "mcp__notes__profile_read",
+                description: "Read user profile preferences.",
+                parameters: .init(type: "object", properties: [:], required: [], additionalProperties: false)
+            )),
+            ChatToolDefinition(function: .init(
+                name: "mcp__feishu__listCalendar",
+                description: "获取飞书日历事件列表。",
+                parameters: .init(type: "object", properties: [:], required: [], additionalProperties: false)
+            )),
+        ]
+
+        let outcome = app.conversationRuns.runToolSearch(
+            ProviderToolCall(
+                id: "ts-1",
+                function: .init(
+                    name: "tool_search",
+                    arguments: #"{"query":"computer use control other apps click type screenshot"}"#
+                )
+            ),
+            runID: runID
+        )
+        XCTAssertFalse(outcome.isError)
+        XCTAssertTrue(outcome.content.contains("mcp__desktop__control_apps"))
+        XCTAssertFalse(outcome.content.contains("mcp__davinci__set_color_type"))
+
+        let camelOutcome = app.conversationRuns.runToolSearch(
+            ProviderToolCall(
+                id: "ts-2",
+                function: .init(name: "tool_search", arguments: #"{"query":"file contents"}"#)
+            ),
+            runID: runID
+        )
+        XCTAssertFalse(camelOutcome.isError)
+        XCTAssertTrue(camelOutcome.content.contains("mcp__github__getFileContents"))
+        XCTAssertFalse(camelOutcome.content.contains("mcp__notes__profile_read"))
+
+        let acronymOutcome = app.conversationRuns.runToolSearch(
+            ProviderToolCall(
+                id: "ts-3",
+                function: .init(name: "tool_search", arguments: #"{"query":"html report"}"#)
+            ),
+            runID: runID
+        )
+        XCTAssertFalse(acronymOutcome.isError)
+        XCTAssertTrue(acronymOutcome.content.contains("mcp__github__createHTMLReport"))
+
+        let cjkOutcome = app.conversationRuns.runToolSearch(
+            ProviderToolCall(
+                id: "ts-4",
+                function: .init(name: "tool_search", arguments: #"{"query":"日历"}"#)
+            ),
+            runID: runID
+        )
+        XCTAssertFalse(cjkOutcome.isError)
+        XCTAssertTrue(cjkOutcome.content.contains("mcp__feishu__listCalendar"))
+
+        XCTAssertTrue(ConversationRunCoordinator.searchTokens(from: "s3Upload").contains("upload"))
+        XCTAssertTrue(ConversationRunCoordinator.searchTokens(from: "读取并编辑MCP配置").contains("mcp"))
+    }
 }
 
 private final class ReviewerOptionsCaptureClient: ProviderClient, @unchecked Sendable {

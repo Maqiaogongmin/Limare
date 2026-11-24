@@ -261,7 +261,7 @@ public struct ProviderSettingsView: View {
                     .textFieldStyle(.roundedBorder)
             }
 
-            FormField("Base URL", caption: "API host address. Suffix /v1 is configured in Advanced options below.") {
+            FormField("Base URL") {
                 TextField("https://api.openai.com", text: $state.draft.baseURL)
                     .textFieldStyle(.roundedBorder)
                     .textContentType(.URL)
@@ -303,7 +303,6 @@ public struct ProviderSettingsView: View {
     private var modelsSection: some View {
         SettingsSection(
             title: "Models",
-            description: "These models are discovered from or added to this provider. Presence here does not guarantee current reachability. Use Quick Test for an on-demand execution check.",
             trailing: {
                 HStack(spacing: AppSpacing.small) {
                     if !state.isNew {
@@ -462,9 +461,6 @@ public struct ProviderSettingsView: View {
                 Button(method.actionTitle) { state.authenticate(store: appState.providers) }
                     .buttonStyle(.charcoalProminent)
                     .disabled(state.activeOperation.isWorking || state.draft.name.trimmingCharacters(in: .whitespaces).isEmpty)
-                Text("Opens your browser.")
-                    .font(.caption)
-                    .foregroundStyle(AppColors.textSecondary)
                 Spacer(minLength: 0)
             }
         }
@@ -481,7 +477,6 @@ public struct ProviderSettingsView: View {
     private var advancedSection: some View {
         DisclosureSection(
             title: "Advanced Configuration",
-            summary: "Protocol format, /v1 suffix, custom headers, and deletion.",
             isExpanded: $state.isAdvancedExpanded
         ) {
             FormField("API Protocol Format") {
@@ -497,7 +492,7 @@ public struct ProviderSettingsView: View {
             }
 
             if state.draft.providerIdentity == .custom || state.draft.protocolAdapter == .anthropicMessages {
-                FormField("Models URL", caption: "Optional full URL for model discovery. Leave empty to use this API base.") {
+                FormField("Models URL") {
                     TextField("https://host/v1/models", text: Binding(
                         get: { state.draft.modelsURL ?? "" },
                         set: { state.draft.modelsURL = $0.isEmpty ? nil : $0 }
@@ -530,7 +525,7 @@ public struct ProviderSettingsView: View {
                 )
             }
 
-            FormField("User-Agent", caption: "Custom User-Agent header for proxy routing or tracing.") {
+            FormField("User-Agent") {
                 TextField(
                     "Limare (Default)",
                     text: Binding(
@@ -888,7 +883,7 @@ public struct ModelInspectorSheet: View {
                     }
 
                     // 2. Detected Capabilities (Unknown is explicitly distinct from Not Supported)
-                    SettingsSection(title: "Detected Capabilities", description: "Inferred from provider catalog and models metadata.") {
+                    SettingsSection(title: "Detected Capabilities") {
                         FormField("Reasoning Support") {
                             HStack(spacing: 6) {
                                 Text(autoReasoningSummary)
@@ -979,7 +974,6 @@ public struct ModelInspectorSheet: View {
                     // 3. Overrides (Progressive Disclosure)
                     DisclosureSection(
                         title: "Custom Overrides",
-                        summary: model.overrides.isEmpty ? "No active overrides." : "Display name, tokens, reasoning, or modality overridden.",
                         isExpanded: $isOverridesExpanded
                     ) {
                         FormField("Display Name Override") {

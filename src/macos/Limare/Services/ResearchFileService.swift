@@ -27,6 +27,8 @@ public struct ResearchFileService: Sendable {
     public static let maxAllowedEntries = 500
     public static let defaultMaxSearchResults = 100
     public static let maxAllowedSearchResults = 100
+    public static let defaultMaxMatchesPerFile = 20
+    public static let defaultMaxSearchOutputBytes = 24_576
     public static let maxContentSearchFileBytes = 1_048_576 // 1MB
 
     private static let ignoredDirectoryNames: Set<String> = [
@@ -47,6 +49,22 @@ public struct ResearchFileService: Sendable {
         maxDepth: Int = defaultMaxDepth,
         maxEntries: Int = defaultMaxEntries
     ) throws -> [[String: Any]] {
+        try listFilesWithMetadata(
+            in: workspaceURL,
+            subpath: subpath,
+            recursive: recursive,
+            maxDepth: maxDepth,
+            maxEntries: maxEntries
+        ).entries
+    }
+
+    public func listFilesWithMetadata(
+        in workspaceURL: URL,
+        subpath: String = ".",
+        recursive: Bool = true,
+        maxDepth: Int = defaultMaxDepth,
+        maxEntries: Int = defaultMaxEntries
+    ) throws -> (entries: [[String: Any]], truncated: Bool) {
         let rootURL = try resolveURL(subpath: subpath, workspaceURL: workspaceURL)
         let effectiveDepth = min(max(maxDepth, 1), Self.maxAllowedDepth)
         let effectiveMaxEntries = min(max(maxEntries, 1), Self.maxAllowedEntries)
@@ -58,6 +76,7 @@ public struct ResearchFileService: Sendable {
         let relativeBase = workspaceURL
 
         var entries: [[String: Any]] = []
+        var truncated = false
         let fileManager = FileManager.default
         let standardizedContainmentPath = containmentRoot.standardizedFileURL.path
 
@@ -68,12 +87,16 @@ public struct ResearchFileService: Sendable {
                 options: [.skipsHiddenFiles]
             )
             for fileURL in contents.sorted(by: { $0.path < $1.path }) {
-                guard entries.count < effectiveMaxEntries else { break }
+                try Task.checkCancellation()
                 let name = fileURL.lastPathComponent
                 if name.hasPrefix(".") || Self.ignoredDirectoryNames.contains(name) { continue }
                 let resolved = fileURL.resolvingSymlinksInPath()
                 guard WorkspacePathResolver.isInsideWorkspace(resolved, workspaceURL: containmentRoot) else { continue }
                 if PermissionEvaluator.isSensitivePath(fileURL) || PermissionEvaluator.isSensitivePath(resolved) { continue }
+                if entries.count >= effectiveMaxEntries {
+                    truncated = true
+                    break
+                }
                 let relative = relativePath(from: relativeBase, to: fileURL)
                 let isDir = (try? fileURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
                 entries.append([
@@ -81,7 +104,7 @@ public struct ResearchFileService: Sendable {
                     "type": isDir ? "directory" : "file"
                 ])
             }
-            return entries
+            return (entries, truncated)
         }
 
         let enumerator = fileManager.enumerator(
@@ -91,7 +114,7 @@ public struct ResearchFileService: Sendable {
         )
 
         while let fileURL = enumerator?.nextObject() as? URL {
-            guard entries.count < effectiveMaxEntries else { break }
+            try Task.checkCancellation()
             let name = fileURL.lastPathComponent
             let isDir = (try? fileURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
             let resolved = fileURL.resolvingSymlinksInPath()
@@ -122,6 +145,10 @@ public struct ResearchFileService: Sendable {
                 continue
             }
 
+            if entries.count >= effectiveMaxEntries {
+                truncated = true
+                break
+            }
             let relative = relativePath(from: relativeBase, to: fileURL)
             entries.append([
                 "path": relative,
@@ -129,7 +156,7 @@ public struct ResearchFileService: Sendable {
             ])
         }
 
-        return entries
+        return (entries, truncated)
     }
 
     public func searchFiles(
@@ -140,6 +167,24 @@ public struct ResearchFileService: Sendable {
         isRegex: Bool = false,
         maxResults: Int = defaultMaxSearchResults
     ) throws -> [[String: Any]] {
+        try searchFilesWithMetadata(
+            in: workspaceURL,
+            query: query,
+            subpath: subpath,
+            mode: mode,
+            isRegex: isRegex,
+            maxResults: maxResults
+        ).results
+    }
+
+    public func searchFilesWithMetadata(
+        in workspaceURL: URL,
+        query: String,
+        subpath: String = ".",
+        mode: String = "content",
+        isRegex: Bool = false,
+        maxResults: Int = defaultMaxSearchResults
+    ) throws -> (results: [[String: Any]], truncated: Bool, perFileTruncatedFiles: Int) {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedQuery.isEmpty else {
             throw ResearchFileError.searchError("Search query cannot be empty.")
@@ -166,10 +211,13 @@ public struct ResearchFileService: Sendable {
         }
 
         var results: [[String: Any]] = []
+        var truncated = false
+        var perFileTruncatedFiles = 0
 
         // A file path searches that file, as grep and rg do.
         var isDirectory: ObjCBool = false
         var singleFile: URL? = fileManager.fileExists(atPath: rootURL.path, isDirectory: &isDirectory) && !isDirectory.boolValue ? rootURL : nil
+        let isSingleFileSearch = singleFile != nil
         let enumerator = singleFile == nil ? fileManager.enumerator(
             at: rootURL,
             includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey],
@@ -184,8 +232,13 @@ public struct ResearchFileService: Sendable {
         }
 
         var boundary = MCPInfrastructureBoundary.AccessChecker()
+        var accumulatedBytes = 0
         while let fileURL = nextFile() {
-            guard results.count < effectiveMaxResults else { break }
+            try Task.checkCancellation()
+            if results.count >= effectiveMaxResults {
+                truncated = true
+                break
+            }
             do { try boundary.require(fileURL) }
             catch { enumerator?.skipDescendants(); continue }
             let name = fileURL.lastPathComponent
@@ -223,6 +276,10 @@ public struct ResearchFileService: Sendable {
                     matches = name.localizedCaseInsensitiveContains(trimmedQuery)
                 }
                 if matches {
+                    if results.count >= effectiveMaxResults {
+                        truncated = true
+                        break
+                    }
                     results.append([
                         "path": relative,
                         "type": "file"
@@ -247,9 +304,10 @@ public struct ResearchFileService: Sendable {
                     continue
                 }
 
+                var fileMatchCount = 0
                 let lines = content.components(separatedBy: .newlines)
                 for (index, line) in lines.enumerated() {
-                    guard results.count < effectiveMaxResults else { break }
+                    try Task.checkCancellation()
                     let lineMatches: Bool
                     if let regex {
                         lineMatches = regex.firstMatch(in: line, range: NSRange(location: 0, length: line.utf16.count)) != nil
@@ -258,19 +316,37 @@ public struct ResearchFileService: Sendable {
                     }
 
                     if lineMatches {
+                        if !isSingleFileSearch && fileMatchCount >= Self.defaultMaxMatchesPerFile {
+                            perFileTruncatedFiles += 1
+                            break
+                        }
+                        if results.count >= effectiveMaxResults {
+                            truncated = true
+                            break
+                        }
                         let trimmedLine = line.trimmingCharacters(in: .whitespaces)
                         let boundedSnippet = String(trimmedLine.prefix(200))
+                        let entryBytes = relative.utf8.count + boundedSnippet.utf8.count + 48
+                        if !results.isEmpty && accumulatedBytes + entryBytes > Self.defaultMaxSearchOutputBytes {
+                            truncated = true
+                            break
+                        }
                         results.append([
                             "path": relative,
                             "line": index + 1,
                             "snippet": boundedSnippet
                         ])
+                        accumulatedBytes += entryBytes
+                        fileMatchCount += 1
                     }
+                }
+                if truncated {
+                    break
                 }
             }
         }
 
-        return results
+        return (results, truncated, perFileTruncatedFiles)
     }
 
     private func resolveURL(subpath: String, workspaceURL: URL) throws -> URL {

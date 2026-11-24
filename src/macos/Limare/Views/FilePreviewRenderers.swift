@@ -156,13 +156,227 @@ public struct FilePreviewToolbar: View {
 
 // MARK: - Markdown Preview View (Preview + Source)
 
+public enum MarkdownPreviewSegment: Equatable, Sendable {
+    case markdown(String)
+    case image(alt: String, source: String)
+}
+
+public enum MarkdownPreviewSegmentSplitter {
+    /// Splits Markdown into prose segments and standalone image lines (`![alt](url)` or `<img ...>`)
+    /// while leaving fenced code blocks untouched.
+    public static func split(_ source: String) -> [MarkdownPreviewSegment] {
+        let lines = source.components(separatedBy: .newlines)
+        var segments: [MarkdownPreviewSegment] = []
+        var markdownBuffer: [String] = []
+        var activeFenceChar: Character?
+        var activeFenceLength = 0
+
+        func flushMarkdown() {
+            guard !markdownBuffer.isEmpty else { return }
+            let joined = markdownBuffer.joined(separator: "\n")
+            if !joined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                segments.append(.markdown(joined))
+            }
+            markdownBuffer.removeAll(keepingCapacity: true)
+        }
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if let fence = parseFence(trimmed) {
+                if let current = activeFenceChar {
+                    if fence.char == current && fence.length >= activeFenceLength && fence.infoIsEmpty {
+                        activeFenceChar = nil
+                        activeFenceLength = 0
+                    }
+                } else {
+                    activeFenceChar = fence.char
+                    activeFenceLength = fence.length
+                }
+                markdownBuffer.append(line)
+                continue
+            }
+
+            if activeFenceChar == nil, let image = parseStandaloneImageLine(trimmed) {
+                flushMarkdown()
+                segments.append(.image(alt: image.alt, source: image.source))
+                continue
+            }
+
+            markdownBuffer.append(line)
+        }
+
+        flushMarkdown()
+        return segments
+    }
+
+    /// Resolves a Markdown image source to an existing local file URL relative to `documentURL`.
+    /// Returns `nil` for remote HTTP(S) URLs (passive preview never fetches network assets) or missing files.
+    public static func resolveLocalImageURL(source: String, documentURL: URL?) -> URL? {
+        let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let lower = trimmed.lowercased()
+        if lower.hasPrefix("http://") || lower.hasPrefix("https://") || lower.hasPrefix("data:") {
+            return nil
+        }
+
+        let fm = FileManager.default
+        if lower.hasPrefix("file://"), let parsed = URL(string: trimmed), parsed.isFileURL {
+            if fm.fileExists(atPath: parsed.path) { return parsed }
+            return nil
+        }
+
+        let unescaped = trimmed.removingPercentEncoding ?? trimmed
+        let candidatesRaw = unescaped == trimmed ? [trimmed] : [trimmed, unescaped]
+        let baseDir = documentURL?.deletingLastPathComponent()
+
+        for candidate in candidatesRaw {
+            if candidate.hasPrefix("~/") {
+                let expanded = (candidate as NSString).expandingTildeInPath
+                if fm.fileExists(atPath: expanded) {
+                    return URL(fileURLWithPath: expanded)
+                }
+            } else if candidate.hasPrefix("/") {
+                if fm.fileExists(atPath: candidate) {
+                    return URL(fileURLWithPath: candidate)
+                }
+            } else if let baseDir {
+                let resolved = baseDir.appendingPathComponent(candidate).standardizedFileURL
+                if fm.fileExists(atPath: resolved.path) {
+                    return resolved
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func parseFence(_ trimmedLine: String) -> (char: Character, length: Int, infoIsEmpty: Bool)? {
+        guard let first = trimmedLine.first, first == "`" || first == "~" else { return nil }
+        var count = 0
+        for ch in trimmedLine {
+            if ch == first { count += 1 } else { break }
+        }
+        guard count >= 3 else { return nil }
+        let rest = trimmedLine.dropFirst(count).trimmingCharacters(in: .whitespaces)
+        return (first, count, rest.isEmpty)
+    }
+
+    private static func parseStandaloneImageLine(_ trimmed: String) -> (alt: String, source: String)? {
+        if trimmed.hasPrefix("![") {
+            return parseMarkdownImage(trimmed)
+        }
+        if trimmed.lowercased().hasPrefix("<img") {
+            return parseHTMLImage(trimmed)
+        }
+        return nil
+    }
+
+    private static func parseMarkdownImage(_ trimmed: String) -> (alt: String, source: String)? {
+        // Scan `![alt](destination "title")` allowing balanced brackets in alt and parentheses in path.
+        var idx = trimmed.index(trimmed.startIndex, offsetBy: 2)
+        var bracketDepth = 1
+        var altEnd: String.Index?
+        while idx < trimmed.endIndex {
+            let ch = trimmed[idx]
+            if ch == "\\", trimmed.index(after: idx) < trimmed.endIndex {
+                idx = trimmed.index(idx, offsetBy: 2)
+                continue
+            }
+            if ch == "[" {
+                bracketDepth += 1
+            } else if ch == "]" {
+                bracketDepth -= 1
+                if bracketDepth == 0 {
+                    altEnd = idx
+                    break
+                }
+            }
+            idx = trimmed.index(after: idx)
+        }
+        guard let altEnd else { return nil }
+        let afterBracket = trimmed.index(after: altEnd)
+        guard afterBracket < trimmed.endIndex, trimmed[afterBracket] == "(" else { return nil }
+
+        let alt = String(trimmed[trimmed.index(trimmed.startIndex, offsetBy: 2)..<altEnd])
+        var destIdx = trimmed.index(after: afterBracket)
+        var parenDepth = 1
+        var destEnd: String.Index?
+        while destIdx < trimmed.endIndex {
+            let ch = trimmed[destIdx]
+            if ch == "\\", trimmed.index(after: destIdx) < trimmed.endIndex {
+                destIdx = trimmed.index(destIdx, offsetBy: 2)
+                continue
+            }
+            if ch == "(" {
+                parenDepth += 1
+            } else if ch == ")" {
+                parenDepth -= 1
+                if parenDepth == 0 {
+                    destEnd = destIdx
+                    break
+                }
+            }
+            destIdx = trimmed.index(after: destIdx)
+        }
+        guard let destEnd else { return nil }
+        let trailing = trimmed[trimmed.index(after: destEnd)...].trimmingCharacters(in: .whitespaces)
+        guard trailing.isEmpty else { return nil }
+
+        var inside = trimmed[trimmed.index(after: afterBracket)..<destEnd].trimmingCharacters(in: .whitespaces)
+        if inside.hasPrefix("<"), let close = inside.firstIndex(of: ">") {
+            let path = String(inside[inside.index(after: inside.startIndex)..<close]).trimmingCharacters(in: .whitespaces)
+            return path.isEmpty ? nil : (alt, path)
+        }
+
+        // Strip optional trailing title `"..."` or `'...'`
+        if let quoteRange = inside.range(of: #"\s+(?:"[^"]*"|'[^']*')\s*$"#, options: .regularExpression) {
+            inside = String(inside[..<quoteRange.lowerBound]).trimmingCharacters(in: .whitespaces)
+        }
+        return inside.isEmpty ? nil : (alt, String(inside))
+    }
+
+    private static func parseHTMLImage(_ trimmed: String) -> (alt: String, source: String)? {
+        guard trimmed.hasSuffix(">") else { return nil }
+        let srcPattern = #"(?i)\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))"#
+        guard let srcRegex = try? NSRegularExpression(pattern: srcPattern),
+              let match = srcRegex.firstMatch(in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed)) else {
+            return nil
+        }
+        var src: String?
+        for group in 1...3 {
+            let r = match.range(at: group)
+            if r.location != NSNotFound, let range = Range(r, in: trimmed) {
+                src = String(trimmed[range])
+                break
+            }
+        }
+        guard let src, !src.isEmpty else { return nil }
+
+        var alt = ""
+        let altPattern = #"(?i)\balt\s*=\s*(?:"([^"]*)"|'([^']*)')"#
+        if let altRegex = try? NSRegularExpression(pattern: altPattern),
+           let altMatch = altRegex.firstMatch(in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed)) {
+            for group in 1...2 {
+                let r = altMatch.range(at: group)
+                if r.location != NSNotFound, let range = Range(r, in: trimmed) {
+                    alt = String(trimmed[range])
+                    break
+                }
+            }
+        }
+        return (alt, src)
+    }
+}
+
 public struct MarkdownFilePreviewView: View {
     let source: String
+    let fileURL: URL?
     /// The source instead of the rendering; switched from the preview toolbar.
     let showsSource: Bool
 
-    public init(source: String, showsSource: Bool = false) {
+    public init(source: String, fileURL: URL? = nil, showsSource: Bool = false) {
         self.source = source
+        self.fileURL = fileURL
         self.showsSource = showsSource
     }
 
@@ -173,9 +387,25 @@ public struct MarkdownFilePreviewView: View {
             } else {
                 // A document's margins, and a fade where lines leave the bottom of the sheet
                 // rather than a cut across them; the bottom margin lets the last line rest clear.
+                let segments = MarkdownPreviewSegmentSplitter.split(source)
                 ScrollView(.vertical) {
                     VStack(alignment: .leading, spacing: AppSpacing.medium) {
-                        LimareMarkdownView(source: source, profile: .document)
+                        if segments.isEmpty {
+                            LimareMarkdownView(source: source, profile: .document)
+                        } else {
+                            ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
+                                switch segment {
+                                case .markdown(let text):
+                                    LimareMarkdownView(source: text, profile: .document)
+                                case .image(let alt, let imageSource):
+                                    MarkdownEmbeddedImageView(
+                                        alt: alt,
+                                        source: imageSource,
+                                        documentURL: fileURL
+                                    )
+                                }
+                            }
+                        }
                     }
                     .padding(.horizontal, 28)
                     .padding(.vertical, AppSpacing.large)
@@ -193,6 +423,149 @@ public struct MarkdownFilePreviewView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppColors.workSurface)
+    }
+}
+
+private struct MarkdownEmbeddedImageView: View {
+    @Environment(WindowSession.self) private var window
+    @Environment(\.openURL) private var openURL
+    let alt: String
+    let source: String
+    let documentURL: URL?
+
+    var body: some View {
+        if let resolvedURL = MarkdownPreviewSegmentSplitter.resolveLocalImageURL(source: source, documentURL: documentURL),
+           let data = try? Data(contentsOf: resolvedURL) {
+            let isSVG = resolvedURL.pathExtension.lowercased() == "svg"
+            VStack(alignment: .leading, spacing: AppSpacing.xxSmall) {
+                if isSVG {
+                    IsolatedSVGWebView(svgData: data, fileURL: resolvedURL)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 360)
+                        .clipShape(RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous)
+                                .strokeBorder(AppColors.hairline, lineWidth: 1)
+                        )
+                } else if let nsImage = NSImage(data: data),
+                          let ratio = Self.aspectRatio(for: nsImage) {
+                    AnimatedImageRepresentable(fileURL: resolvedURL, data: data, image: nsImage)
+                        .aspectRatio(ratio, contentMode: .fit)
+                        .frame(maxWidth: .infinity, maxHeight: 560, alignment: .leading)
+                        .clipShape(RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous)
+                                .strokeBorder(AppColors.hairline, lineWidth: 1)
+                        )
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            window.previewExternalFile(resolvedURL)
+                        }
+                        .help("Open \(resolvedURL.lastPathComponent)")
+                } else {
+                    fallbackBadge(label: alt.isEmpty ? resolvedURL.lastPathComponent : alt, remoteURL: nil)
+                }
+
+                if !alt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(alt)
+                        .font(AppTypography.interfaceCaption)
+                        .foregroundStyle(AppColors.textSecondary)
+                }
+            }
+            .padding(.vertical, AppSpacing.xxSmall)
+        } else {
+            let remoteURL: URL? = {
+                guard let url = URL(string: source.trimmingCharacters(in: .whitespacesAndNewlines)),
+                      let scheme = url.scheme?.lowercased(),
+                      scheme == "http" || scheme == "https" else { return nil }
+                return url
+            }()
+            let label = alt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? (URL(string: source)?.lastPathComponent.nilIfEmpty ?? source)
+                : alt
+            fallbackBadge(label: label, remoteURL: remoteURL)
+        }
+    }
+
+    @ViewBuilder
+    private func fallbackBadge(label: String, remoteURL: URL?) -> some View {
+        let pill = HStack(spacing: AppSpacing.xSmall) {
+            Image(systemName: "photo")
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.textSecondary)
+            Text(label)
+                .font(AppTypography.interfaceCaption)
+                .foregroundStyle(AppColors.textSecondary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, AppSpacing.small)
+        .padding(.vertical, AppSpacing.xSmall)
+        .background(
+            RoundedRectangle(cornerRadius: AppRadius.row, style: .continuous)
+                .fill(AppColors.surfaceSecondary.opacity(0.6))
+        )
+
+        if let remoteURL {
+            Button { openURL(remoteURL) } label: { pill }
+                .buttonStyle(.plain)
+        } else {
+            pill
+        }
+    }
+
+    private static func aspectRatio(for image: NSImage) -> CGFloat? {
+        for rep in image.representations {
+            if rep.pixelsWide > 0 && rep.pixelsHigh > 0 {
+                return CGFloat(rep.pixelsWide) / CGFloat(rep.pixelsHigh)
+            }
+        }
+        guard image.size.width > 0, image.size.height > 0 else { return nil }
+        return image.size.width / image.size.height
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
+}
+
+private struct AnimatedImageRepresentable: NSViewRepresentable {
+    let fileURL: URL
+    let data: Data
+    let image: NSImage
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> NSImageView {
+        let imageView = NSImageView()
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.animates = true
+        imageView.canDrawSubviewsIntoLayer = false
+        imageView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        imageView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        apply(to: imageView, coordinator: context.coordinator)
+        return imageView
+    }
+
+    func updateNSView(_ nsView: NSImageView, context: Context) {
+        apply(to: nsView, coordinator: context.coordinator)
+    }
+
+    private func apply(to imageView: NSImageView, coordinator: Coordinator) {
+        // Avoid re-setting image on unchanged SwiftUI updates so animated GIF playback does not reset to frame 0.
+        if coordinator.lastURL == fileURL && coordinator.lastDataCount == data.count {
+            return
+        }
+        coordinator.lastURL = fileURL
+        coordinator.lastDataCount = data.count
+        imageView.animates = true
+        imageView.image = image
+    }
+
+    final class Coordinator {
+        var lastURL: URL?
+        var lastDataCount: Int = 0
     }
 }
 
@@ -383,6 +756,7 @@ public final class ImageZoomScrollView: NSScrollView {
         self.contentView = centeringClip
 
         imageView.imageScaling = .scaleAxesIndependently
+        imageView.animates = true
         imageView.wantsLayer = true
         imageView.layer?.cornerRadius = AppRadius.card
         imageView.layer?.masksToBounds = true

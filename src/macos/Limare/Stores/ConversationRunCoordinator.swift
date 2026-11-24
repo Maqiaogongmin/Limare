@@ -103,7 +103,7 @@ final class ConversationRunCoordinator {
     private var runLoadedDeferredTools: [UUID: Set<String>] = [:]
     /// Per-run valid deferred tool candidate definitions (built-in + MCP) for tool_search.
     @ObservationIgnored
-    private var runDeferredCandidates: [UUID: [ChatToolDefinition]] = [:]
+    var runDeferredCandidates: [UUID: [ChatToolDefinition]] = [:]
     @ObservationIgnored
     private var runProtectionHints: [UUID: ContextProtectionHints] = [:]
 
@@ -2469,6 +2469,12 @@ final class ConversationRunCoordinator {
                 } else if call.function.name == "tool_search" {
                     outcome = self.runToolSearch(call, runID: runID)
                 } else {
+                    if !offeredNames.contains(call.function.name), offeredNames.contains("tool_search") {
+                        let deferredNames = Set((self.runDeferredCandidates[runID] ?? []).map(\.function.name))
+                        if deferredNames.contains(call.function.name) {
+                            self.runLoadedDeferredTools[runID, default: []].insert(call.function.name)
+                        }
+                    }
                     let executed = await scopedExecutor.execute(call, reviewer: turnReviewer) { [weak self] update in
                         guard let self, self.hasMutationAuthority(conversationID: conversationID, runID: runID) else { return }
                         self.handleToolRecordUpdate(conversationID: conversationID, runID: runID, messageID: resolvedAssistantID, recordID: resolvedRecordID, update: update)
@@ -3506,6 +3512,39 @@ final class ConversationRunCoordinator {
         return names
     }
 
+    /// Splits text into lowercase search tokens on non-alphanumeric separators and
+    /// camelCase/PascalCase boundaries (e.g. `getFileContents` -> `["get", "file", "contents"]`).
+    static func searchTokens(from text: String) -> [String] {
+        let chars = Array(text)
+        var tokens: [String] = []
+        var current = ""
+        func flush() {
+            if !current.isEmpty {
+                tokens.append(current.lowercased())
+                current.removeAll(keepingCapacity: true)
+            }
+        }
+        for i in chars.indices {
+            let ch = chars[i]
+            guard ch.unicodeScalars.allSatisfy({ CharacterSet.alphanumerics.contains($0) }) else {
+                flush()
+                continue
+            }
+            if let prev = current.last {
+                let next: Character? = (i + 1 < chars.count) ? chars[i + 1] : nil
+                if (prev.isLowercase && ch.isUppercase)
+                    || (prev.isUppercase && ch.isUppercase && (next?.isLowercase == true))
+                    || (prev.isNumber && ch.isUppercase)
+                    || (prev.isASCII != ch.isASCII) {
+                    flush()
+                }
+            }
+            current.append(ch)
+        }
+        flush()
+        return tokens
+    }
+
     /// tool_search: "select:a,b" loads those tools; other queries load the best keyword matches.
     func runToolSearch(_ call: ProviderToolCall, runID: UUID) -> ToolExecutionOutcome {
         struct Arguments: Decodable { let query: String; let max_results: Int? }
@@ -3531,12 +3570,49 @@ final class ConversationRunCoordinator {
             let names = Set(query.dropFirst("select:".count).split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
             matches = all.filter { names.contains($0.function.name) }
         } else {
-            let terms = query.lowercased().split(whereSeparator: { $0 == " " || $0 == "_" }).map(String.init)
-            let scored = all.map { tool -> (ChatToolDefinition, Int) in
-                let name = tool.function.name.lowercased(), text = tool.function.description.lowercased()
-                return (tool, terms.reduce(0) { $0 + (name.contains($1) ? 3 : 0) + (text.contains($1) ? 1 : 0) })
+            let rawTokens = Self.searchTokens(from: query)
+            let stopWords: Set<String> = [
+                "the", "and", "for", "with", "use", "from", "that", "this",
+                "into", "other", "all", "can", "are", "tool", "tools"
+            ]
+            let filtered = rawTokens.filter { $0.count >= 2 && !stopWords.contains($0) }
+            let terms = !filtered.isEmpty
+                ? filtered
+                : (rawTokens.filter { $0.count >= 2 }.isEmpty ? rawTokens : rawTokens.filter { $0.count >= 2 })
+            let scored = all.map { tool -> (tool: ChatToolDefinition, score: Int) in
+                let nameTokens = Self.searchTokens(from: tool.function.name)
+                let descTokens = Self.searchTokens(from: tool.function.description)
+                let score = terms.reduce(0) { total, term in
+                    let isASCII = term.unicodeScalars.allSatisfy(\.isASCII)
+                    let nameScore: Int
+                    if nameTokens.contains(term) || (!isASCII && nameTokens.contains(where: { $0.contains(term) })) {
+                        nameScore = 5
+                    } else if isASCII && term.count >= 3 && nameTokens.contains(where: { $0.hasPrefix(term) }) {
+                        nameScore = 3
+                    } else {
+                        nameScore = 0
+                    }
+                    let descScore: Int
+                    if descTokens.contains(term) || (!isASCII && descTokens.contains(where: { $0.contains(term) })) {
+                        descScore = 2
+                    } else if isASCII && term.count >= 4 && descTokens.contains(where: { $0.hasPrefix(term) }) {
+                        descScore = 1
+                    } else {
+                        descScore = 0
+                    }
+                    return total + nameScore + descScore
+                }
+                return (tool, score)
             }
-            matches = scored.filter { $0.1 > 0 }.sorted { $0.1 > $1.1 }.prefix(min(max(args.max_results ?? 5, 1), 50)).map(\.0)
+            let positives = scored.filter { $0.score > 0 }
+            let maxScore = positives.map(\.score).max() ?? 0
+            let threshold = Double(maxScore) * 0.4
+            let limit = min(max(args.max_results ?? 5, 1), 50)
+            matches = positives
+                .filter { Double($0.score) >= threshold }
+                .sorted { ($0.score > $1.score) || ($0.score == $1.score && $0.tool.function.name < $1.tool.function.name) }
+                .prefix(limit)
+                .map(\.tool)
         }
         guard !matches.isEmpty else {
             return ToolExecutionOutcome(content: "No deferred tool matches '\(query)'. Deferred tools: \(all.map(\.function.name).joined(separator: ", ")).",
@@ -3816,7 +3892,7 @@ No tools, shell, browser, or file system access are available for this turn. Res
 
         if exposesToolSearch {
             let searchable = split.deferredPool.map(\.function.name)
-            staticSections.append("# DEFERRED TOOLS\nThese tools can be loaded with tool_search (query \"select:<name>\" or keywords) before calling them: \(searchable.joined(separator: ", ")).")
+            staticSections.append("# DEFERRED TOOLS\nThese tools can be loaded with tool_search (query \"select:name1,name2\" to batch multiple known tools in one call, or keywords) before calling them: \(searchable.joined(separator: ", ")).")
         }
         if mcpToolDefs.count <= Self.mcpDeferralThreshold {
             let mcpToolNames = mcpToolDefs.map(\.function.name).filter { $0.hasPrefix("mcp_") }
@@ -4067,6 +4143,23 @@ No tools, shell, browser, or file system access are available for this turn. Res
         )
     }
 
+    /// Returns any non-redundant `output` suffix for failed, timed-out, or cancelled tool calls,
+    /// suppressing duplicate shell terminal text already present in `errorMessage` while preserving
+    /// any PostToolUse `<system-reminder>` hook context absent from `errorMessage`.
+    static func failedToolSupplementOutput(for tc: ToolCallRecord) -> String? {
+        guard !tc.output.isEmpty, tc.output != tc.errorMessage else { return nil }
+        if tc.mechanicalTerminalFact?.shellTerminal != nil,
+           let err = tc.errorMessage, !err.isEmpty {
+            if let hookRange = tc.output.range(of: "\n\n<system-reminder>\n", options: .backwards) {
+                let hookContext = String(tc.output[hookRange.lowerBound...]).trimmingCharacters(in: .newlines)
+                guard !hookContext.isEmpty, !err.contains(hookContext) else { return nil }
+                return hookContext
+            }
+            return nil
+        }
+        return tc.output
+    }
+
     static func buildChatRequestHistory(
         messages msgs: [ChatMessage],
         systemPrompt: String,
@@ -4132,7 +4225,9 @@ No tools, shell, browser, or file system access are available for this turn. Res
                     let toolResultContent: String
                     switch tc.state {
                     case .completed:
-                        if !tc.output.isEmpty {
+                        if tc.name == "update_plan", !tc.output.hasPrefix("[TOOL RESULT OFFLOADED]") {
+                            toolResultContent = ContextTokenEstimator.projectedCompletedUpdatePlanOutput(tc.output)
+                        } else if !tc.output.isEmpty {
                             toolResultContent = tc.output
                         } else {
                             toolResultContent = "Tool execution completed without captured output."
@@ -4142,8 +4237,8 @@ No tools, shell, browser, or file system access are available for this turn. Res
                         if let err = tc.errorMessage, !err.isEmpty {
                             parts.append(err)
                         }
-                        if !tc.output.isEmpty && tc.output != tc.errorMessage {
-                            parts.append(tc.output)
+                        if let extra = Self.failedToolSupplementOutput(for: tc) {
+                            parts.append(extra)
                         }
                         if parts.count == 1 {
                             toolResultContent = "[Tool Execution Failed] Tool execution failed."
@@ -4155,8 +4250,8 @@ No tools, shell, browser, or file system access are available for this turn. Res
                         if let err = tc.errorMessage, !err.isEmpty {
                             parts.append(err)
                         }
-                        if !tc.output.isEmpty && tc.output != tc.errorMessage {
-                            parts.append(tc.output)
+                        if let extra = Self.failedToolSupplementOutput(for: tc) {
+                            parts.append(extra)
                         }
                         if parts.count == 1 {
                             toolResultContent = "[Tool Execution Timed Out] Tool execution timed out."
@@ -4181,8 +4276,8 @@ No tools, shell, browser, or file system access are available for this turn. Res
                         if let err = tc.errorMessage, !err.isEmpty {
                             parts.append(err)
                         }
-                        if !tc.output.isEmpty && tc.output != tc.errorMessage {
-                            parts.append(tc.output)
+                        if let extra = Self.failedToolSupplementOutput(for: tc) {
+                            parts.append(extra)
                         }
                         if parts.count == 1 {
                             toolResultContent = "[Tool Execution Cancelled] Tool execution was cancelled."

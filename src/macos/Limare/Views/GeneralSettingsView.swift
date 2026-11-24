@@ -11,7 +11,7 @@ struct GeneralSettingsView: View {
         @Bindable var typography = appState.typography
         SettingsPage {
             SettingsSection(title: "About Limare") {
-                SettingsRow("Version", caption: "Apple Silicon · macOS 15.0+") {
+                SettingsRow("Version") {
                     Text(LimareBuild.current.displayVersion)
                 }
                 // Three of a kind: two pages on the web and the licenses panel.
@@ -29,10 +29,7 @@ struct GeneralSettingsView: View {
 
             // Appearance Section
             SettingsSection(title: "Appearance") {
-                SettingsRow(
-                    "Theme",
-                    caption: "Controls how Limare looks."
-                ) {
+                SettingsRow("Theme") {
                     SettingsSegmentedPicker(
                         selection: $appearance,
                         options: AppearancePreference.allCases.map { (value: $0, title: $0.displayName) }
@@ -46,10 +43,7 @@ struct GeneralSettingsView: View {
 
                 SettingsDivider()
 
-                SettingsRow(
-                    "Interface",
-                    caption: "Controls text used across navigation, settings, controls and supporting UI."
-                ) {
+                SettingsRow("Interface") {
                     Picker("", selection: $typography.interfaceSize) {
                         ForEach(TypographyPreferences.interfaceSizeOptions, id: \.self) { size in
                             Text(TypographyPreferences.formatSize(size)).tag(size)
@@ -59,10 +53,7 @@ struct GeneralSettingsView: View {
                     .labelsHidden()
                 }
 
-                SettingsRow(
-                    "Conversation",
-                    caption: "Controls user messages, Agent responses and rich-text reading surfaces."
-                ) {
+                SettingsRow("Conversation") {
                     Picker("", selection: $typography.conversationSize) {
                         ForEach(TypographyPreferences.conversationSizeOptions, id: \.self) { size in
                             Text(TypographyPreferences.formatSize(size)).tag(size)
@@ -72,10 +63,7 @@ struct GeneralSettingsView: View {
                     .labelsHidden()
                 }
 
-                SettingsRow(
-                    "Code",
-                    caption: "Controls code blocks, source views and diff/code-oriented surfaces."
-                ) {
+                SettingsRow("Code") {
                     Picker("", selection: $typography.codeSize) {
                         ForEach(TypographyPreferences.codeSizeOptions, id: \.self) { size in
                             Text(TypographyPreferences.formatSize(size)).tag(size)
@@ -88,10 +76,7 @@ struct GeneralSettingsView: View {
 
             // Composer & Run Section
             SettingsSection(title: "Composer & Run") {
-                SettingsRow(
-                    "When Agent is Running",
-                    caption: "\(streamingSendPreference.detail)"
-                ) {
+                SettingsRow("When Agent is Running") {
                     Picker("", selection: $streamingSendPreference) {
                         ForEach(StreamingSendPreference.allCases) { pref in
                             Text(pref.displayName).tag(pref)
@@ -104,10 +89,7 @@ struct GeneralSettingsView: View {
 
             // Background alerts and Computer Use share one card, a rule between them.
             SettingsSection(title: "Notifications & Capabilities") {
-                SettingsRow(
-                    "Background Alerts",
-                    caption: "While Limare is in the background, notify when a task of 20 seconds or more ends, or when a tool needs your approval. Notifications never name the tool, command or path."
-                ) {
+                SettingsRow("Background Alerts") {
                     Toggle(
                         "",
                         isOn: Binding(
@@ -158,10 +140,7 @@ struct GeneralSettingsView: View {
                 }
 
                 if let workspace = appState.workspace.configuration {
-                    SettingsRow(
-                        "Default Workspace",
-                        caption: "Used when no Project workspace is selected."
-                    ) {
+                    SettingsRow("Default Workspace") {
                         HStack(spacing: AppSpacing.small) {
                             Button("Change…") {
                                 appState.workspace.chooseWorkspace()
@@ -190,10 +169,7 @@ struct GeneralSettingsView: View {
                     }
                     .padding(.vertical, AppSpacing.xxSmall)
                 } else {
-                    SettingsRow(
-                        "Default Workspace",
-                        caption: "No default workspace selected. Standalone conversations use the existing fallback behavior."
-                    ) {
+                    SettingsRow("Default Workspace") {
                         Button("Choose…") {
                             appState.workspace.chooseWorkspace()
                         }
@@ -220,10 +196,7 @@ private struct LanguageSettingsRow: View {
     }
 
     var body: some View {
-        SettingsRow(
-            "Language",
-            caption: "The language of menus, settings and messages in Limare."
-        ) {
+        SettingsRow("Language") {
             Picker("", selection: $selection) {
                 Text("System").tag("")
                 Divider()
@@ -262,10 +235,7 @@ private struct ComputerUseCapabilitySettingsRow: View {
     private var store: ComputerUseActivationStore { appState.computerUseActivation }
 
     var body: some View {
-        SettingsRow(
-            "Computer Use",
-            caption: "Allow Limare to use desktop observation and control when a task requires it."
-        ) {
+        SettingsRow("Computer Use") {
             Toggle(
                 "",
                 isOn: Binding(

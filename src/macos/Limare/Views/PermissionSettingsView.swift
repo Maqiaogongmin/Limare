@@ -69,11 +69,6 @@ struct PermissionSettingsView: View {
                     }
                 }
             }
-
-            Text("Shell commands run in a macOS sandbox, as in Codex; Full access and approved requests run outside it.")
-                .font(AppTypography.interfaceCaption)
-                .foregroundStyle(AppColors.textSecondary)
-                .padding(.horizontal, AppSpacing.xxSmall)
         }
         .alert("Enable Full Access?", isPresented: $showFullAccessWarning) {
             Button("Cancel", role: .cancel) {}

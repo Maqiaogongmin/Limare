@@ -12,7 +12,7 @@ struct WorktreeSettingsSection: View {
             if !app.worktrees.preferences.isReadable {
                 InlineStatus(kind: .error, message: "Worktree settings could not be read; creation is paused.")
             }
-            SettingsRow("Worktree root", caption: "Changes apply only to newly created worktrees.") {
+            SettingsRow("Worktree root") {
                 HStack {
                     Button("Choose…") { chooseRoot() }
                     if app.worktrees.preferences.value.root != nil {
@@ -23,7 +23,7 @@ struct WorktreeSettingsSection: View {
             Text(app.worktrees.managedRoot.path).font(.caption.monospaced()).foregroundStyle(.secondary)
                 .textSelection(.enabled).lineLimit(2).truncationMode(.middle)
             SettingsDivider()
-            SettingsRow("Branch prefix", caption: "Used for newly created task branches.") {
+            SettingsRow("Branch prefix") {
                 HStack {
                     TextField("Branch prefix", text: $prefix).textFieldStyle(.roundedBorder).frame(width: 150)
                     Button("Save") { save(root: app.worktrees.preferences.value.root?.url) }.disabled(saving)

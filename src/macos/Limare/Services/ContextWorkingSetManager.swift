@@ -471,6 +471,7 @@ enum ContextWorkingSetManager {
         func eligibleToolCandidate(messageIndex msgIdx: Int, toolIndex toolIdx: Int) -> ToolCandidate? {
             let call = working[msgIdx].toolCalls[toolIdx]
             guard call.state.isTerminal,
+                  call.name != "update_plan",
                   (hasLaterProviderTurn(after: msgIdx, in: messages) || protectionHints.acknowledgedToolCallIDs.contains(call.id)),
                   !isActive(call),
                   !containsArtifactResultPart(call.resultParts),

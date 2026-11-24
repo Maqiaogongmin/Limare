@@ -209,10 +209,7 @@ private struct ModelUseView: View {
             // Common Tasks Section
             SettingsSection(title: "Common Tasks") {
                 // Chat Role
-                SettingsRow(
-                    "Chat",
-                    caption: "Default model group for new conversations."
-                ) {
+                SettingsRow("Chat") {
                     groupPicker(
                         selection: Binding(
                             get: { appState.modelGroups.defaultPrimaryGroupId },
@@ -226,10 +223,7 @@ private struct ModelUseView: View {
 
                 // Images Role
                 VStack(alignment: .leading, spacing: AppSpacing.xSmall) {
-                    SettingsRow(
-                        "Images",
-                        caption: "Used when Limare needs to understand images."
-                    ) {
+                    SettingsRow("Images") {
                         groupPicker(
                             selection: Binding(
                                 get: { appState.modelGroups.visionGroupId },
@@ -252,10 +246,7 @@ private struct ModelUseView: View {
 
                 // Voice Input Role
                 VStack(alignment: .leading, spacing: AppSpacing.xSmall) {
-                    SettingsRow(
-                        "Voice Input",
-                        caption: "Speech recognition with automatic system voice fallback."
-                    ) {
+                    SettingsRow("Voice Input") {
                         groupPicker(
                             selection: Binding(
                                 get: { appState.modelGroups.voiceInputGroupId },
@@ -278,10 +269,7 @@ private struct ModelUseView: View {
 
                 // Voice Output Role
                 VStack(alignment: .leading, spacing: AppSpacing.xSmall) {
-                    SettingsRow(
-                        "Voice Output",
-                        caption: "Text-to-speech with automatic system voice fallback."
-                    ) {
+                    SettingsRow("Voice Output") {
                         groupPicker(
                             selection: Binding(
                                 get: { appState.modelGroups.voiceOutputGroupId },
@@ -302,15 +290,9 @@ private struct ModelUseView: View {
             }
 
             // Extra Help Section (Optional)
-            SettingsSection(
-                title: "Extra Help",
-                description: "Optional. Limare works normally with the defaults below."
-            ) {
+            SettingsSection(title: "Extra Help") {
                 // Helper Model Row
-                SettingsRow(
-                    "Helper model",
-                    caption: "Default for helper work in new conversations."
-                ) {
+                SettingsRow("Helper model") {
                     groupPicker(
                         selection: Binding(
                             get: { appState.modelGroups.defaultSubGroupId },
@@ -323,10 +305,7 @@ private struct ModelUseView: View {
                 SettingsDivider()
 
                 // Specialist Models Row
-                SettingsRow(
-                    "Specialist models",
-                    caption: "Optional models Limare may call directly for specialized jobs, such as image generation."
-                ) {
+                SettingsRow("Specialist models") {
                     HStack(spacing: AppSpacing.medium) {
                         Text(state.specialistSummary(store: appState.modelGroups))
                             .font(.subheadline)
@@ -446,12 +425,7 @@ private struct ModelGroupDetailView: View {
     // MARK: Models Section
 
     private var modelsSection: some View {
-        SettingsSection(
-            title: "Models",
-            description: group.strategy == .fallback
-                ? "Models are tried in priority order from top to bottom."
-                : "Conversations are distributed across available models."
-        ) {
+        SettingsSection(title: "Models") {
             let members = state.resolvedMembers(for: group, providers: appState.providers.providers, store: appState.modelGroups)
 
             if members.isEmpty {
@@ -628,12 +602,7 @@ private struct ModelGroupDetailView: View {
 
     private var routingSection: some View {
         SettingsSection(title: "Routing") {
-            SettingsRow(
-                "Routing Strategy",
-                caption: group.strategy == .fallback
-                    ? "Try models from top to bottom. If one cannot complete the request, Limare can continue with the next model."
-                    : "New conversations are distributed across available models. A conversation normally stays with the selected model."
-            ) {
+            SettingsRow("Routing Strategy") {
                 SettingsSegmentedPicker(
                     selection: Binding(
                         get: { group.strategy },
@@ -653,12 +622,7 @@ private struct ModelGroupDetailView: View {
             if group.strategy == .fallback {
                 SettingsDivider()
 
-                SettingsRow(
-                    "Fallback Behavior",
-                    caption: group.fallbackStrategy == .limited
-                        ? "Retry temporary failures before switching models."
-                        : "Move to the next model when a provider request fails."
-                ) {
+                SettingsRow("Fallback Behavior") {
                     SettingsSegmentedPicker(
                         selection: Binding(
                             get: { group.fallbackStrategy },
@@ -692,10 +656,7 @@ private struct ModelGroupDetailView: View {
 
     private var reasoningSection: some View {
         SettingsSection(title: "Reasoning") {
-            SettingsRow(
-                "Default Thinking Level",
-                caption: "Sets the initial reasoning effort for models in this group that support reasoning."
-            ) {
+            SettingsRow("Default Thinking Level") {
                 Picker("", selection: Binding(
                     get: { group.defaultThinkingLevel ?? .off },
                     set: { newLevel in
@@ -733,10 +694,7 @@ private struct ModelGroupDetailView: View {
             summary: group.contextLimitTokens != nil ? "Context Limit: \(group.contextLimitTokens!) tokens" : nil,
             isExpanded: $isAdvancedExpanded
         ) {
-            SettingsRow(
-                "Context Limit",
-                caption: "Optional maximum context window tokens to reserve for this group."
-            ) {
+            SettingsRow("Context Limit") {
                 HStack(spacing: AppSpacing.xSmall) {
                     TextField("Unlimited", value: Binding<Int?>(
                         get: { group.contextLimitTokens },
@@ -777,7 +735,7 @@ private struct NewModelGroupSheet: View {
             Text("New Model Group")
                 .font(.headline)
 
-            FormField("Group Name", caption: "Choose a memorable name for this group.") {
+            FormField("Group Name") {
                 TextField("e.g. Fast, Coding, Research", text: $groupName)
                     .textFieldStyle(.roundedBorder)
             }
@@ -821,13 +779,8 @@ private struct SpecialistModelsSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Specialist Models")
-                        .font(.headline)
-                    Text("Choose models Limare may call directly for specialized jobs. Normal chat and helper work do not depend on this list.")
-                        .font(.caption)
-                        .foregroundStyle(AppColors.textSecondary)
-                }
+                Text("Specialist Models")
+                    .font(.headline)
                 Spacer()
                 Button("Done") {
                     dismiss()
@@ -842,10 +795,7 @@ private struct SpecialistModelsSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: AppSemanticSpacing.settingsSectionGap) {
                     // Groups Section
-                    SettingsSection(
-                        title: "Groups",
-                        description: "Groups configured for specialist use. Models within these groups become executable by the Agent runtime when their credentials and actions are satisfied."
-                    ) {
+                    SettingsSection(title: "Groups") {
                         if appState.modelGroups.agentLoopGroupIds.isEmpty {
                             Text("No specialist groups configured.")
                                 .font(.caption)
@@ -892,10 +842,7 @@ private struct SpecialistModelsSheet: View {
                     }
 
                     // Individual Models Section
-                    SettingsSection(
-                        title: "Individual Models",
-                        description: "Specific models configured for specialist use. Models become executable by the Agent runtime when their credentials and actions are satisfied."
-                    ) {
+                    SettingsSection(title: "Individual Models") {
                         if appState.modelGroups.agentLoopModelEntryIds.isEmpty {
                             Text("No individual specialist models configured.")
                                 .font(.caption)

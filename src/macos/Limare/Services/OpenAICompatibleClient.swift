@@ -232,7 +232,14 @@ struct OpenAICompatibleClient: ProviderClient {
         let visible = items.filter { row in
             if provider.authenticationSelection.credentialKind == .oauthAccessToken { return row["visibility"] as? String == "list" }
             if provider.protocolAdapter == .geminiNative, let methods = row["supportedGenerationMethods"] as? [String] {
-                return methods.contains("generateContent")
+                let supported: Set<String> = [
+                    "generateContent",
+                    "predict",
+                    "predictLongRunning",
+                    "bidiGenerateContent",
+                    "createInteraction"
+                ]
+                return methods.contains(where: { supported.contains($0) })
             }
             return true
         }

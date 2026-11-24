@@ -180,6 +180,12 @@ final class AppState {
             artifactStore: artifactStore,
             logs: logs
         )
+        let runtimeMediaGenerationService = RuntimeMediaGenerationService(
+            registry: runtimeModelRegistry,
+            providers: providers,
+            artifactStore: artifactStore,
+            logs: logs
+        )
         // The draft archive loads before conversations: pruning empty conversations at load
         // must already know which ones still hold archived drafts.
         let draftArchive = DraftArchiveStore(rootURL: persistence.rootURL, logs: logs)
@@ -252,6 +258,7 @@ final class AppState {
             runtimeModelRegistry: runtimeModelRegistry,
             runtimeModelUseService: runtimeModelUseService,
             runtimeImageGenerationService: runtimeImageGenerationService,
+            runtimeMediaGenerationService: runtimeMediaGenerationService,
             browserSessionStore: browser,
             representationResolver: representationResolver,
             resourceConversionPolicies: resourceConversionPolicies,

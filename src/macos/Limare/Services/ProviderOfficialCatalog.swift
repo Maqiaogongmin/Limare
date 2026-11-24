@@ -145,6 +145,252 @@ enum ProviderOfficialCatalog {
             if model.baseDisplayName == model.id || model.baseDisplayName.isEmpty {
                 model.baseDisplayName = official.baseDisplayName
             }
+            return
+        }
+
+        guard let spec = supplementalOfficialCard(modelID: model.id, identity: identity) else {
+            return
+        }
+
+        var prov = model.baseCapabilityProvenance ?? ModelCapabilityProvenance()
+        var appliedAny = false
+
+        func canFill(_ source: ModelMetadataSource) -> Bool {
+            source != .providerDeclaration && source != .modelsDevAuthoritative
+        }
+
+        if canFill(prov.modality) {
+            model.baseModality = spec.modalities
+            prov.modality = .providerDeclaration
+            appliedAny = true
+        }
+        if let ctx = spec.contextWindow, canFill(prov.contextWindow) {
+            model.baseContextWindow = ctx
+            prov.contextWindow = .providerDeclaration
+            appliedAny = true
+        }
+        if let out = spec.maxOutputTokens, canFill(prov.maxOutputTokens) {
+            model.baseMaxOutputTokens = out
+            prov.maxOutputTokens = .providerDeclaration
+            appliedAny = true
+        }
+        if canFill(prov.reasoning) {
+            model.baseSupportsReasoning = spec.supportsReasoning
+            prov.reasoning = .providerDeclaration
+            appliedAny = true
+        }
+        if canFill(prov.reasoningEffort) {
+            model.reasoningEffortValues = spec.effortValues
+            model.declaresNoEffortTiers = spec.effortValues.isEmpty
+            model.effortDeclarationIsAuthoritative = true
+            prov.reasoningEffort = .providerDeclaration
+            appliedAny = true
+        }
+
+        if appliedAny {
+            model.baseCapabilityProvenance = prov
+            if model.baseMetadataSource == nil
+                || model.baseMetadataSource == .unknown
+                || model.baseMetadataSource == .modelsDevFallback {
+                model.baseMetadataSource = .providerDeclaration
+            }
+            model.capabilitySourceURL = spec.sourceURL
+            model.capabilityCatalogVersion = spec.catalogVersion
+        }
+        if let displayName = spec.displayName,
+           model.baseDisplayName == model.id || model.baseDisplayName.isEmpty {
+            model.baseDisplayName = displayName
+        }
+    }
+
+    private struct OfficialCardSpec {
+        let displayName: String?
+        let modalities: ModelModality
+        let contextWindow: Int?
+        let maxOutputTokens: Int?
+        let supportsReasoning: Bool
+        let effortValues: [String]
+        let sourceURL: String
+        let catalogVersion: String
+    }
+
+    private static let geminiMediaSourceURL = "https://ai.google.dev/gemini-api/docs/models"
+    private static let geminiMediaCatalogVersion = "2026-11-24"
+    private static let openAILiveSourceURL = "https://developers.openai.com/api/docs/guides/live"
+    private static let openAILiveCatalogVersion = "2026-11-24"
+
+    private static func supplementalOfficialCard(
+        modelID: String,
+        identity: ProviderIdentity?
+    ) -> OfficialCardSpec? {
+        let normalized = modelID.split(separator: "/").last.map(String.init)?.lowercased() ?? modelID.lowercased()
+        switch identity {
+        case .gemini:
+            switch normalized {
+            case "gemini-3.8-flash-lite-tts":
+                return OfficialCardSpec(
+                    displayName: "Gemini 3.8 Flash Lite TTS",
+                    modalities: [.textInput, .audioOutput],
+                    contextWindow: 8_192,
+                    maxOutputTokens: 16_384,
+                    supportsReasoning: false,
+                    effortValues: [],
+                    sourceURL: geminiMediaSourceURL,
+                    catalogVersion: geminiMediaCatalogVersion
+                )
+            case "gemini-omni-1.2-flash":
+                return OfficialCardSpec(
+                    displayName: "Gemini Omni 1.2 Flash",
+                    modalities: [.textInput, .imageInput, .videoInput, .pdfInput, .textOutput, .videoOutput],
+                    contextWindow: 131_072,
+                    maxOutputTokens: 65_536,
+                    supportsReasoning: true,
+                    effortValues: ["low", "high"],
+                    sourceURL: geminiMediaSourceURL,
+                    catalogVersion: geminiMediaCatalogVersion
+                )
+            case "gemini-omni-1.1-flash":
+                return OfficialCardSpec(
+                    displayName: "Gemini Omni 1.1 Flash",
+                    modalities: [.textInput, .imageInput, .videoInput, .textOutput, .videoOutput],
+                    contextWindow: 131_072,
+                    maxOutputTokens: 65_536,
+                    supportsReasoning: true,
+                    effortValues: ["low", "high"],
+                    sourceURL: geminiMediaSourceURL,
+                    catalogVersion: geminiMediaCatalogVersion
+                )
+            case "gemini-omni-flash-preview":
+                return OfficialCardSpec(
+                    displayName: "Gemini Omni Flash Preview",
+                    modalities: [.textInput, .imageInput, .videoInput, .videoOutput],
+                    contextWindow: 131_072,
+                    maxOutputTokens: 65_536,
+                    supportsReasoning: true,
+                    effortValues: [],
+                    sourceURL: geminiMediaSourceURL,
+                    catalogVersion: geminiMediaCatalogVersion
+                )
+            case "lyria-3.5":
+                return OfficialCardSpec(
+                    displayName: "Lyria 3.5",
+                    modalities: [.textInput, .imageInput, .textOutput, .audioOutput],
+                    contextWindow: 1_048_576,
+                    maxOutputTokens: 65_536,
+                    supportsReasoning: false,
+                    effortValues: [],
+                    sourceURL: geminiMediaSourceURL,
+                    catalogVersion: geminiMediaCatalogVersion
+                )
+            case "lyria-3-pro-preview":
+                return OfficialCardSpec(
+                    displayName: "Lyria 3 Pro Preview",
+                    modalities: [.textInput, .imageInput, .textOutput, .audioOutput],
+                    contextWindow: nil,
+                    maxOutputTokens: nil,
+                    supportsReasoning: false,
+                    effortValues: [],
+                    sourceURL: geminiMediaSourceURL,
+                    catalogVersion: geminiMediaCatalogVersion
+                )
+            case "lyria-3-clip-preview":
+                return OfficialCardSpec(
+                    displayName: "Lyria 3 Clip Preview",
+                    modalities: [.textInput, .imageInput, .textOutput, .audioOutput],
+                    contextWindow: nil,
+                    maxOutputTokens: nil,
+                    supportsReasoning: false,
+                    effortValues: [],
+                    sourceURL: geminiMediaSourceURL,
+                    catalogVersion: geminiMediaCatalogVersion
+                )
+            case "gemini-3.5-transcribe":
+                return OfficialCardSpec(
+                    displayName: "Gemini 3.5 Transcribe",
+                    modalities: [.audioInput, .textOutput],
+                    contextWindow: nil,
+                    maxOutputTokens: nil,
+                    supportsReasoning: false,
+                    effortValues: [],
+                    sourceURL: geminiMediaSourceURL,
+                    catalogVersion: geminiMediaCatalogVersion
+                )
+            case "gemini-nano-banana-2.1":
+                return OfficialCardSpec(
+                    displayName: "Nano Banana 2.1",
+                    modalities: [.textInput, .imageInput, .textOutput, .imageOutput],
+                    contextWindow: 65_536,
+                    maxOutputTokens: 65_536,
+                    supportsReasoning: true,
+                    effortValues: ["minimal", "medium", "high"],
+                    sourceURL: geminiMediaSourceURL,
+                    catalogVersion: geminiMediaCatalogVersion
+                )
+            case "nano-banana-pro-preview":
+                return OfficialCardSpec(
+                    displayName: "Nano Banana Pro",
+                    modalities: [.textInput, .imageInput, .textOutput, .imageOutput],
+                    contextWindow: nil,
+                    maxOutputTokens: nil,
+                    supportsReasoning: true,
+                    effortValues: [],
+                    sourceURL: geminiMediaSourceURL,
+                    catalogVersion: geminiMediaCatalogVersion
+                )
+            case "veo-3.1-generate-preview", "veo-3.1-fast-generate-preview":
+                return OfficialCardSpec(
+                    displayName: nil,
+                    modalities: [.textInput, .imageInput, .videoInput, .videoOutput],
+                    contextWindow: nil,
+                    maxOutputTokens: nil,
+                    supportsReasoning: false,
+                    effortValues: [],
+                    sourceURL: geminiMediaSourceURL,
+                    catalogVersion: geminiMediaCatalogVersion
+                )
+            case "veo-3.1-lite-generate-preview":
+                return OfficialCardSpec(
+                    displayName: nil,
+                    modalities: [.textInput, .imageInput, .videoOutput],
+                    contextWindow: nil,
+                    maxOutputTokens: nil,
+                    supportsReasoning: false,
+                    effortValues: [],
+                    sourceURL: geminiMediaSourceURL,
+                    catalogVersion: geminiMediaCatalogVersion
+                )
+            default:
+                return nil
+            }
+        case .openAI:
+            switch normalized {
+            case "gpt-live-1":
+                return OfficialCardSpec(
+                    displayName: "GPT-Live 1",
+                    modalities: [.textInput, .audioInput, .textOutput, .audioOutput],
+                    contextWindow: 128_000,
+                    maxOutputTokens: 16_384,
+                    supportsReasoning: false,
+                    effortValues: [],
+                    sourceURL: openAILiveSourceURL,
+                    catalogVersion: openAILiveCatalogVersion
+                )
+            case "gpt-live-1.1":
+                return OfficialCardSpec(
+                    displayName: "GPT-Live 1.1",
+                    modalities: [.textInput, .audioInput, .textOutput, .audioOutput],
+                    contextWindow: 128_000,
+                    maxOutputTokens: 16_384,
+                    supportsReasoning: false,
+                    effortValues: [],
+                    sourceURL: openAILiveSourceURL,
+                    catalogVersion: openAILiveCatalogVersion
+                )
+            default:
+                return nil
+            }
+        default:
+            return nil
         }
     }
 }

@@ -22911,6 +22911,16 @@
         }
       }
     },
+    "Live Voice" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时语音"
+          }
+        }
+      }
+    },
     "Voice Output" : {
       "localizations" : {
         "zh-Hans" : {

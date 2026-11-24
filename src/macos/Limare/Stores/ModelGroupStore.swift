@@ -261,6 +261,9 @@ final class ModelGroupStore {
 
         switch task {
         case .chat:
+            if OpenAIGPTLiveRouting.isGPTLiveModel(model.id) {
+                return (.notReady(task: .chat, reason: String(localized: "GPT-Live models use live voice WebSocket sessions instead of standard chat completions.")), provider, model)
+            }
             if let modality = model.modality {
                 if modality.contains(.textInput) && modality.contains(.textOutput) {
                     return (.ready(task: .chat), provider, model)
@@ -383,6 +386,18 @@ final class ModelGroupStore {
                 model: model,
                 isChatEligible: false,
                 unavailability: .credentialMissing
+            )
+        }
+
+        if OpenAIGPTLiveRouting.isGPTLiveModel(model.id) {
+            return GroupMemberEligibility(
+                entryId: resolvedEntryId,
+                parsedProviderId: provider.id,
+                parsedModelId: model.id,
+                provider: provider,
+                model: model,
+                isChatEligible: false,
+                unavailability: .noTextInputOutput
             )
         }
 

@@ -117,7 +117,7 @@ public struct FilesSurfaceView: View {
 
                 switch previewData.content {
                 case .markdown(let src):
-                    MarkdownFilePreviewView(source: src, showsSource: showsSource)
+                    MarkdownFilePreviewView(source: src, fileURL: previewData.metadata.url, showsSource: showsSource)
                 case .text(let txt):
                     TextFilePreviewView(text: txt)
                 case .code(let code, let lang):

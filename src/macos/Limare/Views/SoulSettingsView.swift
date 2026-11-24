@@ -148,9 +148,6 @@ struct SoulSettingsView: View {
         SettingsSection(title: "Personality Prompt") {
             VStack(alignment: .leading, spacing: AppSpacing.small) {
                 HStack {
-                    Text("Your custom character, voice, and guidance for Limare. Saved directly to SOUL.md.")
-                        .font(.caption)
-                        .foregroundStyle(AppColors.textSecondary)
                     Spacer()
                     Text("\(editor.tokenCount) / \(SoulStore.bodyTokenLimit) tokens")
                         .font(.caption.weight(.medium))

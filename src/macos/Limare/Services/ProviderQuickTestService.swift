@@ -4,6 +4,7 @@ public enum QuickTestKind: String, CaseIterable, Identifiable, Sendable {
     case text
     case vision
     case voiceOutput
+    case liveVoice
 
     public var id: String { rawValue }
 
@@ -12,6 +13,7 @@ public enum QuickTestKind: String, CaseIterable, Identifiable, Sendable {
         case .text: return String(localized: "Text")
         case .vision: return String(localized: "Vision")
         case .voiceOutput: return String(localized: "Voice Output")
+        case .liveVoice: return String(localized: "Live Voice")
         }
     }
 
@@ -20,6 +22,7 @@ public enum QuickTestKind: String, CaseIterable, Identifiable, Sendable {
         case .text: return "text.bubble"
         case .vision: return "photo"
         case .voiceOutput: return "waveform"
+        case .liveVoice: return "waveform.circle"
         }
     }
 }
@@ -170,6 +173,7 @@ final class ProviderQuickTestService: ObservableObject {
     private let client: any ProviderClient
     private let geminiTTSClient: GeminiTTSClient
     private let openAISpeechClient: OpenAIAudioSpeechClient
+    private let gptLiveClient: OpenAIGPTLiveClient
     private let audioValidator: AudioDataValidating
     private let streamFactory: StreamFactory
     private let sleeper: Sleeper
@@ -179,6 +183,7 @@ final class ProviderQuickTestService: ObservableObject {
         client: any ProviderClient = OpenAICompatibleClient(),
         geminiTTSClient: GeminiTTSClient = GeminiTTSClient(),
         openAISpeechClient: OpenAIAudioSpeechClient = OpenAIAudioSpeechClient(),
+        gptLiveClient: OpenAIGPTLiveClient = OpenAIGPTLiveClient(),
         audioValidator: AudioDataValidating = AVAudioDataValidator(),
         streamFactory: StreamFactory? = nil,
         sleeper: @escaping Sleeper = { try await Task.sleep(nanoseconds: $0) }
@@ -186,6 +191,7 @@ final class ProviderQuickTestService: ObservableObject {
         self.client = client
         self.geminiTTSClient = geminiTTSClient
         self.openAISpeechClient = openAISpeechClient
+        self.gptLiveClient = gptLiveClient
         self.audioValidator = audioValidator
         self.streamFactory = streamFactory ?? { provider, apiKey, modelID, messages, tools, options, attachmentResolver, onDiagnostics in
             client.streamChat(
@@ -203,6 +209,13 @@ final class ProviderQuickTestService: ObservableObject {
     }
 
     static func applicableKinds(for model: ProviderModel, in provider: ProviderConfiguration? = nil) -> [QuickTestKind] {
+        if OpenAIGPTLiveRouting.isGPTLiveModel(model.id) {
+            if provider?.authenticationMode == .oauth {
+                return []
+            }
+            return [.liveVoice]
+        }
+
         var kinds: [QuickTestKind] = []
 
         let effective = model.modality ?? model.baseModality
@@ -246,7 +259,7 @@ final class ProviderQuickTestService: ObservableObject {
                 return true
             }
             return false
-        case .voiceOutput:
+        case .voiceOutput, .liveVoice:
             return false
         }
     }
@@ -468,6 +481,15 @@ final class ProviderQuickTestService: ObservableObject {
             )
         }
 
+        if kind == .liveVoice {
+            return await executeLiveVoiceTest(
+                provider: provider,
+                model: model,
+                apiKey: effectiveKey,
+                startTime: startTime
+            )
+        }
+
         let timeoutSeconds = (kind == .vision) ? Self.visionTimeoutSeconds : Self.textTimeoutSeconds
 
         do {
@@ -621,6 +643,46 @@ final class ProviderQuickTestService: ObservableObject {
         }
     }
 
+    private func executeLiveVoiceTest(
+        provider: ProviderConfiguration,
+        model: ProviderModel,
+        apiKey: String?,
+        startTime: ContinuousClock.Instant
+    ) async -> QuickTestResult {
+        do {
+            let info = try await gptLiveClient.probeConnection(
+                provider: provider,
+                apiKey: apiKey,
+                modelID: model.id
+            )
+            let dur = Self.seconds(since: startTime)
+            let out = String(localized: "GPT-Live session started (id: \(info.id), status: \(info.status)).")
+            return QuickTestResult(
+                kind: .liveVoice,
+                status: .passed(duration: dur, output: out),
+                output: out,
+                observation: QuickTestObservation(completedReceived: true, streamOpened: true),
+                duration: dur
+            )
+        } catch is CancellationError {
+            let dur = Self.seconds(since: startTime)
+            return QuickTestResult(kind: .liveVoice, status: .cancelled(duration: dur), duration: dur)
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            let dur = Self.seconds(since: startTime)
+            return QuickTestResult(kind: .liveVoice, status: .cancelled(duration: dur), duration: dur)
+        } catch {
+            let dur = Self.seconds(since: startTime)
+            let secrets = [apiKey].compactMap { $0 } + Array(provider.extraHeaders.values)
+            let safeMsg = SecretMasker.redact(error.localizedDescription, secrets: secrets)
+            return QuickTestResult(
+                kind: .liveVoice,
+                status: .failed(duration: dur, error: safeMsg),
+                errorMessage: safeMsg,
+                duration: dur
+            )
+        }
+    }
+
     private func runStreamRequest(
         kind: QuickTestKind,
         provider: ProviderConfiguration,
@@ -656,8 +718,8 @@ final class ProviderQuickTestService: ObservableObject {
                 )
             ]
             attachmentResolver = { _ in Self.samplePNGData }
-        case .voiceOutput:
-            throw QuickTestError.unsupported(String(localized: "Voice output does not support stream chat."))
+        case .voiceOutput, .liveVoice:
+            throw QuickTestError.unsupported(String(localized: "This voice mode does not support stream chat."))
         }
 
         let options = ChatInferenceOptions(
